@@ -445,10 +445,6 @@ container allows you to execute the following *documented commands*:
   Blocks until the latest migration applied to solver's and worker's
   databases match the latest known migration.
 
-  To check only the solver's database, you should pass the solver's
-  database URL to both "SOLVER_POSTGRES_URL" and
-  "WORKER_POSTGRES_URL".
-
 * `consume_messages`
 
   Starts only the processes that consume SMP messages. This command
