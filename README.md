@@ -434,20 +434,20 @@ container allows you to execute the following *documented commands*:
   worker PostgreSQL database.
 
   - `configure` will initialize both solver's and worker's databases.
-  - `configure solver` will initialize only solver's database.
-  - `configure worker` will initialize only worker's database.
+  - `configure solver` will initialize only the solver's database.
+  - `configure worker` will initialize only the worker's database.
 
   **IMPORTANT NOTE: This command has to be run only once (at the
   beginning), but running it multiple times should not do any harm.**
 
 * `await_migrations`
 
-  Blocks until the latest migration applied to "WORKER_POSTGRES_URL"
-  and "SOLVER_POSTGRES_URL" PostgreSQL server instances match the
-  latest known migration.
+  Blocks until the latest migration applied to solver's and worker's
+  databases match the latest known migration.
 
-  To check only one PostgreSQL server instance, you should pass the
-  same URL to both "WORKER_POSTGRES_URL" and "SOLVER_POSTGRES_URL".
+  To check only the solver's database, you should pass the solver's
+  database URL to both "SOLVER_POSTGRES_URL" and
+  "WORKER_POSTGRES_URL".
 
 * `consume_messages`
 
