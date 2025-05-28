@@ -17,6 +17,11 @@ config = context.config
 fileConfig(config.config_file_name)
 logger = logging.getLogger('alembic.env')
 
+# Process the -x arguments passed at the command line. For example:
+# `flask db upgrade -x only=solver` will upgrade only the solver's database.
+# `flask db upgrade -x only=worker` will upgrade only the worker's database.
+only = context.get_x_argument(as_dictionary=True).get('only')
+
 
 def get_engine(bind_key=None):
     try:
@@ -48,6 +53,8 @@ else:
                              'bind_names', None)
     if get_bind_names:
         bind_names = get_bind_names()
+if only:
+    bind_names = [x for x in bind_names if x == only]
 for bind in bind_names:
     context.config.set_section_option(
         bind, "sqlalchemy.url", get_engine_url(bind_key=bind))
@@ -94,6 +101,9 @@ def run_migrations_offline():
             'url': context.config.get_main_option('sqlalchemy.url')
         }
     }
+    if only and only != "worker":
+        engines.clear()
+
     for name in bind_names:
         engines[name] = rec = {}
         rec['url'] = context.config.get_section_option(name, "sqlalchemy.url")
@@ -145,6 +155,9 @@ def run_migrations_online():
     engines = {
         '': {'engine': get_engine()}
     }
+    if only and only != "worker":
+        engines.clear()
+
     for name in bind_names:
         engines[name] = rec = {}
         rec['engine'] = get_engine(bind_key=name)

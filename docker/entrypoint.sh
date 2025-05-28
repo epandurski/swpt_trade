@@ -29,7 +29,7 @@ perform_db_upgrade() {
     local error_file="$APP_ROOT_DIR/flask-db-upgrade.error"
     echo -n 'Running database schema upgrade ...'
     while [[ $retry_after -lt $time_limit ]]; do
-        if flask db upgrade &>$error_file; then
+        if flask db upgrade -x only="$1"  &>$error_file; then
             perform_db_initialization
             echo ' done.'
             return 0
@@ -92,7 +92,7 @@ case $1 in
         exec pytest
         ;;
     configure)
-        perform_db_upgrade
+        perform_db_upgrade "$2"
         if [[ "$SETUP_RABBITMQ_BINDINGS" == "yes" ]]; then
             setup_rabbitmq_bindings
         fi
@@ -151,6 +151,12 @@ case $1 in
     solver)
         # Spawns all the necessary solver processes in one container.
         exec supervisord -c "$APP_ROOT_DIR/supervisord-solver.conf"
+        ;;
+    await_migrations)
+        echo Awaiting database migrations to be applied...
+        while [[ $(flask db current 2> /dev/null | grep -c '(head)') != 2 ]]; do
+            sleep 10
+        done
         ;;
     *)
         exec "$@"

@@ -433,8 +433,17 @@ container allows you to execute the following *documented commands*:
   Initializes a new empty solver PostgreSQL database, and a new empty
   worker PostgreSQL database.
 
+  - `configure` will initialize both solver's and worker's databases.
+  - `configure solver` will initialize only the solver's database.
+  - `configure worker` will initialize only the worker's database.
+
   **IMPORTANT NOTE: This command has to be run only once (at the
   beginning), but running it multiple times should not do any harm.**
+
+* `await_migrations`
+
+  Blocks until the latest migration applied to solver's and worker's
+  databases match the latest known migration.
 
 * `consume_messages`
 
