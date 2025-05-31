@@ -1,14 +1,13 @@
 import logging
 import click
+import time
+import threading
 from datetime import timedelta
 from flask import current_app
-from flask.cli import with_appcontext
 from swpt_trade.extensions import db
 from .common import swpt_trade
 
 
-@swpt_trade.command("scan_debtor_info_documents")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -35,8 +34,6 @@ def scan_debtor_info_documents(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_debtor_locator_claims")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -63,8 +60,6 @@ def scan_debtor_locator_claims(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_trading_policies")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -91,8 +86,6 @@ def scan_trading_policies(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_worker_accounts")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -119,8 +112,6 @@ def scan_worker_accounts(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_needed_worker_accounts")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -147,8 +138,6 @@ def scan_needed_worker_accounts(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_interest_rate_changes")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -175,8 +164,6 @@ def scan_interest_rate_changes(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_recently_needed_collectors")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -206,8 +193,6 @@ def scan_recently_needed_collectors(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_account_locks")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -234,8 +219,6 @@ def scan_account_locks(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_creditor_participations")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -263,8 +246,6 @@ def scan_creditor_participations(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_dispatching_statuses")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -291,8 +272,6 @@ def scan_dispatching_statuses(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_worker_collectings")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -319,8 +298,6 @@ def scan_worker_collectings(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_worker_sendings")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -347,8 +324,6 @@ def scan_worker_sendings(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_worker_receivings")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -375,8 +350,6 @@ def scan_worker_receivings(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_worker_dispatchings")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -403,8 +376,6 @@ def scan_worker_dispatchings(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
-@swpt_trade.command("scan_transfer_attempts")
-@with_appcontext
 @click.option("-d", "--days", type=float, help="The number of days.")
 @click.option(
     "--quit-early",
@@ -429,3 +400,57 @@ def scan_transfer_attempts(days, quit_early):
     assert days > 0.0
     scanner = TransferAttemptsScanner()
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
+
+
+_all_scans = [
+    scan_debtor_info_documents,
+    scan_debtor_locator_claims,
+    scan_trading_policies,
+    scan_worker_accounts,
+    scan_interest_rate_changes,
+    scan_needed_worker_accounts,
+    scan_recently_needed_collectors,
+    scan_account_locks,
+    scan_creditor_participations,
+    scan_dispatching_statuses,
+    scan_worker_collectings,
+    scan_worker_sendings,
+    scan_worker_receivings,
+    scan_worker_dispatchings,
+    scan_transfer_attempts,
+]
+for scan in _all_scans:
+    swpt_trade.command(scan.__name__)(scan)
+
+
+@swpt_trade.command("scan_all")
+def scan_all():  # pragma: no cover
+    app = current_app._get_current_object()
+
+    def wrap(f):
+        def wrapper_func(*args, **kwargs):
+            logger = logging.getLogger(__name__)
+            ctx = app.app_context()
+            ctx.push()
+            while True:
+                try:
+                    f(*args, **kwargs)
+                except Exception:
+                    logger.exception("Caught error in %s.", f.__name__)
+                else:
+                    logger.error("Unexpected return from %s.", f.__name__)
+                time.sleep(60.0)
+        return wrapper_func
+
+    for t in [
+        threading.Thread(
+            target=wrap(scan),
+            args=(None, False),
+            daemon=True,
+        )
+        for scan in _all_scans
+    ]:
+        t.start()
+
+    while True:
+        time.sleep(5.0)
