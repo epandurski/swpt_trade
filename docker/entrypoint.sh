@@ -72,7 +72,7 @@ perform_db_initialization() {
 }
 
 generate_oathkeeper_configuration() {
-    envsubst '$WEBSERVER_PORT $OAUTH2_INTROSPECT_URL' \
+    envsubst '$WEBSERVER_PORT $OAUTH2_INTROSPECT_URL $TOKEN_INTROSPECTION_CACHE_MAX_COST' \
              < "$APP_ROOT_DIR/oathkeeper/config.yaml.template" \
              > "$APP_ROOT_DIR/oathkeeper/config.yaml"
     envsubst '$RESOURCE_SERVER' \
