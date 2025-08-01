@@ -80,7 +80,7 @@ RUN SOLVER_POSTGRES_URL=sqlite:// \
     SQLALCHEMY_ENGINE_OPTIONS={} \
     flask openapi write openapi.json
 
-USER $FLASK_APP
+USER $FLASK_APP:$FLASK_APP
 ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
 CMD ["worker"]
 
