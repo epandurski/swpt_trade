@@ -449,7 +449,9 @@ container allows you to execute the following *documented commands*:
 
   Starts only the processes that consume SMP messages. This command
   allows you to start as many additional dedicated RabbitMQ message
-  processors as necessary, to handle the load.
+  processors as necessary, to handle the load. If the
+  `--draining-mode` option is specified, periodic pauses will be made
+  during consumption, to allow the queue to be deleted safely.
 
 * `flush_all`
 

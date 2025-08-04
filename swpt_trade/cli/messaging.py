@@ -44,8 +44,14 @@ from .common import swpt_trade
     type=int,
     help="The prefetch window in terms of whole messages.",
 )
+@click.option(
+    "--draining-mode",
+    is_flag=True,
+    help="Make periodic pauses to allow the queue to be deleted safely.",
+)
 def consume_messages(
-    url, queue, processes, threads, prefetch_size, prefetch_count
+    url, queue, processes, threads, prefetch_size, prefetch_count,
+    draining_mode
 ):
     """Run processes that consume and process incoming Swaptacular
     Messaging Protocol messages.
@@ -83,6 +89,7 @@ def consume_messages(
             threads=threads,
             prefetch_size=prefetch_size,
             prefetch_count=prefetch_count,
+            draining_mode=draining_mode,
         )
         for sig in HANDLED_SIGNALS:
             signal.signal(sig, consumer.stop)
