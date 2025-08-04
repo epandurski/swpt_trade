@@ -487,6 +487,16 @@ container allows you to execute the following *documented commands*:
   triggering transfer attempts. (See "TRIGGER_TRANSFERS_PROCESSES" and
   "TRIGGER_TRANSFERS_PERIOD" environment variables.)
 
+* `subscribe`
+
+  Declares a RabbitMQ queue, and subscribes it to receive incoming
+  messages. Normally, this command should not be executed directly.
+
+* `unsubscribe`
+
+  Unsubscribes a RabbitMQ queue from receiving incoming messages.
+  Normally, this command should not be executed directly.
+
 
 How to run the tests
 --------------------
