@@ -1,6 +1,7 @@
 import logging
 import pika
 import click
+import time
 from flask import current_app
 from flask.cli import with_appcontext
 from .common import swpt_trade
@@ -42,7 +43,7 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
 
     * PROTOCOL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
 
-    * PROTOCOL_BROKER_QUEUE (defalut "swpt_accounts")
+    * PROTOCOL_BROKER_QUEUE (defalut "swpt_trade")
 
     * PROTOCOL_BROKER_QUEUE_ROUTING_KEY (default "#")
     """
@@ -147,7 +148,7 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     "-q",
     "--queue",
     type=str,
-    help="The name of the queue to declare and subscribe.",
+    help="The name of the queue to unsubscribe.",
 )
 @click.option(
     "-k",
@@ -163,10 +164,9 @@ def unsubscribe(url, queue, queue_routing_key):  # pragma: no cover
 
     * PROTOCOL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
 
-    * PROTOCOL_BROKER_QUEUE (defalut "swpt_accounts")
+    * PROTOCOL_BROKER_QUEUE (defalut "swpt_trade")
 
     * PROTOCOL_BROKER_QUEUE_ROUTING_KEY (default "#")
-
     """
 
     from swpt_trade.extensions import TO_TRADE_EXCHANGE
@@ -192,3 +192,54 @@ def unsubscribe(url, queue, queue_routing_key):  # pragma: no cover
         queue_name,
         routing_key,
     )
+
+
+@swpt_trade.command("delete_queue")
+@with_appcontext
+@click.option(
+    "-u",
+    "--url",
+    type=str,
+    help="The RabbitMQ connection URL.",
+)
+@click.option(
+    "-q",
+    "--queue",
+    type=str,
+    help="The name of the queue to delete.",
+)
+def delete_queue(url, queue):  # pragma: no cover
+    """Try to safely delete a RabbitMQ queue.
+
+    When the queue is not empty or is currently in use, this command
+    will continuously try to delete the queue, until the deletion
+    succeeds or fails for some other reason.
+
+    If some of the available options are not specified directly, the
+    values of the following environment variables will be used:
+
+    * PROTOCOL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
+
+    * PROTOCOL_BROKER_QUEUE (defalut "swpt_trade")
+    """
+
+    logger = logging.getLogger(__name__)
+    queue_name = queue or current_app.config["PROTOCOL_BROKER_QUEUE"]
+    broker_url = url or current_app.config["PROTOCOL_BROKER_URL"]
+    connection = pika.BlockingConnection(pika.URLParameters(broker_url))
+    REPLY_CODE_PRECONDITION_FAILED = 406
+
+    while True:
+        channel = connection.channel()
+        try:
+            channel.queue_delete(
+                queue=queue_name,
+                if_unused=True,
+                if_empty=True,
+            )
+            logger.info('Deleted "%s" queue.', queue_name)
+            break
+        except pika.exceptions.ChannelClosedByBroker as e:
+            if e.reply_code != REPLY_CODE_PRECONDITION_FAILED:
+                raise
+            time.sleep(3.0)
