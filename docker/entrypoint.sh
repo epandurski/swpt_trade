@@ -97,11 +97,7 @@ case $1 in
             setup_rabbitmq_bindings
         fi
         ;;
-    subscribe)
-        export SOLVER_POSTGRES_URL=postgresql+psycopg://localhost:5432/dummy
-        exec flask swpt_trade "$@"
-        ;;
-    unsubscribe)
+    subscribe | unsubscribe | delete_queue)
         export SOLVER_POSTGRES_URL=postgresql+psycopg://localhost:5432/dummy
         exec flask swpt_trade "$@"
         ;;

@@ -497,6 +497,11 @@ container allows you to execute the following *documented commands*:
   Unsubscribes a RabbitMQ queue from receiving incoming messages.
   Normally, this command should not be executed directly.
 
+* `delete_queue`
+
+  Tries to safely delete a RabbitMQ queue. Normally, this command
+  should not be executed directly.
+
 
 How to run the tests
 --------------------
