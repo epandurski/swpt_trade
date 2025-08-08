@@ -502,6 +502,12 @@ container allows you to execute the following *documented commands*:
   Tries to safely delete a RabbitMQ queue. Normally, this command
   should not be executed directly.
 
+* `verify_shard_content`
+
+  Verifies that the worker contains only records belonging to the
+  worker's shard. Normally, this command should not be executed
+  directly.
+
 
 How to run the tests
 --------------------

@@ -2,8 +2,12 @@ import logging
 import pika
 import click
 import time
+import sys
+from sqlalchemy import select
 from flask import current_app
 from flask.cli import with_appcontext
+from swpt_pythonlib.utils import ShardingRealm
+from swpt_trade.extensions import db
 from .common import swpt_trade
 
 # TODO: Consider implementing a CLI command which extracts trading
@@ -243,3 +247,64 @@ def delete_queue(url, queue):  # pragma: no cover
             if e.reply_code != REPLY_CODE_PRECONDITION_FAILED:
                 raise
             time.sleep(3.0)
+
+
+@swpt_trade.command("verify_shard_content")
+@with_appcontext
+def verify_shard_content():
+    """Verify that the worker contains only records belonging to the
+    worker's shard.
+
+    If the verification is successful, the exit code will be 0. If a
+    record has been found that does not belong to the worker's shard,
+    the exit code will be 1.
+    """
+
+    from swpt_trade import models
+
+    class InvalidRecord(Exception):
+        """The record does not belong the shard."""
+
+    sr: ShardingRealm = current_app.config["SHARDING_REALM"]
+    yield_per = current_app.config["APP_VERIFY_SHARD_YIELD_PER"]
+    sleep_seconds = current_app.config["APP_VERIFY_SHARD_SLEEP_SECONDS"]
+
+    def verify_table(conn, *table_columns, match_str=False):
+        with conn.execution_options(yield_per=yield_per).execute(
+                select(*table_columns)
+        ) as result:
+            for n, row in enumerate(result):
+                if n % yield_per == 0 and sleep_seconds > 0.0:
+                    time.sleep(sleep_seconds)
+                match = sr.match_str(row[0]) if match_str else sr.match(*row)
+                if not match:
+                    raise InvalidRecord
+
+    with db.engine.connect() as conn:
+        logger = logging.getLogger(__name__)
+        try:
+            verify_table(conn, models.AccountLock.creditor_id)
+            verify_table(conn, models.CreditorParticipation.creditor_id)
+            verify_table(conn, models.InterestRateChange.creditor_id)
+            verify_table(conn, models.NeededWorkerAccount.creditor_id)
+            verify_table(conn, models.TradingPolicy.creditor_id)
+            verify_table(conn, models.DebtorLocatorClaim.debtor_id)
+            verify_table(conn, models.RecentlyNeededCollector.debtor_id)
+            verify_table(conn, models.DispatchingStatus.collector_id)
+            verify_table(conn, models.TransferAttempt.collector_id)
+            verify_table(conn, models.WorkerAccount.creditor_id)
+            verify_table(conn, models.WorkerCollecting.collector_id)
+            verify_table(conn, models.WorkerDispatching.collector_id)
+            verify_table(conn, models.WorkerReceiving.to_collector_id)
+            verify_table(conn, models.WorkerSending.from_collector_id)
+            verify_table(
+                conn,
+                models.DebtorInfoDocument.debtor_info_locator,
+                match_str=True,
+            )
+        except InvalidRecord:
+            logger.error(
+                "At least one record has been found that does not belong to"
+                " the shard."
+            )
+            sys.exit(1)
