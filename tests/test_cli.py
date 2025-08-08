@@ -2608,3 +2608,22 @@ def test_run_phase3_subphase5(
     assert len(m.CollectorSending.query.all()) == 1
     assert len(m.CollectorReceiving.query.all()) == 1
     assert len(m.CollectorDispatching.query.all()) == 1
+
+
+@pytest.mark.parametrize("realm", ["0.#", "1.#"])
+def test_verify_shard_content(app, db_session, realm):
+    orig_sharding_realm = app.config["SHARDING_REALM"]
+    app.config["SHARDING_REALM"] = ShardingRealm(realm)
+    db.session.add(
+        m.DebtorInfoDocument(
+            debtor_info_locator="https://example.com/666",
+            debtor_id=666,
+        )
+    )
+    db.session.commit()
+    runner = app.test_cli_runner()
+    result = runner.invoke(
+        args=["swpt_trade", "verify_shard_content"]
+    )
+    assert result.exit_code == int(realm[0])
+    app.config["SHARDING_REALM"] = orig_sharding_realm

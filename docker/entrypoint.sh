@@ -101,6 +101,9 @@ case $1 in
         export SOLVER_POSTGRES_URL=postgresql+psycopg://localhost:5432/dummy
         exec flask swpt_trade "$@"
         ;;
+    verify_shard_content)
+        exec flask swpt_trade "$@"
+        ;;
     webserver)
         generate_oathkeeper_configuration
         exec supervisord -c "$APP_ROOT_DIR/supervisord-webserver.conf"
