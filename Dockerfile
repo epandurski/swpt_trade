@@ -47,6 +47,7 @@ ENV TOKEN_INTROSPECTION_CACHE_MAX_COST=10000000
 RUN apk add --no-cache \
     libffi \
     postgresql-libs \
+    postgresql-client \
     supervisor \
     gettext \
     && addgroup -S "$FLASK_APP" \

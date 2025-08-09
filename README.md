@@ -508,6 +508,8 @@ container allows you to execute the following *documented commands*:
   worker's shard. Normally, this command should not be executed
   directly.
 
+**Note:** The Docker image comes with `sh` and `psql` installed.
+
 
 How to run the tests
 --------------------
