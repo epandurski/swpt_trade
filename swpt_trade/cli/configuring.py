@@ -293,9 +293,6 @@ def verify_shard_content():
     with db.engine.connect() as conn:
         logger = logging.getLogger(__name__)
         try:
-            # TODO: Include the signal-tables here as well.
-            # Theoretically, the new shard can be split again before
-            # all signals from the parent shard have been processed.
             verify_table(conn, models.AccountLock.creditor_id)
             verify_table(conn, models.CreditorParticipation.creditor_id)
             verify_table(conn, models.InterestRateChange.creditor_id)
@@ -315,6 +312,9 @@ def verify_shard_content():
                 models.DebtorInfoDocument.debtor_info_locator,
                 match_str=True,
             )
+            verify_table(conn, models.ConfigureAccountSignal.creditor_id)
+            verify_table(conn, models.PrepareTransferSignal.creditor_id)
+            verify_table(conn, models.FinalizeTransferSignal.creditor_id)
         except InvalidRecord:
             logger.error(
                 "At least one record has been found that does not belong to"
