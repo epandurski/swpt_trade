@@ -293,6 +293,9 @@ def verify_shard_content():
     with db.engine.connect() as conn:
         logger = logging.getLogger(__name__)
         try:
+            # TODO: Include the signal-tables here as well.
+            # Theoretically, the new shard can be split again before
+            # all signals from the parent shard have been processed.
             verify_table(conn, models.AccountLock.creditor_id)
             verify_table(conn, models.CreditorParticipation.creditor_id)
             verify_table(conn, models.InterestRateChange.creditor_id)
