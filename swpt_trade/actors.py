@@ -185,6 +185,8 @@ def _on_account_transfer_signal(
                     is_collector_trade=is_the_creditor_a_collector,
                 )
             else:
+                # TODO: Oops! With multiple workers, this may happen
+                # before the WorkerCollecting record has been created.
                 assert acquired_amount > 0
                 procedures.update_worker_collecting_record(
                     collector_id=creditor_id,
@@ -203,6 +205,8 @@ def _on_account_transfer_signal(
                     to_collector_id=note.second_id,
                 )
             else:
+                # TODO: Oops! With multiple workers, this may happen
+                # before the WorkerReceiving record has been created.
                 assert acquired_amount > 0
                 procedures.update_worker_receiving_record(
                     to_collector_id=creditor_id,
