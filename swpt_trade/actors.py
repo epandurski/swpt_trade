@@ -131,6 +131,20 @@ def _on_account_transfer_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing account transfer signal'
+        ' (debtor_id=%d, creditor_id=%d, transfer_number=%d,'
+        ' coordinator_type=%s, sender=%s, recipient=%s, acquired_amount=%d).'
+        ' Transfer note:\n%s',
+        debtor_id,
+        creditor_id,
+        transfer_number,
+        coordinator_type,
+        sender,
+        recipient,
+        acquired_amount,
+        transfer_note,
+    )
     if coordinator_type == CT_AGENT:
         if transfer_note_format != AGENT_TRANSFER_NOTE_FORMAT:
             _LOGGER.warning(
@@ -232,6 +246,17 @@ def _on_rejected_agent_transfer_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing rejected transfer signal'
+        ' (debtor_id=%d, creditor_id=%d, coordinator_type=%s,'
+        ' coordinator_id=%d, coordinator_request_id=%d, status_code=%s).',
+        debtor_id,
+        creditor_id,
+        coordinator_type,
+        coordinator_id,
+        coordinator_request_id,
+        status_code,
+    )
     if coordinator_type != CT_AGENT:  # pragma: no cover
         raise RuntimeError(
             f'Unexpected coordinator type: "{coordinator_type}"'
@@ -271,6 +296,20 @@ def _on_prepared_agent_transfer_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing prepared transfer signal'
+        ' (debtor_id=%d, creditor_id=%d, transfer_id=%d, coordinator_type=%s,'
+        ' coordinator_id=%d, coordinator_request_id=%d, locked_amount=%d,'
+        ' recipient=%s).',
+        debtor_id,
+        creditor_id,
+        transfer_id,
+        coordinator_type,
+        coordinator_id,
+        coordinator_request_id,
+        locked_amount,
+        recipient,
+    )
     if coordinator_type != CT_AGENT:  # pragma: no cover
         raise RuntimeError(
             f'Unexpected coordinator type: "{coordinator_type}"'
@@ -321,6 +360,20 @@ def _on_finalized_agent_transfer_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing finalized transfer signal'
+        ' (debtor_id=%d, creditor_id=%d, transfer_id=%d, coordinator_type=%s,'
+        ' coordinator_id=%d, coordinator_request_id=%d, committed_amount=%d,'
+        ' status_code=%s).',
+        debtor_id,
+        creditor_id,
+        transfer_id,
+        coordinator_type,
+        coordinator_id,
+        coordinator_request_id,
+        committed_amount,
+        status_code,
+    )
     if coordinator_type != CT_AGENT:  # pragma: no cover
         raise RuntimeError(
             f'Unexpected coordinator type: "{coordinator_type}"'

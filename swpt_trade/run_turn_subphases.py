@@ -561,6 +561,10 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 }
                 for row in rows
             ]
+            assert all(
+                sharding_realm.match(r["creditor_id"])
+                for r in dicts_to_insert
+            )
             if dicts_to_insert:
                 db.session.execute(
                     insert(CreditorParticipation).execution_options(
@@ -604,6 +608,10 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 }
                 for row in rows
             ]
+            assert all(
+                sharding_realm.match(r["creditor_id"])
+                for r in dicts_to_insert
+            )
             if dicts_to_insert:
                 db.session.execute(
                     insert(CreditorParticipation).execution_options(
@@ -655,6 +663,10 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 }
                 for row in rows
             ]
+            assert all(
+                sharding_realm.match(r["collector_id"])
+                for r in dicts_to_insert
+            )
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerCollecting).execution_options(
@@ -711,6 +723,10 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 }
                 for row in rows
             ]
+            assert all(
+                sharding_realm.match(r["from_collector_id"])
+                for r in dicts_to_insert
+            )
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerSending).execution_options(
@@ -768,6 +784,10 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 }
                 for row in rows
             ]
+            assert all(
+                sharding_realm.match(r["to_collector_id"])
+                for r in dicts_to_insert
+            )
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerReceiving).execution_options(
@@ -826,6 +846,10 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 }
                 for row in rows
             ]
+            assert all(
+                sharding_realm.match(r["collector_id"])
+                for r in dicts_to_insert
+            )
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerDispatching).execution_options(
