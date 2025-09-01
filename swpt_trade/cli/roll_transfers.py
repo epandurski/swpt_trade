@@ -1,7 +1,7 @@
 import logging
 import time
 import click
-from datetime import datetime, timezone, timedelta
+from datetime import timedelta
 from flask import current_app
 from flask.cli import with_appcontext
 from .common import swpt_trade
@@ -33,7 +33,6 @@ def roll_transfers(wait, quit_early):
     """
     from swpt_trade import run_transfers
 
-    
     cfg = current_app.config
     wait_interval: timedelta = cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"] / 12
     wait_seconds = (
@@ -43,7 +42,7 @@ def roll_transfers(wait, quit_early):
     )
     logger = logging.getLogger(__name__)
     logger.info("Started rolling transfers.")
-    
+
     while True:
         logger.info(
             "Looking for collector accounts ready to initiate transfers."
