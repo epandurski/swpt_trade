@@ -198,6 +198,12 @@ example values:
 MIN_COLLECTOR_ID=0x0000010000000000
 MAX_COLLECTOR_ID=0x00000100000007ff
 
+# When a currency is about to be traded for the first time, at least
+# one collector account must be created. This setting determines how
+# many collector accounts will be created for newly encountered
+# currencies (default 1).
+DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS=2
+
 # When the outgouing transfers are committed, a deadline for each
 # transfer should be specified. This allows the "Circular Trade"
 # service to make a resonable estimate for the maximum possible
