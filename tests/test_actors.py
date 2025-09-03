@@ -219,6 +219,34 @@ def test_on_account_transfer_signal_valid(
         ts=datetime.fromisoformat("2000-01-01T00:00:00+00:00"),
         previous_transfer_number=0,
     )
+    if (
+            note_kind != utils.TransferNote.Kind.DISPATCHING
+            and acquired_amount > 0
+    ):
+        dat = m.DelayedAccountTransfer.query.one()
+        assert dat.turn_id == 1
+        assert dat.debtor_id == D_ID
+        assert dat.creditor_id == C_ID
+        assert dat.creation_date == date.fromisoformat("2020-01-02")
+        assert dat.transfer_number == 1
+        assert dat.coordinator_type == "agent"
+        assert dat.sender == str(sender_id)
+        assert dat.recipient == str(receiver_id)
+        assert dat.acquired_amount == acquired_amount
+        assert dat.transfer_note_format == m.AGENT_TRANSFER_NOTE_FORMAT
+        assert dat.transfer_note == str(
+            utils.TransferNote(
+                turn_id=1,
+                note_kind=note_kind,
+                first_id=first_id,
+                second_id=second_id,
+            )
+        )
+        assert dat.committed_at == \
+            datetime.fromisoformat("2019-10-01T00:00:00+00:00")
+        assert dat.principal == 100000
+        assert dat.ts == datetime.fromisoformat("2000-01-01T00:00:00+00:00")
+        assert dat.previous_transfer_number == 0
 
 
 def test_on_updated_ledger_signal(db_session, actors):

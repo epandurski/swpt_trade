@@ -185,8 +185,6 @@ def _on_account_transfer_signal(
                     is_collector_trade=is_the_creditor_a_collector,
                 )
             else:
-                # TODO: Oops! With multiple workers, this may happen
-                # before the WorkerCollecting record has been created.
                 assert acquired_amount > 0
                 procedures.update_worker_collecting_record(
                     collector_id=creditor_id,
@@ -194,6 +192,17 @@ def _on_account_transfer_signal(
                     debtor_id=debtor_id,
                     creditor_id=note.second_id,
                     acquired_amount=acquired_amount,
+                    transfer_number=transfer_number,
+                    creation_date=creation_date,
+                    coordinator_type=coordinator_type,
+                    sender=sender,
+                    recipient=recipient,
+                    transfer_note_format=transfer_note_format,
+                    transfer_note=transfer_note,
+                    committed_at=committed_at,
+                    principal=principal,
+                    previous_transfer_number=previous_transfer_number,
+                    ts=ts,
                 )
 
         elif note_kind == K.SENDING:
@@ -205,8 +214,6 @@ def _on_account_transfer_signal(
                     to_collector_id=note.second_id,
                 )
             else:
-                # TODO: Oops! With multiple workers, this may happen
-                # before the WorkerReceiving record has been created.
                 assert acquired_amount > 0
                 procedures.update_worker_receiving_record(
                     to_collector_id=creditor_id,
@@ -214,6 +221,18 @@ def _on_account_transfer_signal(
                     debtor_id=debtor_id,
                     from_collector_id=note.first_id,
                     acquired_amount=acquired_amount,
+                    creditor_id=creditor_id,
+                    transfer_number=transfer_number,
+                    creation_date=creation_date,
+                    coordinator_type=coordinator_type,
+                    sender=sender,
+                    recipient=recipient,
+                    transfer_note_format=transfer_note_format,
+                    transfer_note=transfer_note,
+                    committed_at=committed_at,
+                    principal=principal,
+                    previous_transfer_number=previous_transfer_number,
+                    ts=ts,
                 )
 
         else:

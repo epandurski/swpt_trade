@@ -47,6 +47,7 @@ from swpt_trade.models import (
     InterestRateChange,
     AccountIdRequestSignal,
     AccountIdResponseSignal,
+    DelayedAccountTransfer,
 )
 
 T = TypeVar("T")
@@ -529,28 +530,67 @@ def release_seller_account_lock(
 
 @atomic
 def update_worker_collecting_record(
+        *,
         collector_id: int,
         turn_id: int,
         debtor_id: int,
         creditor_id: int,
         acquired_amount: int,
+        transfer_number: int,
+        creation_date: date,
+        coordinator_type: str,
+        sender: str,
+        recipient: str,
+        transfer_note_format: str,
+        transfer_note: str,
+        committed_at: datetime,
+        principal: int,
+        previous_transfer_number: int,
+        ts: datetime,
 ) -> None:
     assert acquired_amount > 0
 
-    db.session.execute(
-        update(WorkerCollecting)
-        .where(
-            and_(
-                WorkerCollecting.collector_id == collector_id,
-                WorkerCollecting.turn_id == turn_id,
-                WorkerCollecting.debtor_id == debtor_id,
-                WorkerCollecting.creditor_id == creditor_id,
-                WorkerCollecting.amount == acquired_amount,
-                WorkerCollecting.collected == false(),
+    wt = (
+        WorkerTurn.query
+        .filter_by(turn_id=turn_id)
+        .options(load_only(WorkerTurn.phase, WorkerTurn.worker_turn_subphase))
+        .one_or_none()
+    )
+    if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
+        db.session.execute(
+            update(WorkerCollecting)
+            .where(
+                and_(
+                    WorkerCollecting.collector_id == collector_id,
+                    WorkerCollecting.turn_id == turn_id,
+                    WorkerCollecting.debtor_id == debtor_id,
+                    WorkerCollecting.creditor_id == creditor_id,
+                    WorkerCollecting.amount == acquired_amount,
+                    WorkerCollecting.collected == false(),
+                )
+            )
+            .values(collected=True)
+        )
+    else:
+        db.session.add(
+            DelayedAccountTransfer(
+                turn_id=turn_id,
+                debtor_id=debtor_id,
+                creditor_id=collector_id,
+                transfer_number=transfer_number,
+                creation_date=creation_date,
+                coordinator_type=coordinator_type,
+                sender=sender,
+                recipient=recipient,
+                acquired_amount=acquired_amount,
+                transfer_note_format=transfer_note_format,
+                transfer_note=transfer_note,
+                committed_at=committed_at,
+                principal=principal,
+                previous_transfer_number=previous_transfer_number,
+                ts=ts,
             )
         )
-        .values(collected=True)
-    )
 
 
 @atomic
@@ -575,27 +615,67 @@ def delete_worker_sending_record(
 
 @atomic
 def update_worker_receiving_record(
+        *,
         to_collector_id: int,
         turn_id: int,
         debtor_id: int,
         from_collector_id: int,
         acquired_amount: int,
+        creditor_id: int,
+        transfer_number: int,
+        creation_date: date,
+        coordinator_type: str,
+        sender: str,
+        recipient: str,
+        transfer_note_format: str,
+        transfer_note: str,
+        committed_at: datetime,
+        principal: int,
+        previous_transfer_number: int,
+        ts: datetime,
 ) -> None:
     assert acquired_amount > 0
 
-    db.session.execute(
-        update(WorkerReceiving)
-        .where(
-            and_(
-                WorkerReceiving.to_collector_id == to_collector_id,
-                WorkerReceiving.turn_id == turn_id,
-                WorkerReceiving.debtor_id == debtor_id,
-                WorkerReceiving.from_collector_id == from_collector_id,
-                WorkerReceiving.received_amount == 0,
+    wt = (
+        WorkerTurn.query
+        .filter_by(turn_id=turn_id)
+        .options(load_only(WorkerTurn.phase, WorkerTurn.worker_turn_subphase))
+        .one_or_none()
+    )
+    if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
+        db.session.execute(
+            update(WorkerReceiving)
+            .where(
+                and_(
+                    WorkerReceiving.to_collector_id == to_collector_id,
+                    WorkerReceiving.turn_id == turn_id,
+                    WorkerReceiving.debtor_id == debtor_id,
+                    WorkerReceiving.from_collector_id == from_collector_id,
+                    WorkerReceiving.received_amount == 0,
+                )
+            )
+            .values(received_amount=acquired_amount)
+        )
+    else:
+        db.session.add(
+            DelayedAccountTransfer(
+                turn_id=turn_id,
+                debtor_id=debtor_id,
+                creditor_id=creditor_id,
+                transfer_number=transfer_number,
+                creation_date=creation_date,
+                coordinator_type=coordinator_type,
+                sender=sender,
+                recipient=recipient,
+                acquired_amount=acquired_amount,
+                transfer_note_format=transfer_note_format,
+                transfer_note=transfer_note,
+                committed_at=committed_at,
+                principal=principal,
+                previous_transfer_number=previous_transfer_number,
+                ts=ts,
             )
         )
-        .values(received_amount=acquired_amount)
-    )
 
 
 @atomic
