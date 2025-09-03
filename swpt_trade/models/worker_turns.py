@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import date, timedelta
 from .common import get_now_utc, MAX_INT16, MAX_INT32, MIN_INT64
+from sqlalchemy.dialects import postgresql as pg
 from sqlalchemy.sql.expression import null, true, false, or_, and_
 from swpt_trade.extensions import db
 
@@ -783,3 +784,33 @@ class TransferAttempt(db.Model):
         )
         self.failure_code = failure_code
         self.increment_backoff_counter()
+
+
+class DelayedAccountTransfer(db.Model):
+    turn_id = db.Column(db.Integer, primary_key=True)
+    message_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    creditor_id = db.Column(db.BigInteger, nullable=False)
+    debtor_id = db.Column(db.BigInteger, nullable=False)
+    creation_date = db.Column(db.DATE, nullable=False)
+    transfer_number = db.Column(db.BigInteger, nullable=False)
+    coordinator_type = db.Column(db.String(30), nullable=False)
+    committed_at = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
+    acquired_amount = db.Column(db.BigInteger, nullable=False)
+    transfer_note_format = db.Column(pg.TEXT, nullable=False)
+    transfer_note = db.Column(pg.TEXT, nullable=False)
+    principal = db.Column(db.BigInteger, nullable=False)
+    previous_transfer_number = db.Column(db.BigInteger, nullable=False)
+    sender = db.Column(db.String(100), nullable=False)
+    recipient = db.Column(db.String(100), nullable=False)
+    ts = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
+    __table_args__ = (
+        {
+            "comment": (
+                'Represents an `AccountTransfer` SMP message which has been'
+                ' triggered by the actions of another worker, and has been'
+                ' received by this worker, before it is ready to process it.'
+                ' Such messages will be saved in this table, in order to be'
+                ' "replayed" once this worker is ready to process them.'
+            ),
+        },
+    )

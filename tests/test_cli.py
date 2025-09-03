@@ -291,6 +291,105 @@ def test_roll_transfers(app, db_session, current_ts):
     assert len(m.DispatchingStatus.query.all()) == 0
 
 
+def test_roll_delayed_account_transfers(app, db_session, current_ts):
+    wt1 = m.WorkerTurn(
+        turn_id=1,
+        started_at=current_ts,
+        base_debtor_info_locator="https://example.com/666",
+        base_debtor_id=666,
+        max_distance_to_base=10,
+        min_trade_amount=10000,
+        phase=3,
+        phase_deadline=None,
+        collection_started_at=current_ts - timedelta(days=1),
+        collection_deadline=current_ts + timedelta(days=200),
+        worker_turn_subphase=0,
+    )
+    wt2 = m.WorkerTurn(
+        turn_id=2,
+        started_at=current_ts,
+        base_debtor_info_locator="https://example.com/666",
+        base_debtor_id=666,
+        max_distance_to_base=10,
+        min_trade_amount=10000,
+        phase=3,
+        phase_deadline=None,
+        collection_started_at=current_ts - timedelta(days=1),
+        collection_deadline=current_ts - timedelta(days=49),
+        worker_turn_subphase=5,
+    )
+    db.session.add(wt1)
+    db.session.add(wt2)
+    db.session.add(
+        m.DelayedAccountTransfer(
+            turn_id=wt1.turn_id,
+            creditor_id=666,
+            debtor_id=123,
+            creation_date=date(2021, 6, 18),
+            transfer_number=2345,
+            coordinator_type="agent",
+            committed_at=current_ts,
+            acquired_amount=1000,
+            transfer_note_format="",
+            transfer_note="test note",
+            principal=10000,
+            previous_transfer_number=2344,
+            sender="667",
+            recipient="666",
+            ts=current_ts,
+        )
+    )
+    db.session.add(
+        m.DelayedAccountTransfer(
+            turn_id=wt2.turn_id,
+            creditor_id=667,
+            debtor_id=123,
+            creation_date=date(2021, 6, 18),
+            transfer_number=3456,
+            coordinator_type="agent",
+            committed_at=current_ts,
+            acquired_amount=-1000,
+            transfer_note_format="",
+            transfer_note="test note",
+            principal=5000,
+            previous_transfer_number=3455,
+            sender="667",
+            recipient="666",
+            ts=current_ts,
+        )
+    )
+    db.session.commit()
+    assert len(m.DelayedAccountTransfer.query.all()) == 2
+    assert len(m.ReplayedAccountTransferSignal.query.all()) == 0
+
+    runner = app.test_cli_runner()
+    result = runner.invoke(
+        args=[
+            "swpt_trade",
+            "roll_delayed_account_transfers",
+            "--quit-early",
+        ]
+    )
+    assert result.exit_code != 2
+    dat = m.DelayedAccountTransfer.query.one()
+    assert dat.turn_id == 1
+    rats = m.ReplayedAccountTransferSignal.query.one()
+    assert rats.creditor_id == 667
+    assert rats.debtor_id == 123
+    assert rats.creation_date == date(2021, 6, 18)
+    assert rats.transfer_number == 3456
+    assert rats.coordinator_type == "agent"
+    assert rats.committed_at == current_ts
+    assert rats.acquired_amount == -1000
+    assert rats.transfer_note_format == ""
+    assert rats.transfer_note == "test note"
+    assert rats.principal == 5000
+    assert rats.previous_transfer_number == 3455
+    assert rats.sender == "667"
+    assert rats.recipient == "666"
+    assert rats.ts == current_ts
+
+
 def test_delete_parent_documents(app, db_session, restore_sharding_realm):
     app.config["SHARDING_REALM"] = ShardingRealm("0.#")
     app.config["DELETE_PARENT_SHARD_RECORDS"] = True

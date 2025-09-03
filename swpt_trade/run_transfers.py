@@ -2,7 +2,15 @@ from typing import TypeVar, Callable
 from flask import current_app
 from datetime import datetime, timezone
 from sqlalchemy import select, insert, update, delete
-from sqlalchemy.sql.expression import tuple_, and_, not_, true, false, text
+from sqlalchemy.sql.expression import (
+    tuple_,
+    and_,
+    or_,
+    not_,
+    true,
+    false,
+    text,
+)
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
 from swpt_trade.procedures import process_rescheduled_transfers_batch
@@ -14,6 +22,9 @@ from swpt_trade.models import (
     WorkerDispatching,
     StartSendingSignal,
     StartDispatchingSignal,
+    ReplayedAccountTransferSignal,
+    DelayedAccountTransfer,
+    WorkerTurn,
 )
 from swpt_trade.utils import batched
 
@@ -21,6 +32,10 @@ DISPATCHING_STATUS_PK = tuple_(
     DispatchingStatus.collector_id,
     DispatchingStatus.turn_id,
     DispatchingStatus.debtor_id,
+)
+DELAYED_ACCOUNT_TRANSFER_PK = tuple_(
+    DelayedAccountTransfer.turn_id,
+    DelayedAccountTransfer.message_id,
 )
 INSERT_BATCH_SIZE = 6000
 SELECT_BATCH_SIZE = 50000
@@ -35,6 +50,21 @@ def process_rescheduled_transfers() -> int:
 
     while True:
         n = process_rescheduled_transfers_batch(batch_size)
+        count += n
+        if n < batch_size:
+            break
+
+    return count
+
+
+def process_delayed_account_transfers() -> int:
+    count = 0
+    batch_size = current_app.config[
+        "APP_DELAYED_ACCOUNT_TRANSFERS_BURST_COUNT"
+    ]
+
+    while True:
+        n = process_delayed_account_transfers_batch(batch_size)
         count += n
         if n < batch_size:
             break
@@ -316,3 +346,83 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     )
 
                 db.session.commit()
+
+
+@atomic
+def process_delayed_account_transfers_batch(batch_size: int) -> int:
+    assert batch_size > 0
+
+    ready_delayed_account_transfers = db.session.execute(
+        select(
+            DelayedAccountTransfer.turn_id,
+            DelayedAccountTransfer.message_id,
+            DelayedAccountTransfer.creditor_id,
+            DelayedAccountTransfer.debtor_id,
+            DelayedAccountTransfer.creation_date,
+            DelayedAccountTransfer.transfer_number,
+            DelayedAccountTransfer.coordinator_type,
+            DelayedAccountTransfer.committed_at,
+            DelayedAccountTransfer.acquired_amount,
+            DelayedAccountTransfer.transfer_note_format,
+            DelayedAccountTransfer.transfer_note,
+            DelayedAccountTransfer.principal,
+            DelayedAccountTransfer.previous_transfer_number,
+            DelayedAccountTransfer.sender,
+            DelayedAccountTransfer.recipient,
+            DelayedAccountTransfer.ts,
+        )
+        .select_from(DelayedAccountTransfer)
+        .join(WorkerTurn, WorkerTurn.turn_id == DelayedAccountTransfer.turn_id)
+        .where(
+            or_(
+                WorkerTurn.phase > 3,
+                and_(
+                    WorkerTurn.phase == 3,
+                    WorkerTurn.worker_turn_subphase >= 5,
+                )
+            )
+        )
+        .with_for_update(of=DelayedAccountTransfer, skip_locked=True)
+        .limit(batch_size)
+    ).all()
+
+    if ready_delayed_account_transfers:
+        sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+        account_transfers_to_replay = [
+            dict(
+                creditor_id=row.creditor_id,
+                debtor_id=row.debtor_id,
+                creation_date=row.creation_date,
+                transfer_number=row.transfer_number,
+                coordinator_type=row.coordinator_type,
+                committed_at=row.committed_at,
+                acquired_amount=row.acquired_amount,
+                transfer_note_format=row.transfer_note_format,
+                transfer_note=row.transfer_note,
+                principal=row.principal,
+                previous_transfer_number=row.previous_transfer_number,
+                sender=row.sender,
+                recipient=row.recipient,
+                ts=row.ts,
+            )
+            for row in ready_delayed_account_transfers
+            if sharding_realm.match(row.creditor_id)
+        ]
+        if account_transfers_to_replay:
+            db.session.bulk_insert_mappings(
+                ReplayedAccountTransferSignal, account_transfers_to_replay
+            )
+
+        db.session.execute(
+            delete(DelayedAccountTransfer)
+            .where(
+                DELAYED_ACCOUNT_TRANSFER_PK.in_(
+                    [
+                        (row.turn_id, row.message_id)
+                        for row in ready_delayed_account_transfers
+                    ]
+                )
+            )
+        )
+
+    return len(ready_delayed_account_transfers)

@@ -470,7 +470,9 @@ container allows you to execute the following *documented commands*:
   `flush_confirm_debtors`, `flush_activate_collectors`,
   `flush_candidate_offers`, `flush_needed_collectors`,
   `flush_revise_account_locks`, `flush_trigger_transfers`,
-  `flush_account_id_requests`, `flush_account_id_responses`
+  `flush_account_id_requests`, `flush_account_id_responses`,
+  `flush_start_sendings`, `flush_start_dispatchings`,
+  `flush_replayed_account_transfers`
 
   Starts additional worker processes that send particular type of outgoing
   messages to the RabbitMQ broker, and remove the messages from the

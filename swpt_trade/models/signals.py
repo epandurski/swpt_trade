@@ -1,5 +1,6 @@
 from __future__ import annotations
 from flask import current_app
+from sqlalchemy.dialects import postgresql as pg
 from marshmallow import Schema, fields
 from swpt_pythonlib.utils import (
     i64_to_hex_routing_key,
@@ -463,7 +464,7 @@ class AccountIdRequestSignal(Signal):
 
     @classproperty
     def signalbus_burst_count(self):
-        return current_app.config["APP_ACCOUNT_ID_REQUEST_BURST_COUNT"]
+        return current_app.config["APP_FLUSH_ACCOUNT_ID_REQUEST_BURST_COUNT"]
 
 
 class AccountIdResponseSignal(Signal):
@@ -499,7 +500,7 @@ class AccountIdResponseSignal(Signal):
 
     @classproperty
     def signalbus_burst_count(self):
-        return current_app.config["APP_ACCOUNT_ID_RESPONSE_BURST_COUNT"]
+        return current_app.config["APP_FLUSH_ACCOUNT_ID_RESPONSE_BURST_COUNT"]
 
 
 class StartSendingSignal(Signal):
@@ -527,7 +528,7 @@ class StartSendingSignal(Signal):
 
     @classproperty
     def signalbus_burst_count(self):
-        return current_app.config["APP_START_SENDING_BURST_COUNT"]
+        return current_app.config["APP_FLUSH_START_SENDING_BURST_COUNT"]
 
 
 class StartDispatchingSignal(Signal):
@@ -555,4 +556,55 @@ class StartDispatchingSignal(Signal):
 
     @classproperty
     def signalbus_burst_count(self):
-        return current_app.config["APP_START_DISPATCHING_BURST_COUNT"]
+        return current_app.config["APP_FLUSH_START_DISPATCHING_BURST_COUNT"]
+
+
+class ReplayedAccountTransferSignal(Signal):
+    """Replays an already received `AccountTransfer` message.
+    """
+    exchange_name = TO_TRADE_EXCHANGE
+
+    class __marshmallow__(Schema):
+        type = fields.Constant("AccountTransfer")
+        creditor_id = fields.Integer()
+        debtor_id = fields.Integer()
+        creation_date = fields.Date()
+        transfer_number = fields.Integer()
+        coordinator_type = fields.String()
+        committed_at = fields.DateTime()
+        acquired_amount = fields.Integer()
+        transfer_note_format = fields.String()
+        transfer_note = fields.String()
+        principal = fields.Integer()
+        previous_transfer_number = fields.Integer()
+        sender = fields.String()
+        recipient = fields.String()
+        ts = fields.DateTime()
+
+    __marshmallow_schema__ = __marshmallow__()
+
+    signal_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    creditor_id = db.Column(db.BigInteger, nullable=False)
+    debtor_id = db.Column(db.BigInteger, nullable=False)
+    creation_date = db.Column(db.DATE, nullable=False)
+    transfer_number = db.Column(db.BigInteger, nullable=False)
+    coordinator_type = db.Column(db.String(30), nullable=False)
+    committed_at = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
+    acquired_amount = db.Column(db.BigInteger, nullable=False)
+    transfer_note_format = db.Column(pg.TEXT, nullable=False)
+    transfer_note = db.Column(pg.TEXT, nullable=False)
+    principal = db.Column(db.BigInteger, nullable=False)
+    previous_transfer_number = db.Column(db.BigInteger, nullable=False)
+    sender = db.Column(db.String(100), nullable=False)
+    recipient = db.Column(db.String(100), nullable=False)
+    ts = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
+
+    @property
+    def routing_key(self):  # pragma: no cover
+        return calc_bin_routing_key(self.creditor_id)
+
+    @classproperty
+    def signalbus_burst_count(self):
+        return current_app.config[
+            "APP_FLUSH_REPLAYED_ACCOUNT_TRANSFERS_BURST_COUNT"
+        ]
