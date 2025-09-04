@@ -100,7 +100,8 @@ def roll_delayed_account_transfers(wait, quit_early):
             "Looking for delayed account transfers ready to be processed."
         )
         started_at = time.time()
-        run_transfers.process_delayed_account_transfers()
+        n = run_transfers.process_delayed_account_transfers()
+        logger.info("Replayed %d account transfer messages.", n)
 
         if quit_early:
             break
