@@ -117,14 +117,16 @@ case $1 in
         | scan_worker_collectings | scan_worker_sendings \
         | scan_worker_receivings | scan_worker_dispatchings \
         | scan_transfer_attempts | roll_turns | roll_worker_turns \
-        | roll_transfers | fetch_debtor_infos | trigger_transfers)
+        | roll_transfers | roll_delayed_account_transfers \
+        | fetch_debtor_infos | trigger_transfers)
         exec flask swpt_trade "$@"
         ;;
     flush_configure_accounts | flush_prepare_transfers | flush_finalize_transfers \
         | flush_fetch_debtor_infos | flush_store_documents | flush_discover_debtors \
         | flush_confirm_debtors | flush_activate_collectors | flush_candidate_offers \
         | flush_needed_collectors | flush_revise_account_locks | flush_trigger_transfers \
-        | flush_account_id_requests | flush_account_id_responses | flush_all)
+        | flush_account_id_requests | flush_account_id_responses | flush_start_sendings \
+        | flush_start_dispatchings | flush_replayed_account_transfers | flush_all)
 
         flush_configure_accounts=ConfigureAccountSignal
         flush_prepare_transfers=PrepareTransferSignal
@@ -142,6 +144,7 @@ case $1 in
         flush_account_id_responses=AccountIdResponseSignal
         flush_start_sendings=StartSendingSignal
         flush_start_dispatchings=StartDispatchingSignal
+        flush_replayed_account_transfers=ReplayedAccountTransferSignal
         flush_all=
 
         # For example: if `$1` is "flush_configure_accounts",

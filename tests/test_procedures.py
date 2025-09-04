@@ -2440,6 +2440,20 @@ def test_release_seller_account_lock(
 
 
 def test_update_worker_collecting_record(db_session, current_ts):
+    wt = WorkerTurn(
+        turn_id=1,
+        started_at=current_ts,
+        base_debtor_info_locator="https://example.com/666",
+        base_debtor_id=666,
+        max_distance_to_base=10,
+        min_trade_amount=10000,
+        phase=3,
+        phase_deadline=None,
+        collection_started_at=current_ts - timedelta(days=1),
+        collection_deadline=current_ts - timedelta(days=49),
+        worker_turn_subphase=5,
+    )
+    db_session.add(wt)
     db_session.add(
         WorkerCollecting(
             collector_id=999,
@@ -2452,6 +2466,19 @@ def test_update_worker_collecting_record(db_session, current_ts):
     )
     db_session.commit()
 
+    other_kwargs = dict(
+        transfer_number=123,
+        creation_date=current_ts.date(),
+        coordinator_type="agent",
+        sender="321",
+        recipient="123",
+        transfer_note_format="",
+        transfer_note="test note",
+        committed_at=current_ts,
+        principal=1000,
+        previous_transfer_number=122,
+        ts=current_ts,
+    )
     assert len(WorkerCollecting.query.all()) == 1
     p.update_worker_collecting_record(
         collector_id=999,
@@ -2459,6 +2486,7 @@ def test_update_worker_collecting_record(db_session, current_ts):
         debtor_id=666,
         creditor_id=123,
         acquired_amount=1000,
+        **other_kwargs
     )
     wc = WorkerCollecting.query.one()
     assert wc.amount == 1000
@@ -2471,6 +2499,7 @@ def test_update_worker_collecting_record(db_session, current_ts):
         debtor_id=666,
         creditor_id=123,
         acquired_amount=1000,
+        **other_kwargs
     )
     wc = WorkerCollecting.query.one()
     assert wc.amount == 1000
@@ -2510,6 +2539,20 @@ def test_delete_worker_sending_record(db_session, current_ts):
 
 
 def test_update_worker_receiving_record(db_session, current_ts):
+    wt = WorkerTurn(
+        turn_id=1,
+        started_at=current_ts,
+        base_debtor_info_locator="https://example.com/666",
+        base_debtor_id=666,
+        max_distance_to_base=10,
+        min_trade_amount=10000,
+        phase=3,
+        phase_deadline=None,
+        collection_started_at=current_ts - timedelta(days=1),
+        collection_deadline=current_ts - timedelta(days=49),
+        worker_turn_subphase=5,
+    )
+    db_session.add(wt)
     db_session.add(
         WorkerReceiving(
             to_collector_id=999,
@@ -2522,6 +2565,20 @@ def test_update_worker_receiving_record(db_session, current_ts):
     )
     db_session.commit()
 
+    other_kwargs = dict(
+        creditor_id=123,
+        transfer_number=123,
+        creation_date=current_ts.date(),
+        coordinator_type="agent",
+        sender="321",
+        recipient="123",
+        transfer_note_format="",
+        transfer_note="test note",
+        committed_at=current_ts,
+        principal=1000,
+        previous_transfer_number=122,
+        ts=current_ts,
+    )
     assert len(WorkerReceiving.query.all()) == 1
     p.update_worker_receiving_record(
         to_collector_id=999,
@@ -2529,6 +2586,7 @@ def test_update_worker_receiving_record(db_session, current_ts):
         debtor_id=666,
         from_collector_id=888,
         acquired_amount=1000,
+        **other_kwargs
     )
     wr = WorkerReceiving.query.one()
     assert wr.expected_amount == 1001
@@ -2541,6 +2599,7 @@ def test_update_worker_receiving_record(db_session, current_ts):
         debtor_id=666,
         from_collector_id=888,
         acquired_amount=1000,
+        **other_kwargs
     )
     wr = WorkerReceiving.query.one()
     assert wr.expected_amount == 1001

@@ -28,6 +28,7 @@ def test_sibnalbus_burst_count(app):
     assert isinstance(m.AccountIdResponseSignal.signalbus_burst_count, int)
     assert isinstance(m.StartSendingSignal.signalbus_burst_count, int)
     assert isinstance(m.StartDispatchingSignal.signalbus_burst_count, int)
+    assert isinstance(m.ReplayedAccountTransferSignal.signalbus_burst_count, int)
 
 
 def test_sharding_realm(app, restore_sharding_realm, db_session, current_ts):

@@ -192,6 +192,17 @@ def _on_account_transfer_signal(
                     debtor_id=debtor_id,
                     creditor_id=note.second_id,
                     acquired_amount=acquired_amount,
+                    transfer_number=transfer_number,
+                    creation_date=creation_date,
+                    coordinator_type=coordinator_type,
+                    sender=sender,
+                    recipient=recipient,
+                    transfer_note_format=transfer_note_format,
+                    transfer_note=transfer_note,
+                    committed_at=committed_at,
+                    principal=principal,
+                    previous_transfer_number=previous_transfer_number,
+                    ts=ts,
                 )
 
         elif note_kind == K.SENDING:
@@ -210,6 +221,18 @@ def _on_account_transfer_signal(
                     debtor_id=debtor_id,
                     from_collector_id=note.first_id,
                     acquired_amount=acquired_amount,
+                    creditor_id=creditor_id,
+                    transfer_number=transfer_number,
+                    creation_date=creation_date,
+                    coordinator_type=coordinator_type,
+                    sender=sender,
+                    recipient=recipient,
+                    transfer_note_format=transfer_note_format,
+                    transfer_note=transfer_note,
+                    committed_at=committed_at,
+                    principal=principal,
+                    previous_transfer_number=previous_transfer_number,
+                    ts=ts,
                 )
 
         else:
@@ -587,6 +610,8 @@ def _on_needed_collector_signal(
     *args,
     **kwargs
 ) -> None:
+    cfg = current_app.config
+
     # NOTE: When there are more than one "worker" servers, it is quite
     # likely that more than one signal will be received for a given
     # debtor ID because every "worker" server may send such a signal.
@@ -595,8 +620,9 @@ def _on_needed_collector_signal(
     if not procedures.is_recently_needed_collector(debtor_id):
         procedures.ensure_collector_accounts(
             debtor_id=debtor_id,
-            min_collector_id=current_app.config["MIN_COLLECTOR_ID"],
-            max_collector_id=current_app.config["MAX_COLLECTOR_ID"],
+            min_collector_id=cfg["MIN_COLLECTOR_ID"],
+            max_collector_id=cfg["MAX_COLLECTOR_ID"],
+            number_of_accounts=cfg["DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
         )
         procedures.mark_as_recently_needed_collector(debtor_id, ts)
 
