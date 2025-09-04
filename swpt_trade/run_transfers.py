@@ -387,7 +387,9 @@ def process_delayed_account_transfers_batch(batch_size: int) -> int:
     ).all()
 
     if ready_delayed_account_transfers:
-        sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+        cfg = current_app.config
+        sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+        delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
         account_transfers_to_replay = [
             dict(
                 creditor_id=row.creditor_id,
@@ -406,7 +408,20 @@ def process_delayed_account_transfers_batch(batch_size: int) -> int:
                 ts=row.ts,
             )
             for row in ready_delayed_account_transfers
-            if sharding_realm.match(row.creditor_id)
+            if (
+                    sharding_realm.match(row.creditor_id)
+                    or not (
+                        # Replying the message more than once is safe,
+                        # and therefore we do not shy from doing it
+                        # unless we are certain that the other shard
+                        # is the one responsible for this particular
+                        # message.
+                        delete_parent_records
+                        and sharding_realm.match(
+                            row.creditor_id, match_parent=True
+                        )
+                    )
+            )
         ]
         if account_transfers_to_replay:
             db.session.bulk_insert_mappings(
