@@ -998,6 +998,12 @@ def _calc_transfer_params(
     max_commit_delay = attempt.calc_backoff_seconds(
         transfers_healthy_max_commit_delay.total_seconds()
     )
+    if not attempt.is_dispatching:  # pragma: no cover
+        # We do not seize the usual portion of the transfer when
+        # transferring between collector accounts. In this case, we
+        # still reduce the amount imperceptibly, just to be on the
+        # safe side of the rounding errors.
+        transfers_amount_cut = 1e-10
 
     assert 0 <= max_commit_delay <= MAX_INT32
     past_demmurage_period = current_ts - attempt.collection_started_at
