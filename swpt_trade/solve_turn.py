@@ -122,6 +122,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
+        _ensure_enough_collector_accounts(turn_id)
 
         turn.phase = 3
         turn.phase_deadline = None
@@ -162,8 +163,6 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
                 )
             )
         )
-
-        _ensure_enough_collector_accounts(turn_id)
 
 
 def _write_takings(solver: Solver, turn_id: int) -> None:
@@ -319,24 +318,21 @@ def _ensure_enough_collector_accounts(turn_id: int) -> None:
         .group_by(overshoots.c.debtor_id)
     ).all()
 
-    if overshooted_currencies:
-        db.session.execute(
-            text("LOCK TABLE collector_account IN SHARE ROW EXCLUSIVE MODE"),
-            bind_arguments={"bind": db.engines["solver"]},
-        )
-        for currency in overshooted_currencies:
-            try:
-                overshooting_factor = currency.transfers_count / max_count
-            except ZeroDivisionError:
-                # This happens only when `max_count == 0`. This case
-                # is allowed only for testing purposes.
-                overshooting_factor = 1.0
+    for currency in overshooted_currencies:
+        try:
+            overshooting_factor = currency.transfers_count / max_count
+        except ZeroDivisionError:
+            # This happens only when `max_count == 0`. This case
+            # is allowed only for testing purposes.
+            overshooting_factor = 1.0
 
-            procedures.ensure_collector_accounts(
-                debtor_id=currency.debtor_id,
-                min_collector_id=cfg["MIN_COLLECTOR_ID"],
-                max_collector_id=cfg["MAX_COLLECTOR_ID"],
-                number_of_doublings=math.ceil(
-                    math.log(overshooting_factor, 2.0)
-                ),
-            )
+        # TODO: This can deadlock very badly! Instead, write a record
+        # to a new table, and implement a CLI command that reads the
+        # table and executes `ensure_collector_accounts` for each
+        # record.
+        procedures.ensure_collector_accounts(
+            debtor_id=currency.debtor_id,
+            min_collector_id=cfg["MIN_COLLECTOR_ID"],
+            max_collector_id=cfg["MAX_COLLECTOR_ID"],
+            number_of_doublings=math.ceil(math.log(overshooting_factor, 2.0)),
+        )
