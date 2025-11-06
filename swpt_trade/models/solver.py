@@ -36,18 +36,6 @@ class CollectorAccount(db.Model):
     #    the superfluous collector accounts (they've had their
     #    "status"es set to "3" already) should be deleted.
 
-    # TODO: Consider implementing `CollectorAccount` addition logic.
-    #       The addition logic should work more or less like this:
-    #
-    # 1. Statistics should be collected for the number of trading
-    #    transfers performed in each currency.
-    #
-    # 2. When it is deemed that a given currency has less collector
-    #    accounts than needed, the `ensure_collector_accounts`
-    #    function should be called with the number of needed collector
-    #    accounts. (Note that for each traded currency at least one
-    #    collector account will be created automatically when needed.)
-
     # TODO: Consider implementing some logic that detects and
     #       eventually deletes `CollectorAccount` rows which are stuck
     #       at `status==1` for quite a long time. This could happen if

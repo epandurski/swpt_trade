@@ -1,7 +1,9 @@
+import math
 from typing import TypeVar, Callable
 from datetime import datetime, timezone
-from sqlalchemy import select, insert, delete
+from sqlalchemy import select, insert, delete, text, func, union_all
 from sqlalchemy.sql.expression import and_
+from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     CollectorAccount,
@@ -16,6 +18,7 @@ from swpt_trade.models import (
     CreditorGiving,
     CreditorTaking,
 )
+from swpt_trade import procedures
 from swpt_trade.solver import Solver
 from swpt_trade.utils import batched, calc_hash
 
@@ -160,6 +163,8 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
             )
         )
 
+        _ensure_enough_collector_accounts(turn_id)
+
 
 def _write_takings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.takings_iter(), INSERT_BATCH_SIZE):
@@ -263,3 +268,75 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
                 } for ac in account_changes
             ],
         )
+
+
+def _ensure_enough_collector_accounts(turn_id: int) -> None:
+    cfg = current_app.config
+    max_count = cfg["TRANSFERS_COLLECTOR_LIMIT"]
+    assert max_count >= 0
+
+    dispatching_overshoots = (
+        select(
+            CollectorDispatching.debtor_id.label("debtor_id"),
+            CollectorDispatching.collector_id.label("collector_id"),
+            func.count(CollectorDispatching.creditor_id).label("count"),
+        )
+        .where(CollectorDispatching.turn_id == turn_id)
+        .group_by(
+            CollectorDispatching.debtor_id,
+            CollectorDispatching.collector_id,
+        )
+        .having(
+            func.count(CollectorDispatching.creditor_id) > max_count
+        )
+    )
+    collecting_overshoots = (
+        select(
+            CollectorCollecting.debtor_id.label("debtor_id"),
+            CollectorCollecting.collector_id.label("collector_id"),
+            func.count(CollectorCollecting.creditor_id).label("count"),
+        )
+        .where(CollectorCollecting.turn_id == turn_id)
+        .group_by(
+            CollectorCollecting.debtor_id,
+            CollectorCollecting.collector_id,
+        )
+        .having(
+            func.count(CollectorCollecting.creditor_id) > max_count
+        )
+    )
+    overshoots = (
+        union_all(dispatching_overshoots, collecting_overshoots)
+        .subquery(name="overshoots")
+    )
+
+    overshooted_currencies = db.session.execute(
+        select(
+            overshoots.c.debtor_id.label("debtor_id"),
+            func.max(overshoots.c.count).label("transfers_count"),
+        )
+        .select_from(overshoots)
+        .group_by(overshoots.c.debtor_id)
+    ).all()
+
+    if overshooted_currencies:
+        db.session.execute(
+            text("LOCK TABLE collector_account IN SHARE ROW EXCLUSIVE MODE"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        for currency in overshooted_currencies:
+            try:
+                overshooting_factor = currency.transfers_count / max_count
+            except ZeroDivisionError:
+                # This happens only when `max_count == 0`. This case
+                # is allowed only for testing purposes.
+                overshooting_factor = 1.0
+
+            procedures.ensure_collector_accounts(
+                debtor_id=currency.debtor_id,
+                min_collector_id=cfg["MIN_COLLECTOR_ID"],
+                max_collector_id=cfg["MAX_COLLECTOR_ID"],
+                number_of_doublings=math.ceil(
+                    math.log(overshooting_factor, 2.0)
+                ),
+            )

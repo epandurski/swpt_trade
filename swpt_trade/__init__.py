@@ -225,6 +225,7 @@ class Configuration(metaclass=MetaEnvReader):
 
     TRANSFERS_HEALTHY_MAX_COMMIT_DELAY: parse_timedelta = parse_timedelta("2h")
     TRANSFERS_AMOUNT_CUT = 1e-5
+    TRANSFERS_COLLECTOR_LIMIT = 100000
 
     PROTOCOL_BROKER_URL = "amqp://guest:guest@localhost:5672"
     PROTOCOL_BROKER_QUEUE = "swpt_trade"
