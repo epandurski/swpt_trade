@@ -270,8 +270,7 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
 
 
 def _ensure_enough_collector_accounts(turn_id: int) -> None:
-    cfg = current_app.config
-    max_transfers_count = cfg["TRANSFERS_COLLECTOR_LIMIT"]
+    max_transfers_count = current_app.config["TRANSFERS_COLLECTOR_LIMIT"]
     assert max_transfers_count >= 0
 
     cd = CollectorDispatching
