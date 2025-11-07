@@ -47,6 +47,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
+    _try_to_handle_overloaded_currencies()
 
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
@@ -338,6 +339,28 @@ def _ensure_enough_collector_accounts(turn_id: int) -> None:
         )
     )
 
-    # TODO: Make sure `ensure_collector_accounts` will be called for
-    # each OverloadedCurrency record (number_of_accounts = 2 *
-    # currency.collectors_count).
+
+def _try_to_handle_overloaded_currencies() -> None:
+    cfg = current_app.config
+    min_collector_id = cfg["MIN_COLLECTOR_ID"]
+    max_collector_id = cfg["MAX_COLLECTOR_ID"]
+
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    OverloadedCurrency.turn_id,
+                    OverloadedCurrency.debtor_id,
+                    OverloadedCurrency.collectors_count,
+                )
+        ) as result:
+            for row in result:
+                procedures.ensure_collector_accounts(
+                    debtor_id=row.debtor_id,
+                    min_collector_id=min_collector_id,
+                    max_collector_id=max_collector_id,
+                    number_of_accounts=2 * row.collectors_count,
+                )
+                procedures.forget_overloaded_currency(
+                    turn_id=row.turn_id,
+                    debtor_id=row.debtor_id,
+                )

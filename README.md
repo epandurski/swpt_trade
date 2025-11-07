@@ -155,6 +155,14 @@ MAX_DISTANCE_TO_BASE=10
 # default is 1000).
 MIN_TRADE_AMOUNT=10000
 
+# The maximum number of transfers which should be initiated per
+# turn, from/to a single collector account. When for any of the
+# collector accounts, the number of initiated trnasfers per
+# trading turn have exceeded this number, more collector accounts
+# will be created with the given currency, to share the burden.
+# The default is 100000.
+TRANSFERS_COLLECTOR_LIMIT=100000
+
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
 
@@ -221,14 +229,6 @@ TRANSFERS_HEALTHY_MAX_COMMIT_DELAY=2.5h
 # seized portion is. The default is "1e-5", wich means that
 # 0.001% of the amount will be seized.
 TRANSFERS_AMOUNT_CUT=1e-6
-
-# The maximum number of transfers which should be initiated per
-# turn, from/to a single collector account. When for any of the
-# collector accounts, the number of initiated trnasfers per
-# trading turn have exceeded this number, more collector accounts
-# will be created with the given currency, to share the burden.
-# The default is 100000.
-TRANSFERS_COLLECTOR_LIMIT=100000
 
 # Connection string for this worker's PostgreSQL database server.
 WORKER_POSTGRES_URL=postgresql+psycopg://swpt_worker:swpt_worker@localhost:5435/test

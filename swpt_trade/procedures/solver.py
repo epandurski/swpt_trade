@@ -19,6 +19,7 @@ from swpt_trade.models import (
     CollectorCollecting,
     CreditorGiving,
     CreditorTaking,
+    OverloadedCurrency,
 )
 
 
@@ -360,3 +361,16 @@ def ensure_collector_accounts(
                     number_of_alive_accounts += 1
                     if number_of_alive_accounts == number_of_accounts:
                         break
+
+
+@atomic
+def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
+    db.session.execute(
+        delete(OverloadedCurrency)
+        .where(
+            and_(
+                OverloadedCurrency.turn_id == turn_id,
+                OverloadedCurrency.debtor_id == debtor_id,
+            )
+        )
+    )
