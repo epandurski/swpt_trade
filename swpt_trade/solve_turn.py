@@ -47,7 +47,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
-    _try_to_handle_overloaded_currencies()
+    _handle_overloaded_currencies()
 
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
@@ -340,7 +340,7 @@ def _detect_overloaded_currencies(turn_id: int) -> None:
     )
 
 
-def _try_to_handle_overloaded_currencies() -> None:
+def _handle_overloaded_currencies() -> None:
     cfg = current_app.config
     min_collector_id = cfg["MIN_COLLECTOR_ID"]
     max_collector_id = cfg["MAX_COLLECTOR_ID"]
