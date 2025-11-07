@@ -301,7 +301,6 @@ def ensure_collector_accounts(
         min_collector_id: int,
         max_collector_id: int,
         number_of_accounts: int = 1,
-        number_of_doublings: int = 0,
 ) -> None:
     """Ensure that for the given `debtor_id`, there are at least
     `number_of_accounts` alive (status != 3) collector accounts.
@@ -309,10 +308,6 @@ def ensure_collector_accounts(
     When the number of existing alive collector accounts is less than
     the given `number_of_accounts`, new collector accounts will be
     created until the given number is reached.
-
-    When the `number_of_doublings` argument is specified, this
-    function ensures that the total number of collector accounts with
-    the given `debtor_id` will be doubled that many times.
 
     The collector IDs for the created accounts will be picked from a
     *repeatable* pseudoranom sequence. Thus, when two or more
@@ -329,10 +324,6 @@ def ensure_collector_accounts(
     )
     number_of_alive_accounts = sum(
         1 for account in accounts if account.status != 3
-    )
-    number_of_accounts = max(
-        number_of_accounts,
-        number_of_alive_accounts * (2 ** number_of_doublings),
     )
 
     def collector_ids_iter() -> Iterable[int]:

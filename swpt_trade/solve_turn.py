@@ -1,7 +1,6 @@
-import math
 from typing import TypeVar, Callable
 from datetime import datetime, timezone
-from sqlalchemy import select, insert, delete, text, func, union_all
+from sqlalchemy import select, insert, delete, func, union_all
 from sqlalchemy.sql.expression import and_
 from flask import current_app
 from swpt_trade.extensions import db
@@ -271,61 +270,67 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
 
 def _ensure_enough_collector_accounts(turn_id: int) -> None:
     cfg = current_app.config
-    max_count = cfg["TRANSFERS_COLLECTOR_LIMIT"]
-    assert max_count >= 0
+    max_transfers_count = cfg["TRANSFERS_COLLECTOR_LIMIT"]
+    assert max_transfers_count >= 0
 
-    dispatching_overshoots = (
+    cd = CollectorDispatching
+    dispatchings = (
         select(
-            CollectorDispatching.debtor_id.label("debtor_id"),
-            CollectorDispatching.collector_id.label("collector_id"),
-            func.count(CollectorDispatching.creditor_id).label("count"),
+            cd.debtor_id.label("debtor_id"),
+            cd.collector_id.label("collector_id"),
+            func.count(cd.creditor_id).label("transfers_count"),
         )
-        .where(CollectorDispatching.turn_id == turn_id)
-        .group_by(
-            CollectorDispatching.debtor_id,
-            CollectorDispatching.collector_id,
-        )
-        .having(
-            func.count(CollectorDispatching.creditor_id) > max_count
-        )
+        .select_from(cd)
+        .where(cd.turn_id == turn_id)
+        .group_by(cd.debtor_id, cd.collector_id)
+        .subquery(name="dispatchings")
     )
-    collecting_overshoots = (
+    dispatching_overloads = (
         select(
-            CollectorCollecting.debtor_id.label("debtor_id"),
-            CollectorCollecting.collector_id.label("collector_id"),
-            func.count(CollectorCollecting.creditor_id).label("count"),
+            dispatchings.c.debtor_id.label("debtor_id"),
+            func.count(dispatchings.c.collector_id).label("collectors_count"),
         )
-        .where(CollectorCollecting.turn_id == turn_id)
-        .group_by(
-            CollectorCollecting.debtor_id,
-            CollectorCollecting.collector_id,
-        )
-        .having(
-            func.count(CollectorCollecting.creditor_id) > max_count
-        )
-    )
-    overshoots = (
-        union_all(dispatching_overshoots, collecting_overshoots)
-        .subquery(name="overshoots")
+        .select_from(dispatchings)
+        .group_by(dispatchings.c.debtor_id)
+        .having(func.max(dispatchings.c.transfers_count) > max_transfers_count)
     )
 
-    overshooted_currencies = db.session.execute(
+    cc = CollectorCollecting
+    collectings = (
         select(
-            overshoots.c.debtor_id.label("debtor_id"),
-            func.max(overshoots.c.count).label("transfers_count"),
+            cc.debtor_id.label("debtor_id"),
+            cc.collector_id.label("collector_id"),
+            func.count(cc.creditor_id).label("transfers_count"),
         )
-        .select_from(overshoots)
-        .group_by(overshoots.c.debtor_id)
+        .select_from(cc)
+        .where(cc.turn_id == turn_id)
+        .group_by(cc.debtor_id, cc.collector_id)
+        .subquery(name="collectings")
+    )
+    collecting_overloads = (
+        select(
+            collectings.c.debtor_id.label("debtor_id"),
+            func.count(collectings.c.collector_id).label("collectors_count"),
+        )
+        .select_from(collectings)
+        .group_by(collectings.c.debtor_id)
+        .having(func.max(collectings.c.transfers_count) > max_transfers_count)
+    )
+
+    overloads = (
+        union_all(dispatching_overloads, collecting_overloads)
+        .subquery(name="overloads")
+    )
+    overloaded_currencies = db.session.execute(
+        select(
+            overloads.c.debtor_id.label("debtor_id"),
+            func.max(overloads.c.collectors_count).label("collectors_count"),
+        )
+        .select_from(overloads)
+        .group_by(overloads.c.debtor_id)
     ).all()
 
-    for currency in overshooted_currencies:
-        try:
-            overshooting_factor = currency.transfers_count / max_count
-        except ZeroDivisionError:
-            # This happens only when `max_count == 0`. This case
-            # is allowed only for testing purposes.
-            overshooting_factor = 1.0
-
+    for currency in overloaded_currencies:
         # TODO: This can deadlock very badly! Instead, write a record
         # to a new table, and implement a CLI command that reads the
         # table and executes `ensure_collector_accounts` for each
@@ -334,5 +339,5 @@ def _ensure_enough_collector_accounts(turn_id: int) -> None:
             debtor_id=currency.debtor_id,
             min_collector_id=cfg["MIN_COLLECTOR_ID"],
             max_collector_id=cfg["MAX_COLLECTOR_ID"],
-            number_of_doublings=math.ceil(math.log(overshooting_factor, 2.0)),
+            number_of_accounts=2 * currency.collectors_count,
         )
