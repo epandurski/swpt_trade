@@ -163,15 +163,15 @@ MIN_TRADE_AMOUNT=10000
 # The default is 100000.
 TRANSFERS_COLLECTOR_LIMIT=100000
 
-# All collector accounts will have their creditor IDs
-# between "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can
-# be passed as a decimal number (like "4294967296"), or a
-# hexadecimal number (like "0x100000000"). Numbers between
-# 0x8000000000000000 and 0xffffffffffffffff will be automatically
-# converted to their corresponding two's complement negative
-# numbers. Normally, you would not need this interval to contain
-# more than a few thousand IDs. The defaults are: from
-# "0x0000010000000000" to "0x00000100000007ff".
+# All collector accounts will have their creditor IDs between
+# "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can be passed as a
+# decimal number (like "4294967296"), or a hexadecimal number (like
+# "0x100000000"). Numbers between 0x8000000000000000 and
+# 0xffffffffffffffff will be automatically converted to their
+# corresponding two's complement negative numbers. Normally, you would
+# not need this interval to contain more than a few thousand IDs. Note
+# that once this interval has been set, it must not be changed! The
+# defaults are: from "0x0000010000000000" to "0x00000100000007ff".
 MIN_COLLECTOR_ID=0x0000010000000000
 MAX_COLLECTOR_ID=0x00000100000007ff
 
@@ -206,15 +206,15 @@ variables. Here are the most important settings with some random
 example values:
 
 ```shell
-# All collector accounts will have their creditor IDs
-# between "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can
-# be passed as a decimal number (like "4294967296"), or a
-# hexadecimal number (like "0x100000000"). Numbers between
-# 0x8000000000000000 and 0xffffffffffffffff will be automatically
-# converted to their corresponding two's complement negative
-# numbers. Normally, you would not need this interval to contain
-# more than a few thousand IDs. The defaults are: from
-# "0x0000010000000000" to "0x00000100000007ff".
+# All collector accounts will have their creditor IDs between
+# "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can be passed as a
+# decimal number (like "4294967296"), or a hexadecimal number (like
+# "0x100000000"). Numbers between 0x8000000000000000 and
+# 0xffffffffffffffff will be automatically converted to their
+# corresponding two's complement negative numbers. Normally, you would
+# not need this interval to contain more than a few thousand IDs. Note
+# that once this interval has been set, it must not be changed! The
+# defaults are: from "0x0000010000000000" to "0x00000100000007ff".
 MIN_COLLECTOR_ID=0x0000010000000000
 MAX_COLLECTOR_ID=0x00000100000007ff
 
