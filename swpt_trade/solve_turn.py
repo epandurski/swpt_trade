@@ -123,7 +123,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
-        _ensure_enough_collector_accounts(turn_id)
+        _detect_overloaded_currencies(turn_id)
 
         turn.phase = 3
         turn.phase_deadline = None
@@ -270,7 +270,7 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
         )
 
 
-def _ensure_enough_collector_accounts(turn_id: int) -> None:
+def _detect_overloaded_currencies(turn_id: int) -> None:
     max_transfers_count = current_app.config["TRANSFERS_COLLECTOR_LIMIT"]
     assert max_transfers_count >= 0
 
