@@ -16,6 +16,7 @@ from swpt_trade.models import (
     CollectorCollecting,
     CreditorGiving,
     CreditorTaking,
+    OverloadedCurrency,
 )
 from swpt_trade import procedures
 from swpt_trade.solver import Solver
@@ -321,23 +322,23 @@ def _ensure_enough_collector_accounts(turn_id: int) -> None:
         union_all(dispatching_overloads, collecting_overloads)
         .subquery(name="overloads")
     )
-    overloaded_currencies = db.session.execute(
-        select(
-            overloads.c.debtor_id.label("debtor_id"),
-            func.max(overloads.c.collectors_count).label("collectors_count"),
+    db.session.execute(
+        insert(OverloadedCurrency).from_select(
+            [
+                "turn_id",
+                "debtor_id",
+                "collectors_count",
+            ],
+            select(
+                turn_id,
+                overloads.c.debtor_id,
+                func.max(overloads.c.collectors_count),
+            )
+            .select_from(overloads)
+            .group_by(overloads.c.debtor_id)
         )
-        .select_from(overloads)
-        .group_by(overloads.c.debtor_id)
-    ).all()
+    )
 
-    for currency in overloaded_currencies:
-        # TODO: This can deadlock very badly! Instead, write a record
-        # to a new table, and implement a CLI command that reads the
-        # table and executes `ensure_collector_accounts` for each
-        # record.
-        procedures.ensure_collector_accounts(
-            debtor_id=currency.debtor_id,
-            min_collector_id=cfg["MIN_COLLECTOR_ID"],
-            max_collector_id=cfg["MAX_COLLECTOR_ID"],
-            number_of_accounts=2 * currency.collectors_count,
-        )
+    # TODO: Make sure `ensure_collector_accounts` will be called for
+    # each OverloadedCurrency record (number_of_accounts = 2 *
+    # currency.collectors_count).

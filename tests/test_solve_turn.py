@@ -12,6 +12,7 @@ from swpt_trade.models import (
     CollectorCollecting,
     CreditorGiving,
     CreditorTaking,
+    OverloadedCurrency,
     TS0,
 )
 
@@ -244,3 +245,13 @@ def test_try_to_advance_turn_to_phase3(db_session):
     assert cg[2].amount == 3000
     assert cg[2].collector_id == 999
     assert cg[2].creditor_hash == calc_hash(2)
+
+    oc = OverloadedCurrency.query.all()
+    oc.sort(key=lambda row: row.debtor_id)
+    assert len(oc) == 2
+    assert oc[0].turn_id == turn_id
+    assert oc[0].debtor_id == 101
+    assert oc[0].collectors_count == 2
+    assert oc[1].turn_id == turn_id
+    assert oc[1].debtor_id == 102
+    assert oc[1].collectors_count == 1

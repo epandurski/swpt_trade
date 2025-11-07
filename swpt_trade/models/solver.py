@@ -386,3 +386,20 @@ class CreditorGiving(db.Model):
             ),
         },
     )
+
+
+class OverloadedCurrency(db.Model):
+    __bind_key__ = "solver"
+    turn_id = db.Column(db.Integer, primary_key=True)
+    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    collectors_count = db.Column(db.Integer, nullable=False)
+    __table_args__ = (
+        db.CheckConstraint(collectors_count > 0),
+        {
+            "comment": (
+                'Represents the fact that during the given trading turn, the'
+                ' number of active collector accounts with the given currency'
+                ' have been too small to handle all the transfers.'
+            ),
+        },
+    )
