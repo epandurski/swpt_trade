@@ -272,7 +272,7 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
 
 def _detect_overloaded_currencies(turn_id: int) -> None:
     max_transfers_count = current_app.config["TRANSFERS_COLLECTOR_LIMIT"]
-    assert max_transfers_count >= 0
+    assert max_transfers_count > 0
 
     cd = CollectorDispatching
     dispatchings = (

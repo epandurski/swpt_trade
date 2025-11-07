@@ -248,9 +248,9 @@ def test_try_to_advance_turn_to_phase3(db_session):
 
     cas = CollectorAccount.query.all()
     cas.sort(key=lambda row: row.debtor_id)
-    assert len(cas) == 6
-    assert cas[0].debtor_id == cas[3].debtor_id == 101
-    assert cas[4].debtor_id == cas[5].debtor_id == 102
+    assert len(cas) == 4
+    assert cas[0].debtor_id == cas[1].debtor_id == 101
+    assert cas[2].debtor_id == cas[3].debtor_id == 102
 
     ocs = OverloadedCurrency.query.all()
     assert len(ocs) == 0
