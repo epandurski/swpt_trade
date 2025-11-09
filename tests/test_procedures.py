@@ -2364,6 +2364,11 @@ def test_process_revise_account_lock_signal_self_lock(
     assert al.account_last_transfer_number is not None
     assert al.has_been_revised is True
     assert len(FinalizeTransferSignal.query.all()) == 0
+    wa = WorkerAccount.query.one()
+    assert wa.debtor_id == 666
+    assert wa.creditor_id == collector_id
+    assert wa.surplus_spent_amount == (-amount if amount < 0 else 0)
+    assert wa.surplus_last_transfer_number == 1
 
     # process again (must be a noop)
     p.process_revise_account_lock_signal(
@@ -2374,6 +2379,11 @@ def test_process_revise_account_lock_signal_self_lock(
     assert len(CreditorParticipation.query.all()) == 0
     assert len(FinalizeTransferSignal.query.all()) == 0
     assert len(AccountLock.query.all()) == 1
+    wa = WorkerAccount.query.one()
+    assert wa.debtor_id == 666
+    assert wa.creditor_id == collector_id
+    assert wa.surplus_spent_amount == (-amount if amount < 0 else 0)
+    assert wa.surplus_last_transfer_number == 1
 
 
 @pytest.mark.parametrize("is_collector_trade", [True, False])

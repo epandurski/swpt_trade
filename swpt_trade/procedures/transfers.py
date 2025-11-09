@@ -1,3 +1,4 @@
+import logging
 import random
 import math
 from typing import TypeVar, Callable, Tuple, Optional
@@ -462,7 +463,11 @@ def process_revise_account_lock_signal(
                 # neither possible nor needed. Instead, we simply
                 # release the account lock.
                 dismiss()
-                acd, altn = _register_collector_trade(creditor_id, amount)
+                acd, altn = _register_collector_trade(
+                    debtor_id,
+                    creditor_id,
+                    amount,
+                )
                 lock.released_at = lock.finalized_at = current_ts
                 lock.account_creation_date = acd
                 lock.account_last_transfer_number = altn
@@ -521,7 +526,11 @@ def release_seller_account_lock(
     if lock:
         if is_collector_trade:
             account_creation_date, account_transfer_number = (
-                _register_collector_trade(creditor_id, acquired_amount)
+                _register_collector_trade(
+                    debtor_id,
+                    creditor_id,
+                    acquired_amount,
+                )
             )
         lock.released_at = current_ts
         lock.account_creation_date = account_creation_date
@@ -728,7 +737,11 @@ def release_buyer_account_lock(
     if lock:
         if is_collector_trade:
             account_creation_date, account_transfer_number = (
-                _register_collector_trade(creditor_id, acquired_amount)
+                _register_collector_trade(
+                    debtor_id,
+                    creditor_id,
+                    acquired_amount,
+                )
             )
         lock.released_at = lock.finalized_at = current_ts
         lock.account_creation_date = account_creation_date
@@ -746,28 +759,43 @@ def release_buyer_account_lock(
 
 
 def _register_collector_trade(
+        debtor_id: int,
         collector_id: int,
         amount: int,
 ) -> Tuple[date, int]:
-    # TODO: Consider implementing this function.
-    #
     # This function will be called when a collector account
     # participates in a trading turn. The `amount` will be negative
     # when the collector account is the seller, and will be positive
     # when the collector account is the buyer.
-    #
-    # It can be very useful to make a collector account participate in
-    # circular trades like any "normal" creditor account, because this
-    # allows exchanging accumulated (collected) useless surpluses for
-    # useful currencies.
-    #
-    # The implementation of this function should update the amount
-    # that is available on the collector account.
 
-    account_creation_date = DATE0  # currently, a made-up date
-    account_last_transfer_number = 0  # currently, a made-up number
+    worker_account = (
+        WorkerAccount.query
+        .filter_by(debtor_id=debtor_id, creditor_id=collector_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if worker_account:
+        worker_account.surplus_last_transfer_number += 1
 
-    return account_creation_date, account_last_transfer_number
+        # When selling -- increase the spent surplus amount. When
+        # buying -- do nothing, because the buying offers coming from
+        # worker accounts are always unlimited.
+        if amount < 0:
+            worker_account.surplus_spent_amount -= amount
+
+        return (
+            worker_account.creation_date,
+            worker_account.surplus_last_transfer_number,
+        )
+    else:
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "A collector trade has been registered, but the corresponding"
+            " WorkerAccount(creditor_id=%d, debtor_id=%d) does not exist.",
+            collector_id,
+            debtor_id,
+        )
+        return DATE0, 0
 
 
 @atomic

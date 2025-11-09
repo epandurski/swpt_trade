@@ -48,6 +48,38 @@ class WorkerAccount(db.Model):
     last_heartbeat_ts = db.Column(
         db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
     )
+    surplus_amount = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        comment="The calculated surplus on this account. The surplus can"
+                " be spent on behalf of the owner of the creditors agent"
+                " node.",
+    )
+    surplus_ts = db.Column(
+        db.TIMESTAMP(timezone=True),
+        nullable=False,
+        default=get_now_utc,
+        comment="The moment when the surplus was observed. This is needed"
+                " so that, for the current moment, we can calculate the"
+                " maximum possible demurrage that surplus may have suffered.",
+    )
+    surplus_spent_amount = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        comment="The surplus amount which already has been spent on behalf"
+                " of the owner of the creditors agent node.",
+    )
+    surplus_last_transfer_number = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=0,
+        comment="This number must be incremented each time when `surplus_ts`"
+                " change, or a trade has been made on behalf of the owner of"
+                " the creditors agent node. This is necessary in order to"
+                " avoid double-spending and double-buying.",
+    )
     __table_args__ = (
         db.CheckConstraint(interest_rate >= -100.0),
         db.CheckConstraint(transfer_note_max_bytes >= 0),
@@ -56,6 +88,9 @@ class WorkerAccount(db.Model):
             and_(demurrage_rate >= -100.0, demurrage_rate <= 0.0)
         ),
         db.CheckConstraint(commit_period >= 0),
+        db.CheckConstraint(surplus_amount >= 0),
+        db.CheckConstraint(surplus_last_transfer_number >= 0),
+        db.CheckConstraint(surplus_spent_amount >= 0),
         {
             "comment": (
                 'Represents an existing Swaptacular account, managed by a '
