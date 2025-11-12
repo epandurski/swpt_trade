@@ -1957,6 +1957,92 @@ def test_run_phase2_subphase0(
     )
     db.session.commit()
 
+    db.session.add(
+        m.HoardedCurrency(
+            turn_id=t1.turn_id,
+            debtor_id=666,
+        )
+    )
+    db.session.add(
+        m.WorkerAccount(
+            creditor_id=0x0000010000000000,
+            debtor_id=777,
+            creation_date=date(2024, 4, 12),
+            last_change_ts=current_ts,
+            last_change_seqnum=0,
+            principal=100000,
+            interest=0.0,
+            interest_rate=0.0,
+            last_interest_rate_change_ts=current_ts,
+            config_flags=0,
+            account_id="CollectorAccount777Id",
+            debtor_info_iri="https://example.com/777",
+            last_transfer_number=1,
+            last_transfer_committed_at=current_ts,
+            demurrage_rate=-5.0,
+            commit_period=10000000,
+            transfer_note_max_bytes=500,
+            last_heartbeat_ts=current_ts,
+            surplus_amount=50000,
+            surplus_ts=current_ts - timedelta(days=10),
+            surplus_spent_amount=10000,
+            surplus_last_transfer_number=1239,
+        )
+    )
+    db.session.add(
+        m.WorkerAccount(
+            creditor_id=0x0000010000000000,
+            debtor_id=666,
+            creation_date=date(2024, 4, 11),
+            last_change_ts=current_ts,
+            last_change_seqnum=0,
+            principal=0,
+            interest=0.0,
+            interest_rate=0.0,
+            last_interest_rate_change_ts=current_ts,
+            config_flags=0,
+            account_id="CollectorAccount666Id",
+            debtor_info_iri="https://example.com/666",
+            last_transfer_number=1,
+            last_transfer_committed_at=current_ts,
+            demurrage_rate=-50.0,
+            commit_period=10000000,
+            transfer_note_max_bytes=500,
+            last_heartbeat_ts=current_ts,
+            surplus_amount=0,
+            surplus_ts=m.TS0,
+            surplus_spent_amount=0,
+            surplus_last_transfer_number=1238,
+        )
+    )
+    db.session.add(
+        m.WorkerAccount(
+            creditor_id=0x0000010000000001,
+            debtor_id=666,
+            creation_date=date(2024, 4, 15),
+            last_change_ts=current_ts,
+            last_change_seqnum=0,
+            principal=0,
+            interest=0.0,
+            interest_rate=0.0,
+            last_interest_rate_change_ts=current_ts,
+            config_flags=0,
+            account_id="",
+            debtor_info_iri="https://example.com/666",
+            last_transfer_number=1,
+            last_transfer_committed_at=current_ts,
+            demurrage_rate=-50.0,
+            commit_period=10000000,
+            transfer_note_max_bytes=500,
+            last_heartbeat_ts=current_ts,
+            surplus_amount=0,
+            surplus_ts=m.TS0,
+            surplus_spent_amount=0,
+            surplus_last_transfer_number=1230,
+        )
+    )
+    db.session.commit()
+
     assert len(m.WorkerTurn.query.all()) == 1
     assert len(m.CandidateOfferSignal.query.all()) == 0
     assert len(m.NeededCollectorSignal.query.all()) == 0
@@ -1974,8 +2060,8 @@ def test_run_phase2_subphase0(
     assert wt.phase == t1.phase
     assert wt.worker_turn_subphase == 5
     cas = m.CandidateOfferSignal.query.all()
-    cas.sort(key=lambda x: x.debtor_id)
-    assert len(cas) == 2
+    cas.sort(key=lambda x: (x.debtor_id, x.creditor_id))
+    assert len(cas) == 4
     assert cas[0].turn_id == t1.turn_id
     assert cas[0].debtor_id == 666
     assert cas[0].creditor_id == 123
@@ -1984,12 +2070,26 @@ def test_run_phase2_subphase0(
     assert cas[0].last_transfer_number == 567
     assert cas[0].inserted_at >= current_ts
     assert cas[1].turn_id == t1.turn_id
-    assert cas[1].debtor_id == 777
-    assert cas[1].creditor_id == 123
-    assert cas[1].amount == -100000
-    assert cas[1].account_creation_date == date(2024, 4, 9)
-    assert cas[1].last_transfer_number == 789
+    assert cas[1].debtor_id == 666
+    assert cas[1].creditor_id == 0x0000010000000000
+    assert cas[1].amount == m.MAX_INT64
+    assert cas[1].account_creation_date == date(2024, 4, 11)
+    assert cas[1].last_transfer_number == 1238
     assert cas[1].inserted_at >= current_ts
+    assert cas[2].turn_id == t1.turn_id
+    assert cas[2].debtor_id == 777
+    assert cas[2].creditor_id == 123
+    assert cas[2].amount == -100000
+    assert cas[2].account_creation_date == date(2024, 4, 9)
+    assert cas[2].last_transfer_number == 789
+    assert cas[2].inserted_at >= current_ts
+    assert cas[3].turn_id == t1.turn_id
+    assert cas[3].debtor_id == 777
+    assert cas[3].creditor_id == 0x0000010000000000
+    assert -49000 <= cas[3].amount <= -20000
+    assert cas[3].account_creation_date == date(2024, 4, 12)
+    assert cas[3].last_transfer_number == 1239
+    assert cas[3].inserted_at >= current_ts
     ncs = m.NeededCollectorSignal.query.all()
     assert len(ncs) == 1
     assert ncs[0].debtor_id == 888

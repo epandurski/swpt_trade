@@ -403,3 +403,32 @@ class OverloadedCurrency(db.Model):
             ),
         },
     )
+
+
+class HoardedCurrency(db.Model):
+    __bind_key__ = "solver"
+    turn_id = db.Column(db.Integer, primary_key=True)
+    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    peg_debtor_id = db.Column(db.BigInteger)
+    peg_exchange_rate = db.Column(db.FLOAT)
+    __table_args__ = (
+        db.CheckConstraint(
+            or_(
+                and_(
+                    peg_debtor_id == null(),
+                    peg_exchange_rate == null(),
+                ),
+                and_(
+                    peg_debtor_id != null(),
+                    peg_exchange_rate != null(),
+                ),
+            )
+        ),
+        {
+            "comment": (
+                'Represents the fact that during the given trading turn, the'
+                ' owner of the creditors agent node wants to buy (hoard)'
+                ' the given currency.'
+            ),
+        },
+    )

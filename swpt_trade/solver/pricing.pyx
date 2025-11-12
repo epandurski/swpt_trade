@@ -177,6 +177,26 @@ cdef class BidProcessor:
         currency_registry.prepare_for_queries()
         return currency_registry.get_currency_price(debtor_id)
 
+    def get_tradable_currency_peg(self, i64 debtor_id):
+        """Return the (peg_debtor_id, peg_exchange_rate) tuple for a
+        tradable currency.
+
+        This method should be called only after all the participating
+        currencies have been registered (by calling the
+        `register_currency` method for each one of them).
+
+        If the currency determined by the given `debtor_id` is not
+        tradable (that is: the currency it is not both confirmed and
+        priceable) -- (0, nan) will be returned.
+        """
+        currency_registry = self.currency_registry_ptr
+        currency_registry.prepare_for_queries()
+        tc = currency_registry.get_tradable_currency(debtor_id)
+        if tc != NULL and tc.peg_ptr != NULL:
+            return tc.peg_ptr.debtor_id, tc.peg_exchange_rate
+        else:
+            return 0, NAN
+
     def register_bid(
         self,
         i64 creditor_id,

@@ -17,6 +17,7 @@ from swpt_trade.models import (
     CreditorGiving,
     CreditorTaking,
     OverloadedCurrency,
+    HoardedCurrency,
 )
 from swpt_trade import procedures
 from swpt_trade.solver import Solver
@@ -47,6 +48,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
+    _delete_hoarded_currencies(turn_id)
     _handle_overloaded_currencies()
 
 
@@ -364,3 +366,9 @@ def _handle_overloaded_currencies() -> None:
                     turn_id=row.turn_id,
                     debtor_id=row.debtor_id,
                 )
+
+
+def _delete_hoarded_currencies(turn_id: int) -> None:
+    db.session.execute(
+        delete(HoardedCurrency).where(HoardedCurrency.turn_id == turn_id)
+    )

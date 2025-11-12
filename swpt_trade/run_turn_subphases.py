@@ -11,12 +11,14 @@ from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.utils import (
     batched,
     u16_to_i16,
+    calc_demurrage,
     contain_principal_overflow,
     DispatchingData,
 )
 from swpt_trade.extensions import db
 from swpt_trade.solver import CandidateOfferAuxData, BidProcessor
 from swpt_trade.models import (
+    MAX_INT64,
     DebtorInfoDocument,
     DebtorLocatorClaim,
     DebtorInfo,
@@ -29,6 +31,7 @@ from swpt_trade.models import (
     NeededCollectorSignal,
     ReviseAccountLockSignal,
     CollectorAccount,
+    HoardedCurrency,
     ActiveCollector,
     AccountLock,
     SellOffer,
@@ -189,7 +192,12 @@ def run_phase2_subphase0(turn_id: int) -> None:
                 worker_turn.min_trade_amount,
             )
             _load_currencies(bp, turn_id)
-            _generate_candidate_offers(bp, turn_id)
+            _generate_user_candidate_offers(bp, turn_id)
+            _generate_owner_candidate_offers(
+                bp,
+                turn_id,
+                worker_turn.collection_deadline,
+            )
             _copy_active_collectors(bp)
             _insert_needed_collector_signals(bp)
 
@@ -216,10 +224,32 @@ def _load_currencies(bp: BidProcessor, turn_id: int) -> None:
                     bp.register_currency(*row)
 
 
-def _generate_candidate_offers(bp, turn_id):
+def _generate_user_candidate_offers(bp, turn_id):
     current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
     bid_counter = 0
+
+    def calc_user_bid_amount(row) -> int:
+        if (
+                row.is_scheduled_for_deletion
+                or not row.has_account_id
+                or not row.wants_to_trade
+                or row.max_principal < row.min_principal
+                or row.min_principal <= row.principal <= row.max_principal
+        ):
+            return 0
+
+        if row.principal < row.min_principal:
+            # Return a positive number (buy).
+            return contain_principal_overflow(
+                row.min_principal - row.principal
+            )
+
+        # Return a negative number (sell).
+        assert row.principal > row.max_principal
+        return contain_principal_overflow(
+            row.max_principal - row.principal
+        )
 
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
@@ -250,14 +280,14 @@ def _generate_candidate_offers(bp, turn_id):
                 if sharding_realm.match(creditor_id):
                     for row in rows:
                         assert row.creditor_id == creditor_id
-                        rate = row.peg_exchange_rate
+                        peg_rate = row.peg_exchange_rate
 
                         bp.register_bid(
                             creditor_id,
                             row.debtor_id,
-                            _calc_bid_amount(row),
+                            calc_user_bid_amount(row),
                             row.peg_debtor_id or 0,
-                            math.nan if rate is None else rate,
+                            math.nan if peg_rate is None else peg_rate,
                             CandidateOfferAuxData(
                                 creation_date=row.creation_date,
                                 last_transfer_number=row.last_transfer_number,
@@ -275,23 +305,113 @@ def _generate_candidate_offers(bp, turn_id):
             _process_bids(bp, turn_id, current_ts)
 
 
-def _calc_bid_amount(row) -> int:
-    if (
-            row.is_scheduled_for_deletion
-            or not row.has_account_id
-            or not row.wants_to_trade
-            or row.max_principal < row.min_principal
-            or row.min_principal <= row.principal <= row.max_principal
-    ):
-        return 0
+def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
+    current_ts = datetime.now(tz=timezone.utc)
+    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+    bid_counter = 0
 
-    if row.principal < row.min_principal:
-        # Return a positive number (buy).
-        return contain_principal_overflow(row.min_principal - row.principal)
+    def calc_owner_bid_amount(row, hoarded) -> int:
+        if row.is_scheduled_for_deletion or not row.has_account_id:
+            return 0  # Do not trade.
+        if hoarded:
+            # Return a huge positive number (buy without limit).
+            return MAX_INT64
+        worse_surplus_demurrage = calc_demurrage(
+            row.demurrage_rate,
+            collection_deadline - min(row.surplus_ts, current_ts),
+        )
+        available_surplus_amount = max(
+            0,
+            + math.floor(row.surplus_amount * worse_surplus_demurrage)
+            - row.surplus_spent_amount
+        )
+        # We must make sure that the amount locked during the trading
+        # turn will never exceed the available surplus. To compensate
+        # for the possible demurrage, the locked amount will be bigger
+        # than the bid amount. Therefore, we must factor the possible
+        # demurrage again, and also add some safety cushion.
+        lock_correction_factor = 0.9999 * calc_demurrage(
+            row.demurrage_rate, collection_deadline - current_ts
+        )
+        # Return a negative number (sell the available surplus).
+        return contain_principal_overflow(
+            - max(
+                0,
+                + math.floor(available_surplus_amount * lock_correction_factor)
+                - 1
+            )
+        )
 
-    # Return a negative number (sell).
-    assert row.principal > row.max_principal
-    return contain_principal_overflow(row.max_principal - row.principal)
+    with db.engines["solver"].connect() as s_conn:
+        hoarded_currency_pegs = {
+            row.debtor_id: (row.peg_debtor_id, row.peg_exchange_rate)
+            for row in s_conn.execute(
+                select(
+                    HoardedCurrency.debtor_id,
+                    HoardedCurrency.peg_debtor_id,
+                    HoardedCurrency.peg_exchange_rate,
+                )
+                .where(HoardedCurrency.turn_id == turn_id)
+            ).all()
+        }
+
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    WorkerAccount.creditor_id,
+                    WorkerAccount.debtor_id,
+                    WorkerAccount.creation_date,
+                    WorkerAccount.demurrage_rate,
+                    WorkerAccount.surplus_amount,
+                    WorkerAccount.surplus_ts,
+                    WorkerAccount.surplus_spent_amount,
+                    (
+                        WorkerAccount.surplus_last_transfer_number
+                    ).label("last_transfer_number"),
+                    (
+                        WorkerAccount.account_id != ""
+                    ).label("has_account_id"),
+                    (
+                        WorkerAccount.config_flags.op("&")(DELETION_FLAG) != 0
+                    ).label("is_scheduled_for_deletion"),
+                )
+                .order_by(WorkerAccount.creditor_id)
+        ) as result:
+            for creditor_id, rows in groupby(result, lambda r: r.creditor_id):
+                if sharding_realm.match(creditor_id):
+                    for row in rows:
+                        assert row.creditor_id == creditor_id
+                        debtor_id = row.debtor_id
+                        hoarded = hoarded_currency_pegs.get(debtor_id)
+                        peg_debtor_id, peg_rate = (
+                            # For hoarded currencies -- insist on
+                            # using the peg provided by the owner of
+                            # the creditors agent node. For other
+                            # currencies -- accept the peg provided by
+                            # the issuer of the currency.
+                            hoarded or bp.get_tradable_currency_peg(debtor_id)
+                        )
+                        bp.register_bid(
+                            creditor_id,
+                            debtor_id,
+                            calc_owner_bid_amount(row, hoarded),
+                            peg_debtor_id or 0,
+                            math.nan if peg_rate is None else peg_rate,
+                            CandidateOfferAuxData(
+                                creation_date=row.creation_date,
+                                last_transfer_number=row.last_transfer_number,
+                            ),
+                        )
+                        bid_counter += 1
+
+                    # Process the registered bids when they become too
+                    # many, so that they can not use up the available
+                    # memory.
+                    if bid_counter >= BID_COUNTER_THRESHOLD:
+                        _process_bids(bp, turn_id, current_ts)
+                        bid_counter = 0
+
+            _process_bids(bp, turn_id, current_ts)
 
 
 def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
