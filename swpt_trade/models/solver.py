@@ -412,6 +412,7 @@ class HoardedCurrency(db.Model):
     peg_debtor_id = db.Column(db.BigInteger)
     peg_exchange_rate = db.Column(db.FLOAT)
     __table_args__ = (
+        db.CheckConstraint(peg_exchange_rate >= 0.0),
         db.CheckConstraint(
             or_(
                 and_(
