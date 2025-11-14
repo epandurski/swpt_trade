@@ -194,6 +194,9 @@ class Configuration(metaclass=MetaEnvReader):
     MAX_COLLECTOR_ID: _parse_creditor_id = (
         _parse_creditor_id("0x00000100000007ff")
     )
+    OWNER_CREDITOR_ID: _parse_creditor_id = (
+        _parse_creditor_id("0x00000100ffffffff")
+    )
     DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 1
     OAUTH2_SUPERUSER_USERNAME = "creditors-superuser"
     OAUTH2_SUPERVISOR_USERNAME = "creditors-supervisor"

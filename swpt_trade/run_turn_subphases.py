@@ -80,6 +80,7 @@ def run_phase1_subphase0(turn_id: int) -> None:
             ):
                 _populate_debtor_infos(w_conn, s_conn, turn_id)
                 _populate_confirmed_debtors(w_conn, s_conn, turn_id)
+                _populate_hoarded_currencies(w_conn, s_conn, turn_id)
 
         worker_turn.worker_turn_subphase = 10
 
@@ -169,6 +170,62 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
                     break
         else:
             s_conn.commit()
+
+
+def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    owner_creditor_id = cfg["OWNER_CREDITOR_ID"]
+
+    if sharding_realm.match(owner_creditor_id):
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    TradingPolicy.debtor_id,
+                    TradingPolicy.peg_debtor_id,
+                    TradingPolicy.peg_exchange_rate,
+                )
+                .where(
+                    and_(
+                        TradingPolicy.creditor_id == owner_creditor_id,
+                        TradingPolicy.account_id != "",
+                        TradingPolicy.account_id_is_obsolete == false(),
+                        TradingPolicy.config_flags.op("&")(DELETION_FLAG) == 0,
+                        TradingPolicy.policy_name != null(),
+                        TradingPolicy.principal < TradingPolicy.min_principal,
+                        TradingPolicy.min_principal
+                        <= TradingPolicy.max_principal,
+                    )
+                )
+        ) as result:
+            for rows in batched(result, INSERT_BATCH_SIZE):
+                dicts_to_insert = [
+                    {
+                        "turn_id": turn_id,
+                        "debtor_id": row.debtor_id,
+                        "peg_debtor_id": row.peg_debtor_id,
+                        "peg_exchange_rate": row.peg_exchange_rate,
+                    }
+                    for row in rows
+                ]
+                if dicts_to_insert:
+                    try:
+                        s_conn.execute(
+                            insert(HoardedCurrency).execution_options(
+                                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            ),
+                            dicts_to_insert,
+                        )
+                    except IntegrityError:
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            "An attempt has been made to insert an already"
+                            " existing hoarded currency row for turn %d.",
+                            turn_id,
+                        )
+                        s_conn.rollback()
+                        break
+            else:
+                s_conn.commit()
 
 
 @atomic

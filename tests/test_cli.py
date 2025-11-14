@@ -1674,6 +1674,7 @@ def test_update_worker_turns(app, db_session, current_ts):
 
 @pytest.mark.parametrize("populated_confirmed_debtors", [True, False])
 @pytest.mark.parametrize("populated_debtor_infos", [True, False])
+@pytest.mark.parametrize("populated_hoarded_currencies", [True, False])
 def test_run_phase1_subphase0(
         mocker,
         app,
@@ -1681,6 +1682,7 @@ def test_run_phase1_subphase0(
         current_ts,
         populated_debtor_infos,
         populated_confirmed_debtors,
+        populated_hoarded_currencies,
 ):
     mocker.patch("swpt_trade.run_turn_subphases.INSERT_BATCH_SIZE", new=1)
     mocker.patch("swpt_trade.run_turn_subphases.SELECT_BATCH_SIZE", new=1)
@@ -1732,7 +1734,17 @@ def test_run_phase1_subphase0(
                 peg_exchange_rate=2.0,
             )
         )
+    if populated_hoarded_currencies:
+        db.session.add(
+            m.HoardedCurrency(
+                turn_id=t1.turn_id,
+                debtor_id=777,
+                peg_debtor_id=666,
+                peg_exchange_rate=1.1,
+            )
+        )
 
+    owner_creditor_id = current_app.config["OWNER_CREDITOR_ID"]
     wt1 = m.WorkerTurn(
         turn_id=t1.turn_id,
         started_at=t1.started_at,
@@ -1745,6 +1757,36 @@ def test_run_phase1_subphase0(
         worker_turn_subphase=0,
     )
     db.session.add(wt1)
+    db.session.add(
+        m.TradingPolicy(
+            creditor_id=owner_creditor_id,
+            debtor_id=777,
+            account_id="Owner",
+            creation_date=date(2024, 4, 9),
+            principal=0,
+            last_transfer_number=789,
+            policy_name="conservative",
+            min_principal=50000,
+            max_principal=60000,
+            peg_debtor_id=666,
+            peg_exchange_rate=1.1,
+        )
+    )
+    db.session.add(
+        m.TradingPolicy(
+            creditor_id=owner_creditor_id + 1,
+            debtor_id=888,
+            account_id="Other",
+            creation_date=date(2024, 4, 9),
+            principal=0,
+            last_transfer_number=789,
+            policy_name="conservative",
+            min_principal=50000,
+            max_principal=60000,
+            peg_debtor_id=666,
+            peg_exchange_rate=1.1,
+        )
+    )
     db.session.add(
         m.DebtorInfoDocument(
             debtor_info_locator="https://example.com/777",
@@ -1814,6 +1856,12 @@ def test_run_phase1_subphase0(
     assert cds[0].debtor_info_locator == "https://example.com/666"
     assert cds[1].debtor_id == 777
     assert cds[1].debtor_info_locator == "https://example.com/777"
+    hcs = m.HoardedCurrency.query.all()
+    assert len(hcs) == 1
+    assert hcs[0].turn_id == t1.turn_id
+    assert hcs[0].debtor_id == 777
+    assert hcs[0].peg_debtor_id == 666
+    assert hcs[0].peg_exchange_rate == 1.1
 
 
 @pytest.mark.parametrize("has_active_collectors", [True, False])

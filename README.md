@@ -218,6 +218,17 @@ example values:
 MIN_COLLECTOR_ID=0x0000010000000000
 MAX_COLLECTOR_ID=0x00000100000007ff
 
+# The creditor ID of the user account of the owner of the creditors
+# agent node. The system will use the acumullated surpluses to buy the
+# same currencies that the user with this creditor ID buys.
+# Eventually, all bought amounts will be automatically transfered to
+# this user account. The creditor ID can be passed as a decimal number
+# (like "4294967296"), or a hexadecimal number (like "0x100000000").
+# Numbers between 0x8000000000000000 and 0xffffffffffffffff will be
+# automatically converted to their corresponding two's complement
+# negative numbers. The default is "0x00000100ffffffff".
+OWNER_CREDITOR_ID=1234567890
+
 # When a currency is about to be traded for the first time, at least
 # one collector account must be created. This setting determines how
 # many collector accounts will be created for newly encountered
