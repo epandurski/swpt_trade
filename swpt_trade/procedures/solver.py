@@ -1,11 +1,9 @@
 from typing import TypeVar, Callable, Sequence, List, Iterable, Tuple
-from random import Random
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, delete, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
-from sqlalchemy.orm import load_only
-from swpt_trade.utils import can_start_new_turn
+from swpt_trade.utils import can_start_new_turn, collector_ids_iter
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TS0,
@@ -334,40 +332,35 @@ def ensure_collector_accounts(
     collector IDs, avoiding the creation of unneeded collector
     accounts.
     """
-    accounts = (
-        CollectorAccount.query
-        .filter_by(debtor_id=debtor_id)
-        .options(load_only(CollectorAccount.status))
-        .all()
-    )
-    number_of_alive_accounts = sum(
-        1 for account in accounts if account.status != 3
-    )
+    accounts = db.session.execute(
+        select(CollectorAccount.collector_id, CollectorAccount.status)
+        .where(CollectorAccount.debtor_id == debtor_id)
+    ).all()
 
-    def collector_ids_iter() -> Iterable[int]:
-        number_of_dead_accounts = len(accounts) - number_of_alive_accounts
-        final_number_of_accounts = number_of_dead_accounts + number_of_accounts
-        ids_total_count = 1 + max_collector_id - min_collector_id
+    number_of_dead_accounts = sum(1 for x in accounts if x.status == 3)
+    number_of_alive_accounts = len(accounts) - number_of_dead_accounts
 
-        # NOTE: Because we rely on being able to efficiently pick
-        # random IDs between `min_collector_id` and
+    if number_of_alive_accounts < number_of_accounts:
+        # NOTE: Because we rely on being able to randomly pick
+        # non-existing IDs between `min_collector_id` and
         # `max_collector_id`, we can not utilize the range of
         # available IDs at 100%. Here we ensure a 1/4 safety margin.
-        if final_number_of_accounts > ids_total_count * 3 // 4:
+        if (
+                number_of_accounts + number_of_dead_accounts
+                > (1 + max_collector_id - min_collector_id) * 3 // 4
+        ):
             raise RuntimeError(
                 "The number of available collector IDs is not big enough."
             )
 
-        rgen = Random()
-        rgen.seed(debtor_id, version=2)
-        while True:
-            yield rgen.randint(min_collector_id, max_collector_id)
-
-    if number_of_alive_accounts < number_of_accounts:
-        existing_ids = set(x.collector_id for x in accounts)
         new_collectors = []
+        existing_ids = set(x.collector_id for x in accounts)
 
-        for collector_id in collector_ids_iter():
+        for collector_id in collector_ids_iter(
+                debtor_id=debtor_id,
+                min_collector_id=min_collector_id,
+                max_collector_id=max_collector_id,
+        ):
             if collector_id not in existing_ids:
                 new_collectors.append((debtor_id, collector_id))
                 existing_ids.add(collector_id)

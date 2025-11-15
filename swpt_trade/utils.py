@@ -2,7 +2,8 @@ from __future__ import annotations
 import re
 import math
 import array
-from typing import Self
+from random import Random
+from typing import Self, Iterable
 from enum import Enum
 from dataclasses import dataclass
 from hashlib import md5
@@ -278,3 +279,17 @@ def calc_demurrage(demurrage_rate: float, period: timedelta) -> float:
     k = calc_k(demurrage_rate)
     t = max(0.0, period.total_seconds())
     return min(math.exp(k * t), 1.0)
+
+
+def collector_ids_iter(
+        *,
+        debtor_id: int,
+        min_collector_id: int,
+        max_collector_id: int,
+) -> Iterable[int]:
+    assert min_collector_id <= max_collector_id
+
+    rgen = Random()
+    rgen.seed(debtor_id, version=2)
+    while True:
+        yield rgen.randint(min_collector_id, max_collector_id)
