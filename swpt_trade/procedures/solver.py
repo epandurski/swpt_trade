@@ -1,7 +1,7 @@
 from typing import TypeVar, Callable, Sequence, List, Iterable, Tuple
 from random import Random
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, insert, delete, text, func
+from sqlalchemy import select, insert, delete, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
 from sqlalchemy.orm import load_only
