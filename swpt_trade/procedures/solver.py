@@ -3,7 +3,7 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, delete, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
-from swpt_trade.utils import can_start_new_turn, collector_ids_iter
+from swpt_trade.utils import can_start_new_turn, pseudorandom_id_generator
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TS0,
@@ -356,10 +356,10 @@ def ensure_collector_accounts(
         new_collectors = []
         existing_ids = set(x.collector_id for x in accounts)
 
-        for collector_id in collector_ids_iter(
-                debtor_id=debtor_id,
-                min_collector_id=min_collector_id,
-                max_collector_id=max_collector_id,
+        for collector_id in pseudorandom_id_generator(
+                seed=debtor_id,
+                min_id=min_collector_id,
+                max_id=max_collector_id,
         ):
             if collector_id not in existing_ids:
                 new_collectors.append((debtor_id, collector_id))

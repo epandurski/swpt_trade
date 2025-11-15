@@ -281,15 +281,15 @@ def calc_demurrage(demurrage_rate: float, period: timedelta) -> float:
     return min(math.exp(k * t), 1.0)
 
 
-def collector_ids_iter(
+def pseudorandom_id_generator(
         *,
-        debtor_id: int,
-        min_collector_id: int,
-        max_collector_id: int,
+        seed: int,
+        min_id: int,
+        max_id: int,
 ) -> Iterable[int]:
-    assert min_collector_id <= max_collector_id
+    assert min_id <= max_id
 
     rgen = Random()
-    rgen.seed(debtor_id, version=2)
+    rgen.seed(seed, version=2)
     while True:
-        yield rgen.randint(min_collector_id, max_collector_id)
+        yield rgen.randint(min_id, max_id)
