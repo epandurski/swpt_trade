@@ -881,6 +881,20 @@ def test_mark_requested_collector(db_session, current_ts):
     assert cas[2].status == 0
 
 
+def test_insert_collector_accounts(db_session):
+    p.insert_collector_accounts([(666, 1000)])
+    p.insert_collector_accounts([(666, 1000), (666, 1001)])
+    cas = CollectorAccount.query.all()
+    cas.sort(key=lambda x: (x.debtor_id, x.collector_id))
+    assert len(cas) == 2
+    assert cas[0].debtor_id == 666
+    assert cas[0].collector_id == 1000
+    assert cas[0].status == 0
+    assert cas[1].debtor_id == 666
+    assert cas[1].collector_id == 1001
+    assert cas[0].status == 0
+
+
 def test_ensure_collector_accounts(db_session):
     p.ensure_collector_accounts(
         debtor_id=666,

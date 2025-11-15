@@ -1,7 +1,8 @@
 from typing import TypeVar, Callable, Sequence, List, Iterable, Tuple
 from random import Random
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, insert, delete, text
+from sqlalchemy import select, insert, delete, text, func
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
 from sqlalchemy.orm import load_only
 from swpt_trade.utils import can_start_new_turn
@@ -296,6 +297,22 @@ def activate_collector(
 
 
 @atomic
+def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
+    db.session.execute(
+        postgresql.insert(CollectorAccount).on_conflict_do_nothing(
+            index_elements=[
+                CollectorAccount.debtor_id,
+                CollectorAccount.collector_id,
+            ]
+        ),
+        [
+            {"debtor_id": debtor_id, "collector_id": collector_id}
+            for debtor_id, collector_id in pks
+        ]
+    )
+
+
+@atomic
 def ensure_collector_accounts(
         *,
         debtor_id: int,
@@ -347,20 +364,18 @@ def ensure_collector_accounts(
             yield rgen.randint(min_collector_id, max_collector_id)
 
     if number_of_alive_accounts < number_of_accounts:
-        with db.retry_on_integrity_error():
-            existing_ids = set(x.collector_id for x in accounts)
+        existing_ids = set(x.collector_id for x in accounts)
+        new_collectors = []
 
-            for collector_id in collector_ids_iter():
-                if collector_id not in existing_ids:
-                    db.session.add(
-                        CollectorAccount(
-                            debtor_id=debtor_id, collector_id=collector_id
-                        )
-                    )
-                    existing_ids.add(collector_id)
-                    number_of_alive_accounts += 1
-                    if number_of_alive_accounts == number_of_accounts:
-                        break
+        for collector_id in collector_ids_iter():
+            if collector_id not in existing_ids:
+                new_collectors.append((debtor_id, collector_id))
+                existing_ids.add(collector_id)
+                number_of_alive_accounts += 1
+                if number_of_alive_accounts == number_of_accounts:
+                    break
+
+        insert_collector_accounts(new_collectors)
 
 
 @atomic

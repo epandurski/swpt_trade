@@ -48,7 +48,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
-    _delete_hoarded_currencies(turn_id)
+    _handle_hoarded_currencies(turn_id)
     _handle_overloaded_currencies()
 
 
@@ -368,7 +368,44 @@ def _handle_overloaded_currencies() -> None:
                 )
 
 
-def _delete_hoarded_currencies(turn_id: int) -> None:
+def _handle_hoarded_currencies(turn_id: int) -> None:
+    """Ensure hoarded currencies utilize the maximum number of
+    creditor IDs.
+
+    NOTE: Surplus amounts will accumulate on collectors with different
+    creditor IDs (between MIN_COLLECTOR_ID and MAX_COLLECTOR_ID).
+    Thus, a surplus selling offer could come from any creditor in this
+    interval, and therefore, in order to reliably match buying and
+    selling offers, surplus buying offers should also be registered
+    from all possible creditor IDs in this interval.
+    """
+
+    cfg = current_app.config
+    min_collector_id = cfg["MIN_COLLECTOR_ID"]
+    max_collector_id = cfg["MAX_COLLECTOR_ID"]
+    assert min_collector_id <= max_collector_id
+    number_of_ids = 1 + max_collector_id - min_collector_id
+
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(HoardedCurrency.debtor_id)
+                .join(
+                    CollectorAccount,
+                    CollectorAccount.debtor_id == HoardedCurrency.debtor_id,
+                    isouter=True,
+                )
+                .where(HoardedCurrency.turn_id == turn_id)
+                .group_by(HoardedCurrency.debtor_id)
+                .having(
+                    func.count(CollectorAccount.collector_id) < number_of_ids
+                )
+        ) as result:
+            for row in result:
+                procedures.insert_collector_accounts(
+                    (row.debtor_id, c_id)
+                    for c_id in range(min_collector_id, max_collector_id + 1)
+                )
+
     db.session.execute(
         delete(HoardedCurrency).where(HoardedCurrency.turn_id == turn_id)
     )
