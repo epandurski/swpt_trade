@@ -1941,7 +1941,7 @@ def test_run_phase2_subphase0(
     db.session.add(wt1)
     if has_active_collectors:
         db.session.add(
-            m.ActiveCollector(
+            m.UsefulCollector(
                 debtor_id=999,
                 collector_id=0x0000010000000000,
                 account_id="TestCollectorAccountId",
@@ -2141,11 +2141,12 @@ def test_run_phase2_subphase0(
     ncs = m.NeededCollectorSignal.query.all()
     assert len(ncs) == 1
     assert ncs[0].debtor_id == 888
-    acs = m.ActiveCollector.query.all()
+    acs = m.UsefulCollector.query.all()
     assert len(acs) == 1
     assert acs[0].debtor_id == 999
     assert acs[0].collector_id == 0x0000010000000000
     assert acs[0].account_id == "TestCollectorAccountId"
+    assert acs[0].disabled_at is None
 
 
 @pytest.mark.parametrize("has_sell_offers", [True, False])

@@ -80,15 +80,22 @@ class RecentlyNeededCollector(db.Model):
     )
 
 
-class ActiveCollector(db.Model):
+class UsefulCollector(db.Model):
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
     account_id = db.Column(db.String, nullable=False)
+    disabled_at = db.Column(db.TIMESTAMP(timezone=True))
     __table_args__ = (
+        db.Index(
+            "idx_useful_collector_collector_id",
+            collector_id,
+            debtor_id,
+            unique=True,
+        ),
         db.CheckConstraint(account_id != ""),
         {
             "comment": (
-                'Represents an active Swaptacular account which can be'
+                'Represents an existing Swaptacular account which can be'
                 ' used to collect and dispatch transfers. Each "Worker"'
                 ' servers will maintain its own copy of this table (that is:'
                 ' no rows-sharding) by periodically copying the relevant'

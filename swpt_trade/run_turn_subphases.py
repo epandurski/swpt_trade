@@ -32,7 +32,7 @@ from swpt_trade.models import (
     ReviseAccountLockSignal,
     CollectorAccount,
     HoardedCurrency,
-    ActiveCollector,
+    UsefulCollector,
     AccountLock,
     SellOffer,
     BuyOffer,
@@ -255,7 +255,7 @@ def run_phase2_subphase0(turn_id: int) -> None:
                 turn_id,
                 worker_turn.collection_deadline,
             )
-            _copy_active_collectors(bp)
+            _copy_useful_collectors(bp)
             _insert_needed_collector_signals(bp)
 
         worker_turn.worker_turn_subphase = 5
@@ -492,12 +492,12 @@ def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
         )
 
 
-def _copy_active_collectors(bp: BidProcessor) -> None:
+def _copy_useful_collectors(bp: BidProcessor) -> None:
     with db.engines["solver"].connect() as s_conn:
         db.session.execute(
-            text("LOCK TABLE active_collector IN SHARE ROW EXCLUSIVE MODE")
+            text("LOCK TABLE useful_collector IN SHARE ROW EXCLUSIVE MODE")
         )
-        ActiveCollector.query.delete(synchronize_session=False)
+        UsefulCollector.query.delete(synchronize_session=False)
 
         with s_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -506,7 +506,6 @@ def _copy_active_collectors(bp: BidProcessor) -> None:
                     CollectorAccount.account_id,
                     CollectorAccount.status
                 )
-                .where(CollectorAccount.status < 3)
         ) as result:
             for rows in batched(result, INSERT_BATCH_SIZE):
                 dicts_to_insert = [
@@ -514,12 +513,17 @@ def _copy_active_collectors(bp: BidProcessor) -> None:
                         "debtor_id": row.debtor_id,
                         "collector_id": row.collector_id,
                         "account_id": row.account_id,
+                        "disabled_at": (
+                            None
+                            if row.status == 2
+                            else row.latest_status_change_at
+                        ),
                     }
-                    for row in rows if row.status == 2
+                    for row in rows if row.status >= 2
                 ]
                 if dicts_to_insert:
                     db.session.execute(
-                        insert(ActiveCollector).execution_options(
+                        insert(UsefulCollector).execution_options(
                             insertmanyvalues_page_size=INSERT_BATCH_SIZE
                         ),
                         dicts_to_insert,

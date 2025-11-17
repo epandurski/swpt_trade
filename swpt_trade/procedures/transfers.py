@@ -32,7 +32,7 @@ from swpt_trade.models import (
     cr_seq,
     WorkerTurn,
     AccountLock,
-    ActiveCollector,
+    UsefulCollector,
     PrepareTransferSignal,
     FinalizeTransferSignal,
     TriggerTransferSignal,
@@ -130,11 +130,17 @@ def process_candidate_offer_signal(
     ):
         return
 
-    active_collectors = (
-        ActiveCollector.query
-        .filter_by(debtor_id=debtor_id)
-        .all()
-    )
+    active_collectors = db.session.execute(
+        select(
+            UsefulCollector.collector_id,
+            UsefulCollector.account_id,
+        )
+        .where(
+            UsefulCollector.debtor_id == debtor_id,
+            UsefulCollector.disabled_at == null(),
+        )
+    ).all()
+
     try:
         collector = random.choice(active_collectors)
     except IndexError:
