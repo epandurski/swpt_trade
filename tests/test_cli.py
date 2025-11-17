@@ -2012,6 +2012,12 @@ def test_run_phase2_subphase0(
         )
     )
     db.session.add(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000000,
+            debtor_id=777,
+        )
+    )
+    db.session.add(
         m.WorkerAccount(
             creditor_id=0x0000010000000000,
             debtor_id=777,
@@ -2038,6 +2044,12 @@ def test_run_phase2_subphase0(
         )
     )
     db.session.add(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000000,
+            debtor_id=666,
+        )
+    )
+    db.session.add(
         m.WorkerAccount(
             creditor_id=0x0000010000000000,
             debtor_id=666,
@@ -2061,6 +2073,12 @@ def test_run_phase2_subphase0(
             surplus_ts=m.TS0,
             surplus_spent_amount=0,
             surplus_last_transfer_number=1238,
+        )
+    )
+    db.session.add(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000001,
+            debtor_id=666,
         )
     )
     db.session.add(

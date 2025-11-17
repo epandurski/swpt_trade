@@ -10,6 +10,7 @@ class NeededWorkerAccount(db.Model):
     configured_at = db.Column(
         db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
     )
+    collection_disabled_since = db.Column(db.TIMESTAMP(timezone=True))
     __table_args__ = (
         {
             "comment": (

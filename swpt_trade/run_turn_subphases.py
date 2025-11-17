@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from itertools import groupby
 from sqlalchemy import select, insert, delete, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.sql.expression import null, false, and_
+from sqlalchemy.sql.expression import null, false, case, and_
 from flask import current_app
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.utils import (
@@ -27,6 +27,7 @@ from swpt_trade.models import (
     CurrencyInfo,
     TradingPolicy,
     WorkerAccount,
+    NeededWorkerAccount,
     CandidateOfferSignal,
     NeededCollectorSignal,
     ReviseAccountLockSignal,
@@ -413,13 +414,20 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         }
 
     with db.engine.connect() as w_conn:
+        # NOTE: Disabled collector accounts (status == 3) must not try
+        # to sell their surplus amounts, because this may interfere
+        # with correctly determining the new surplus amounts.
+        surplus_amount_expression = case(
+            (NeededWorkerAccount.collection_disabled_since != null(), 0),
+            else_=WorkerAccount.surplus_amount
+        )
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     WorkerAccount.creditor_id,
                     WorkerAccount.debtor_id,
                     WorkerAccount.creation_date,
                     WorkerAccount.demurrage_rate,
-                    WorkerAccount.surplus_amount,
+                    surplus_amount_expression.label("surplus_amount"),
                     WorkerAccount.surplus_ts,
                     WorkerAccount.surplus_spent_amount,
                     (
@@ -431,6 +439,16 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
                     (
                         WorkerAccount.config_flags.op("&")(DELETION_FLAG) != 0
                     ).label("is_scheduled_for_deletion"),
+                )
+                .select_from(WorkerAccount)
+                .join(
+                    NeededWorkerAccount,
+                    and_(
+                        NeededWorkerAccount.creditor_id
+                        == WorkerAccount.creditor_id,
+                        NeededWorkerAccount.debtor_id
+                        == WorkerAccount.debtor_id,
+                    ),
                 )
                 .order_by(WorkerAccount.creditor_id)
         ) as result:
