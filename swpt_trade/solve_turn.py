@@ -497,5 +497,4 @@ def _disable_extra_collector_accounts() -> None:
                     )
                     if len(waiting_to_be_disabled) > 5000:  # pragma: no cover
                         disable_waiting()
-
             disable_waiting()
