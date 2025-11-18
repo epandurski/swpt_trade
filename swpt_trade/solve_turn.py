@@ -54,6 +54,11 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
+
+    # At this point, the trading turn has successfully advanced to
+    # phase 3. The next few calls are not bound to this specific
+    # trading turn, but should generally be run after the end of each
+    # turn.
     _handle_overloaded_currencies()
     _disable_extra_collector_accounts()
 
