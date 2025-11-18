@@ -57,7 +57,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
 
     # At this point, the trading turn has successfully advanced to
     # phase 3. The next few calls are not bound to this specific
-    # trading turn, but should generally be run after the end of each
+    # trading turn, but should generally be run near the end of each
     # turn.
     _handle_overloaded_currencies()
     _disable_extra_collector_accounts()
