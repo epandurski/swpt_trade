@@ -59,7 +59,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     # phase 3. The next few calls are not bound to this specific
     # trading turn, but should generally be run near the end of each
     # turn.
-    _handle_overloaded_currencies()
+    _strengthen_overloaded_currencies()
     _disable_extra_collector_accounts()
 
 
@@ -137,7 +137,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
         _detect_overloaded_currencies(turn_id)
-        _handle_hoarded_currencies(turn_id)
+        _saturate_hoarded_currencies(turn_id)
 
         turn.phase = 3
         turn.phase_deadline = None
@@ -363,7 +363,11 @@ def _detect_overloaded_currencies(turn_id: int) -> None:
     )
 
 
-def _handle_overloaded_currencies() -> None:
+def _strengthen_overloaded_currencies() -> None:
+    """Double the number of existing collector accounts for all
+    overloaded currencies.
+    """
+
     cfg = current_app.config
     min_collector_id = cfg["MIN_COLLECTOR_ID"]
     max_collector_id = cfg["MAX_COLLECTOR_ID"]
@@ -389,7 +393,7 @@ def _handle_overloaded_currencies() -> None:
                 )
 
 
-def _handle_hoarded_currencies(turn_id: int) -> None:
+def _saturate_hoarded_currencies(turn_id: int) -> None:
     """Ensure hoarded currencies utilize the maximum number of
     creditor IDs.
 
