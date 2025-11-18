@@ -39,8 +39,6 @@ atomic: Callable[[T], T] = db.atomic
 
 def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     turn_id = turn.turn_id
-    _handle_hoarded_currencies(turn_id)
-
     solver = Solver(
         turn.base_debtor_info_locator,
         turn.base_debtor_id,
@@ -134,6 +132,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
         _detect_overloaded_currencies(turn_id)
+        _handle_hoarded_currencies(turn_id)
 
         turn.phase = 3
         turn.phase_deadline = None
