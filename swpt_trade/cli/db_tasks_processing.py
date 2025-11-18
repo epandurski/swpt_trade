@@ -3,6 +3,7 @@ import time
 import click
 import signal
 import sys
+import random
 from typing import Any
 from datetime import timedelta
 from flask import current_app
@@ -97,6 +98,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
 
     logger = logging.getLogger(__name__)
     logger.info("Started pristine collector accounts processor.")
+    time.sleep(wait * random.random())
 
     ThreadPoolProcessor(
         threads,
