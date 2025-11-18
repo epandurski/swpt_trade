@@ -65,17 +65,20 @@ def test_try_to_advance_turn_to_phase3(db_session):
     )
     db_session.add(
         CollectorAccount(
-            debtor_id=101, collector_id=997, account_id="997", status=2
+            debtor_id=101, collector_id=997, account_id="997", status=2,
+            latest_status_change_at=TS0,
         )
     )
     db_session.add(
         CollectorAccount(
-            debtor_id=101, collector_id=998, account_id="998", status=2
+            debtor_id=101, collector_id=998, account_id="998", status=2,
+            latest_status_change_at=TS0,
         )
     )
     db_session.add(
         CollectorAccount(
-            debtor_id=102, collector_id=999, account_id="999", status=2
+            debtor_id=102, collector_id=999, account_id="999", status=2,
+            latest_status_change_at=TS0,
         )
     )
     db_session.add(
@@ -136,10 +139,13 @@ def test_try_to_advance_turn_to_phase3(db_session):
     assert len(ca) == 3
     assert ca[0].collector_id == 997
     assert ca[0].collector_hash == calc_hash(ca[0].collector_id)
+    assert ca[0].status == 2
     assert ca[1].collector_id == 998
     assert ca[1].collector_hash == calc_hash(ca[1].collector_id)
+    assert ca[1].status == 2
     assert ca[2].collector_id == 999
     assert ca[2].collector_hash == calc_hash(ca[2].collector_id)
+    assert ca[2].status == 2
 
     try_to_advance_turn_to_phase3(turn)
 
@@ -257,11 +263,16 @@ def test_try_to_advance_turn_to_phase3(db_session):
     cfg = current_app.config
     max_collectors = 1 + cfg["MAX_COLLECTOR_ID"] - cfg["MIN_COLLECTOR_ID"]
     cas = CollectorAccount.query.all()
-    cas.sort(key=lambda row: row.debtor_id)
+    cas.sort(key=lambda row: (row.debtor_id, row.collector_id))
     assert len(cas) == 4 + max_collectors
     assert cas[0].debtor_id == cas[1].debtor_id == 101
+    assert cas[0].status == 3
+    assert cas[1].status == 2
     assert cas[2].debtor_id == cas[3].debtor_id == 102
+    assert cas[2].status == 3
+    assert cas[3].status == 0
     assert cas[4].debtor_id == cas[-1].debtor_id == 103
+    assert cas[4].status == 0
 
     ocs = OverloadedCurrency.query.all()
     assert len(ocs) == 0

@@ -1,7 +1,9 @@
+import math
 from typing import TypeVar, Callable
-from datetime import datetime, timezone
-from sqlalchemy import select, insert, delete, func, union_all
-from sqlalchemy.sql.expression import and_
+from itertools import groupby
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import select, insert, update, delete, func, union_all
+from sqlalchemy.sql.expression import text, and_, tuple_
 from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -26,6 +28,10 @@ from swpt_trade.utils import batched, calc_hash
 INSERT_BATCH_SIZE = 50000
 SELECT_BATCH_SIZE = 50000
 
+COLLECTOR_ACCOUNT_PK = tuple_(
+    CollectorAccount.debtor_id,
+    CollectorAccount.collector_id,
+)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -33,6 +39,8 @@ atomic: Callable[[T], T] = db.atomic
 
 def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     turn_id = turn.turn_id
+    _handle_hoarded_currencies(turn_id)
+
     solver = Solver(
         turn.base_debtor_info_locator,
         turn.base_debtor_id,
@@ -48,8 +56,8 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
-    _handle_hoarded_currencies(turn_id)
     _handle_overloaded_currencies()
+    _disable_extra_collector_accounts()
 
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
@@ -406,6 +414,77 @@ def _handle_hoarded_currencies(turn_id: int) -> None:
                     for c_id in range(min_collector_id, max_collector_id + 1)
                 )
 
-    db.session.execute(
-        delete(HoardedCurrency).where(HoardedCurrency.turn_id == turn_id)
+    procedures.delete_hoarded_currencies(turn_id)
+
+
+def _disable_extra_collector_accounts() -> None:
+    """Try to disable some of the active collector accounts (status ==
+    2), so that the surplus amounts accumulated on them can be
+    detected.
+
+    NOTE: If possible, this function will not disable more than ~1/3
+    of the active collector accounts for any given currency. Also,
+    collector accounts that have not been active for at least
+    `APP_COLLECTOR_ACTIVITY_MIN_DAYS` days, will not be disabled.
+    """
+
+    current_ts = datetime.now(tz=timezone.utc)
+    activity_cutoff_ts = current_ts - timedelta(
+        days=current_app.config["APP_COLLECTOR_ACTIVITY_MIN_DAYS"]
     )
+    waiting_to_be_disabled = []
+
+    @atomic
+    def disable_waiting():
+        if waiting_to_be_disabled:
+            db.session.execute(
+                update(CollectorAccount)
+                .where(
+                    and_(
+                        COLLECTOR_ACCOUNT_PK.in_(waiting_to_be_disabled),
+                        CollectorAccount.status == 2,
+                    )
+                )
+                .values(
+                    status=3,
+                    latest_status_change_at=current_ts,
+                )
+            )
+            waiting_to_be_disabled.clear()
+
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    CollectorAccount.debtor_id,
+                    CollectorAccount.collector_id,
+                    CollectorAccount.status,
+                    CollectorAccount.latest_status_change_at,
+                )
+                .where(CollectorAccount.status >= text("2"))
+                .order_by(CollectorAccount.debtor_id)
+        ) as result:
+            for debtor_id, group in groupby(result, lambda r: r.debtor_id):
+                rows = list(group)
+                rows.sort(
+                    key=lambda x: (
+                        x.status, x.latest_status_change_at, x.collector_id
+                    )
+                )
+                number_of_disabled = sum(1 for r in rows if r.status != 2)
+                max_number_to_disable = (
+                    math.ceil(len(rows) / 3) - number_of_disabled
+                )
+                for n, row in enumerate(rows):
+                    if (
+                        n >= max_number_to_disable
+                        or row.status != 2
+                        or row.latest_status_change_at > activity_cutoff_ts
+                    ):
+                        break
+                    waiting_to_be_disabled.append(
+                        (debtor_id, row.collector_id)
+                    )
+                    if len(waiting_to_be_disabled) > 5000:  # pragma: no cover
+                        disable_waiting()
+
+            disable_waiting()
