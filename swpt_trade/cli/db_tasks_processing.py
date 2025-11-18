@@ -53,15 +53,6 @@ def handle_pristine_collectors(threads, wait, quit_early):
     not set, the default number of seconds is 60.
     """
 
-    # TODO: Consider allowing load-sharing between multiple processes
-    #       or containers. This may also be true for the other
-    #       "process_*" CLI commands. A possible way to do this is to
-    #       separate the `args collection` in multiple buckets,
-    #       assigning a dedicated process/container for each bucket.
-    #       Note that this would makes sense only if the load is
-    #       CPU-bound, which is unlikely, especially if we
-    #       re-implement the logic in stored procedures.
-
     threads = threads or current_app.config[
         "HANDLE_PRISTINE_COLLECTORS_THREADS"
     ]
