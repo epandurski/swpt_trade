@@ -192,7 +192,7 @@ class Configuration(metaclass=MetaEnvReader):
         _parse_creditor_id("0x0000010000000000")
     )
     MAX_COLLECTOR_ID: _parse_creditor_id = (
-        _parse_creditor_id("0x00000100000007ff")
+        _parse_creditor_id("0x00000100000003ff")
     )
     OWNER_CREDITOR_ID: _parse_creditor_id = (
         _parse_creditor_id("0x00000100ffffffff")

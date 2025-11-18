@@ -171,9 +171,9 @@ TRANSFERS_COLLECTOR_LIMIT=100000
 # corresponding two's complement negative numbers. Normally, you would
 # not need this interval to contain more than a few thousand IDs. Note
 # that once this interval has been set, it must not be changed! The
-# defaults are: from "0x0000010000000000" to "0x00000100000007ff".
+# defaults are: from "0x0000010000000000" to "0x00000100000003ff".
 MIN_COLLECTOR_ID=0x0000010000000000
-MAX_COLLECTOR_ID=0x00000100000007ff
+MAX_COLLECTOR_ID=0x00000100000003ff
 
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
@@ -214,9 +214,9 @@ example values:
 # corresponding two's complement negative numbers. Normally, you would
 # not need this interval to contain more than a few thousand IDs. Note
 # that once this interval has been set, it must not be changed! The
-# defaults are: from "0x0000010000000000" to "0x00000100000007ff".
+# defaults are: from "0x0000010000000000" to "0x00000100000003ff".
 MIN_COLLECTOR_ID=0x0000010000000000
-MAX_COLLECTOR_ID=0x00000100000007ff
+MAX_COLLECTOR_ID=0x00000100000003ff
 
 # The creditor ID of the user account of the owner of the creditors
 # agent node. The system will use the acumullated surpluses to buy the
@@ -379,9 +379,9 @@ example values:
 # converted to their corresponding two's complement negative
 # numbers. Normally, you would not need this interval to contain
 # more than a few thousand IDs. The defaults are: from
-# "0x0000010000000000" to "0x00000100000007ff".
+# "0x0000010000000000" to "0x00000100000003ff".
 MIN_COLLECTOR_ID=0x0000010000000000
-MAX_COLLECTOR_ID=0x00000100000007ff
+MAX_COLLECTOR_ID=0x00000100000003ff
 
 # Requests to the "admin API" are protected by an OAuth
 # 2.0 authorization server. With every request, the client (a Web
