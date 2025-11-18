@@ -42,6 +42,38 @@ SELECT_BATCH_SIZE = 50000
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
+ready_dalayed_account_transfers_query = (
+    select(
+        DelayedAccountTransfer.turn_id,
+        DelayedAccountTransfer.message_id,
+        DelayedAccountTransfer.creditor_id,
+        DelayedAccountTransfer.debtor_id,
+        DelayedAccountTransfer.creation_date,
+        DelayedAccountTransfer.transfer_number,
+        DelayedAccountTransfer.coordinator_type,
+        DelayedAccountTransfer.committed_at,
+        DelayedAccountTransfer.acquired_amount,
+        DelayedAccountTransfer.transfer_note_format,
+        DelayedAccountTransfer.transfer_note,
+        DelayedAccountTransfer.principal,
+        DelayedAccountTransfer.previous_transfer_number,
+        DelayedAccountTransfer.sender,
+        DelayedAccountTransfer.recipient,
+        DelayedAccountTransfer.ts,
+    )
+    .select_from(DelayedAccountTransfer)
+    .join(WorkerTurn, WorkerTurn.turn_id == DelayedAccountTransfer.turn_id)
+    .where(
+        or_(
+            WorkerTurn.phase > 3,
+            and_(
+                WorkerTurn.phase == 3,
+                WorkerTurn.worker_turn_subphase >= 5,
+            )
+        )
+    )
+    .with_for_update(of=DelayedAccountTransfer, skip_locked=True)
+)
 
 
 def process_rescheduled_transfers() -> int:
@@ -353,37 +385,7 @@ def process_delayed_account_transfers_batch(batch_size: int) -> int:
     assert batch_size > 0
 
     ready_delayed_account_transfers = db.session.execute(
-        select(
-            DelayedAccountTransfer.turn_id,
-            DelayedAccountTransfer.message_id,
-            DelayedAccountTransfer.creditor_id,
-            DelayedAccountTransfer.debtor_id,
-            DelayedAccountTransfer.creation_date,
-            DelayedAccountTransfer.transfer_number,
-            DelayedAccountTransfer.coordinator_type,
-            DelayedAccountTransfer.committed_at,
-            DelayedAccountTransfer.acquired_amount,
-            DelayedAccountTransfer.transfer_note_format,
-            DelayedAccountTransfer.transfer_note,
-            DelayedAccountTransfer.principal,
-            DelayedAccountTransfer.previous_transfer_number,
-            DelayedAccountTransfer.sender,
-            DelayedAccountTransfer.recipient,
-            DelayedAccountTransfer.ts,
-        )
-        .select_from(DelayedAccountTransfer)
-        .join(WorkerTurn, WorkerTurn.turn_id == DelayedAccountTransfer.turn_id)
-        .where(
-            or_(
-                WorkerTurn.phase > 3,
-                and_(
-                    WorkerTurn.phase == 3,
-                    WorkerTurn.worker_turn_subphase >= 5,
-                )
-            )
-        )
-        .with_for_update(of=DelayedAccountTransfer, skip_locked=True)
-        .limit(batch_size)
+        ready_dalayed_account_transfers_query.limit(batch_size)
     ).all()
 
     if ready_delayed_account_transfers:
