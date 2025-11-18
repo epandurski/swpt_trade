@@ -19,7 +19,6 @@ from swpt_trade.models import (
     CreditorGiving,
     CreditorTaking,
     OverloadedCurrency,
-    HoardedCurrency,
 )
 
 
@@ -382,12 +381,4 @@ def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
                 OverloadedCurrency.debtor_id == debtor_id,
             )
         )
-    )
-
-
-@atomic
-def delete_hoarded_currencies(turn_id: int) -> None:
-    db.session.execute(
-        delete(HoardedCurrency)
-        .where(HoardedCurrency.turn_id == turn_id)
     )

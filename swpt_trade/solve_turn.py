@@ -140,13 +140,13 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         turn.collection_started_at = datetime.now(tz=timezone.utc)
 
         # NOTE: When reaching turn phase 3, all records for the given
-        # turn from the `CurrencyInfo`, `SellOffer`, and `BuyOffer`
-        # tables will be deleted. This however, does not guarantee
-        # that a worker process will not continue to insert new rows
-        # for the given turn in these tables. Therefore, in order to
-        # ensure that such obsolete records will be deleted
-        # eventually, here we delete all records for which the turn
-        # phase 3 has been reached.
+        # turn from the `CurrencyInfo`, `SellOffer`, `BuyOffer`, and
+        # `HoardedCurrency` tables will be deleted. This however, does
+        # not guarantee that a worker process will not continue to
+        # insert new rows for the given turn in these tables.
+        # Therefore, in order to ensure that such obsolete records
+        # will be deleted eventually, here we delete all records for
+        # which the turn phase 3 has been reached.
         db.session.execute(
             delete(CurrencyInfo)
             .where(
@@ -170,6 +170,15 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
             .where(
                 and_(
                     Turn.turn_id == BuyOffer.turn_id,
+                    Turn.phase >= 3,
+                )
+            )
+        )
+        db.session.execute(
+            delete(HoardedCurrency)
+            .where(
+                and_(
+                    Turn.turn_id == HoardedCurrency.turn_id,
                     Turn.phase >= 3,
                 )
             )
@@ -413,8 +422,6 @@ def _handle_hoarded_currencies(turn_id: int) -> None:
                     (row.debtor_id, c_id)
                     for c_id in range(min_collector_id, max_collector_id + 1)
                 )
-
-    procedures.delete_hoarded_currencies(turn_id)
 
 
 def _disable_extra_collector_accounts() -> None:
