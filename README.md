@@ -232,7 +232,8 @@ OWNER_CREDITOR_ID=1234567890
 # When a currency is about to be traded for the first time, at least
 # one collector account must be created. This setting determines how
 # many collector accounts will be created for newly encountered
-# currencies (default 1).
+# currencies. The default is 2, and it is not recommended to change it
+# without a good reason.
 DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS=2
 
 # When the outgouing transfers are committed, a deadline for each
