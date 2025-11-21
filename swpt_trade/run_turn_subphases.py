@@ -1151,6 +1151,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
         with db.engines["solver"].connect() as s_conn:
             s_conn.execute(
                 delete(CreditorTaking)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         CreditorTaking.turn_id == turn_id,
@@ -1161,6 +1162,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.execute(
                 delete(CreditorGiving)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         CreditorGiving.turn_id == turn_id,
@@ -1171,6 +1173,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.execute(
                 delete(CollectorCollecting)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         CollectorCollecting.turn_id == turn_id,
@@ -1181,6 +1184,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.execute(
                 delete(CollectorSending)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         CollectorSending.turn_id == turn_id,
@@ -1191,6 +1195,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.execute(
                 delete(CollectorReceiving)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         CollectorReceiving.turn_id == turn_id,
@@ -1201,6 +1206,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.execute(
                 delete(CollectorDispatching)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         CollectorDispatching.turn_id == turn_id,

@@ -379,6 +379,7 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                 if locked_rows:
                     db.session.execute(
                         delete(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                     )
 
@@ -437,6 +438,7 @@ def process_delayed_account_transfers_batch(batch_size: int) -> int:
 
         db.session.execute(
             delete(DelayedAccountTransfer)
+            .execution_options(synchronize_session=False)
             .where(
                 DELAYED_ACCOUNT_TRANSFER_PK.in_(
                     [

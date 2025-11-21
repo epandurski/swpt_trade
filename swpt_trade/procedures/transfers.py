@@ -620,6 +620,7 @@ def delete_worker_sending_record(
 ) -> None:
     db.session.execute(
         delete(WorkerSending)
+        .execution_options(synchronize_session=False)
         .where(
             and_(
                 WorkerSending.from_collector_id == from_collector_id,
@@ -706,6 +707,7 @@ def delete_worker_dispatching_record(
 ) -> None:
     db.session.execute(
         delete(WorkerDispatching)
+        .execution_options(synchronize_session=False)
         .where(
             and_(
                 WorkerDispatching.collector_id == collector_id,
@@ -1431,7 +1433,9 @@ def process_start_sending_signal(
     dispatching_status.awaiting_signal_flag = False
 
     db.session.execute(
-        delete(WorkerCollecting).where(worker_collectings_predicate)
+        delete(WorkerCollecting)
+        .execution_options(synchronize_session=False)
+        .where(worker_collectings_predicate)
     )
 
     if dispatching_status.amount_to_send > 0:
@@ -1560,7 +1564,9 @@ def process_start_dispatching_signal(
     dispatching_status.awaiting_signal_flag = False
 
     db.session.execute(
-        delete(WorkerReceiving).where(worker_receivings_predicate)
+        delete(WorkerReceiving)
+        .execution_options(synchronize_session=False)
+        .where(worker_receivings_predicate)
     )
 
     if dispatching_status.amount_to_dispatch > 0:

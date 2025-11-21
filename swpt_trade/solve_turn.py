@@ -153,6 +153,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         # which the turn phase 3 has been reached.
         db.session.execute(
             delete(CurrencyInfo)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     Turn.turn_id == CurrencyInfo.turn_id,
@@ -162,6 +163,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             delete(SellOffer)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     Turn.turn_id == SellOffer.turn_id,
@@ -171,6 +173,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             delete(BuyOffer)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     Turn.turn_id == BuyOffer.turn_id,
@@ -180,6 +183,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             delete(HoardedCurrency)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     Turn.turn_id == HoardedCurrency.turn_id,

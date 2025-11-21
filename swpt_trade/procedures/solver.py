@@ -154,6 +154,7 @@ def try_to_advance_turn_to_phase2(
         # reached.
         db.session.execute(
             delete(DebtorInfo)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     Turn.turn_id == DebtorInfo.turn_id,
@@ -163,6 +164,7 @@ def try_to_advance_turn_to_phase2(
         )
         db.session.execute(
             delete(ConfirmedDebtor)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     Turn.turn_id == ConfirmedDebtor.turn_id,
@@ -379,6 +381,7 @@ def ensure_collector_accounts(
 def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
     db.session.execute(
         delete(OverloadedCurrency)
+        .execution_options(synchronize_session=False)
         .where(
             and_(
                 OverloadedCurrency.turn_id == turn_id,
