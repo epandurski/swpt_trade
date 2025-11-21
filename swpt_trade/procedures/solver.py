@@ -102,7 +102,9 @@ def try_to_advance_turn_to_phase2(
             .subquery(name="ad")
         )
         db.session.execute(
-            insert(CurrencyInfo).from_select(
+            insert(CurrencyInfo)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "turn_id",
                     "debtor_info_locator",
@@ -297,7 +299,9 @@ def activate_collector(
 @atomic
 def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
     db.session.execute(
-        postgresql.insert(CollectorAccount).on_conflict_do_nothing(
+        postgresql.insert(CollectorAccount)
+        .execution_options(synchronize_session=False)
+        .on_conflict_do_nothing(
             index_elements=[
                 CollectorAccount.debtor_id,
                 CollectorAccount.collector_id,

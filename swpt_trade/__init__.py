@@ -274,6 +274,7 @@ class Configuration(metaclass=MetaEnvReader):
     APP_INTEREST_RATE_HISTORY_PERIOD: parse_timedelta = parse_timedelta("180d")
     APP_MIN_DEMURRAGE_RATE = -50.0
     APP_MIN_TRANSFER_NOTE_MAX_BYTES = 80
+    APP_SURPLUS_BLOCKING_DELAY_DAYS = 14.0
     APP_ACCOUNT_LOCK_MAX_DAYS = 365.0
     APP_RELEASED_ACCOUNT_LOCK_MAX_DAYS = 30.0
     APP_COLLECTOR_ACTIVITY_MIN_DAYS = 30.0
@@ -397,6 +398,12 @@ def _check_config_sanity(c):  # pragma: nocover
     if c["APP_DEBTOR_INFO_EXPIRY_DAYS"] < 1.0:
         raise RuntimeError(
             "The configured value for APP_DEBTOR_INFO_EXPIRY_DAYS is too"
+            " small. Choose a more appropriate value."
+        )
+
+    if c["APP_SURPLUS_BLOCKING_DELAY_DAYS"] < 7.0:
+        raise RuntimeError(
+            "The configured value for APP_SURPLUS_BLOCKING_DELAY_DAYS is too"
             " small. Choose a more appropriate value."
         )
 

@@ -37,7 +37,7 @@ DELAYED_ACCOUNT_TRANSFER_PK = tuple_(
     DelayedAccountTransfer.turn_id,
     DelayedAccountTransfer.message_id,
 )
-INSERT_BATCH_SIZE = 6000
+INSERT_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 
 T = TypeVar("T")
@@ -162,12 +162,14 @@ def signal_dispatching_statuses_ready_to_send() -> None:
 
                     db.session.execute(
                         update(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
                         insert(StartSendingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         [
                             {
@@ -234,6 +236,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                 if locked_rows:
                     db.session.execute(
                         update(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                         .values(all_sent=True)
                     )
@@ -301,12 +304,14 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
 
                     db.session.execute(
                         update(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
                         insert(StartDispatchingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         [
                             {

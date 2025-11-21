@@ -3,9 +3,10 @@ import math
 from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from itertools import groupby
-from sqlalchemy import select, insert, delete, text
+from sqlalchemy import select, insert, update, delete, text, bindparam
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.sql.expression import null, false, case, and_
+from sqlalchemy.sql.expression import null, false, case, func, and_
+from sqlalchemy.sql.functions import coalesce
 from flask import current_app
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.utils import (
@@ -18,6 +19,7 @@ from swpt_trade.utils import (
 from swpt_trade.extensions import db
 from swpt_trade.solver import CandidateOfferAuxData, BidProcessor
 from swpt_trade.models import (
+    TS0,
     MAX_INT64,
     DebtorInfoDocument,
     DebtorLocatorClaim,
@@ -51,7 +53,8 @@ from swpt_trade.models import (
     CollectorDispatching,
 )
 
-INSERT_BATCH_SIZE = 50000
+INSERT_BATCH_SIZE = 5000
+UPDATE_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
@@ -115,7 +118,8 @@ def _populate_debtor_infos(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(DebtorInfo).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -156,7 +160,8 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(ConfirmedDebtor).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -212,7 +217,8 @@ def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
                     try:
                         s_conn.execute(
                             insert(HoardedCurrency).execution_options(
-                                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                                synchronize_session=False,
                             ),
                             dicts_to_insert,
                         )
@@ -493,7 +499,8 @@ def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
     for candidate_offers in batched(bp.analyze_bids(), INSERT_BATCH_SIZE):
         db.session.execute(
             insert(CandidateOfferSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -542,7 +549,8 @@ def _copy_useful_collectors(bp: BidProcessor) -> None:
                 if dicts_to_insert:
                     db.session.execute(
                         insert(UsefulCollector).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -559,7 +567,8 @@ def _insert_needed_collector_signals(bp: BidProcessor) -> None:
     ):
         db.session.execute(
             insert(NeededCollectorSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -631,7 +640,8 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(SellOffer).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -682,7 +692,8 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(BuyOffer).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -767,7 +778,8 @@ def _copy_creditor_takings(s_conn, worker_turn):
             if dicts_to_insert:
                 db.session.execute(
                     insert(CreditorParticipation).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
                     ),
                     dicts_to_insert,
                 )
@@ -814,7 +826,8 @@ def _copy_creditor_givings(s_conn, worker_turn):
             if dicts_to_insert:
                 db.session.execute(
                     insert(CreditorParticipation).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
                     ),
                     dicts_to_insert,
                 )
@@ -869,7 +882,8 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerCollecting).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
                     ),
                     dicts_to_insert,
                 )
@@ -929,7 +943,8 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerSending).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
                     ),
                     dicts_to_insert,
                 )
@@ -990,7 +1005,8 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerReceiving).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
                     ),
                     dicts_to_insert,
                 )
@@ -1052,7 +1068,8 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
             if dicts_to_insert:
                 db.session.execute(
                     insert(WorkerDispatching).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
                     ),
                     dicts_to_insert,
                 )
@@ -1072,7 +1089,8 @@ def _create_dispatching_statuses(worker_turn, statuses):
         if dicts_to_insert:
             db.session.execute(
                 insert(DispatchingStatus).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
                 ),
                 dicts_to_insert,
             )
@@ -1105,7 +1123,8 @@ def _insert_revise_account_lock_signals(worker_turn):
                 if dicts_to_insert:
                     db.session.execute(
                         insert(ReviseAccountLockSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -1192,4 +1211,103 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.commit()
 
+        _update_needed_worker_account_states()
+        _update_needed_worker_account_blocked_amounts()
         worker_turn.worker_turn_subphase = 10
+
+
+def _update_needed_worker_account_states() -> None:
+    nwa = NeededWorkerAccount
+    uc = UsefulCollector
+
+    db.session.execute(
+        update(nwa)
+        .execution_options(synchronize_session=False)
+        .where(
+            nwa.creditor_id == uc.collector_id,
+            nwa.debtor_id == uc.debtor_id,
+            nwa.collection_disabled_since.is_distinct_from(uc.disabled_at),
+        )
+        .values(collection_disabled_since=uc.disabled_at)
+    )
+
+
+def _update_needed_worker_account_blocked_amounts() -> None:
+    current_ts = datetime.now(tz=timezone.utc)
+    sbd = timedelta(
+        days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+    )
+    with db.engine.connect() as w_conn:
+        nwa = NeededWorkerAccount
+        al = AccountLock
+        ds = DispatchingStatus
+
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    nwa.creditor_id,
+                    nwa.debtor_id,
+                    func.sum(
+                        coalesce(al.max_locked_amount, text("0"))
+                    ).label("locked"),
+                    func.sum(
+                        coalesce(ds.amount_to_send, text("0"))
+                    ).label("to_send"),
+                    func.sum(
+                        coalesce(ds.amount_to_dispatch, text("0"))
+                    ).label("to_dispatch"),
+                )
+                .select_from(nwa)
+                .join(
+                    al,
+                    and_(
+                        al.creditor_id == nwa.creditor_id,
+                        al.debtor_id == nwa.debtor_id,
+                        al.released_at == null(),
+                    ),
+                    isouter=True,
+                )
+                .join(
+                    ds,
+                    and_(
+                        ds.collector_id == nwa.creditor_id,
+                        ds.debtor_id == nwa.debtor_id,
+                    ),
+                    isouter=True,
+                )
+                .where(
+                    nwa.collection_disabled_since < current_ts - sbd,
+                    nwa.collection_disabled_since
+                    > coalesce(nwa.blocked_amount_ts, TS0) - sbd,
+                )
+                .group_by(nwa.creditor_id, nwa.debtor_id)
+        ) as result:
+            tbl = NeededWorkerAccount.__table__
+            update_statement = (
+                update(tbl)
+                .where(
+                    tbl.c.creditor_id == bindparam("b_creditor_id"),
+                    tbl.c.debtor_id == bindparam("b_debtor_id"),
+                    tbl.c.collection_disabled_since < current_ts - sbd,
+                    tbl.c.collection_disabled_since
+                    > coalesce(tbl.c.blocked_amount_ts, TS0) - sbd,
+                )
+                .values(
+                    blocked_amount=bindparam("b_blocked_amount"),
+                    blocked_amount_ts=current_ts,
+                )
+            )
+            for rows in batched(result, UPDATE_BATCH_SIZE):
+                dicts_to_update = [
+                    {
+                        "b_creditor_id": row.creditor_id,
+                        "b_debtor_id": row.debtor_id,
+                        "b_blocked_amount": contain_principal_overflow(
+                            + row.locked
+                            + row.to_send
+                            + row.to_dispatch
+                        ),
+                    }
+                    for row in rows
+                ]
+                if dicts_to_update:
+                    db.session.execute(update_statement, dicts_to_update)

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from sqlalchemy.sql.expression import and_
+from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
 from .common import get_now_utc
 
@@ -11,7 +11,16 @@ class NeededWorkerAccount(db.Model):
         db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
     )
     collection_disabled_since = db.Column(db.TIMESTAMP(timezone=True))
+    blocked_amount = db.Column(db.BigInteger)
+    blocked_amount_ts = db.Column(db.TIMESTAMP(timezone=True))
     __table_args__ = (
+        db.CheckConstraint(blocked_amount >= 0),
+        db.CheckConstraint(
+            or_(
+                and_(blocked_amount == null(), blocked_amount_ts == null()),
+                and_(blocked_amount != null(), blocked_amount_ts != null()),
+            )
+        ),
         {
             "comment": (
                 'Represents the fact that a "worker" server has requested'

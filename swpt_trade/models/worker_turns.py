@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import date, timedelta
-from .common import get_now_utc, MAX_INT16, MAX_INT32, MIN_INT64
+from .common import get_now_utc, MAX_INT16, MAX_INT32, MIN_INT64, MAX_INT64
 from sqlalchemy.dialects import postgresql as pg
 from sqlalchemy.sql.expression import null, true, false, or_, and_
 from swpt_trade.extensions import db
@@ -146,6 +146,12 @@ class AccountLock(db.Model):
         ),
         nullable=False,
     )
+    max_locked_amount = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=MAX_INT64,
+        comment="An upper limit for the actual locked amount.",
+    )
     transfer_id = db.Column(db.BigInteger)
     finalized_at = db.Column(
         db.TIMESTAMP(timezone=True),
@@ -157,6 +163,7 @@ class AccountLock(db.Model):
     has_been_revised = db.Column(db.BOOLEAN, nullable=False, default=False)
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
+        db.CheckConstraint(max_locked_amount >= 0),
         db.CheckConstraint(or_(finalized_at == null(), transfer_id != null())),
         db.CheckConstraint(
             or_(
@@ -254,6 +261,8 @@ class DispatchingStatus(db.Model):
     # file should be edited so as not to create a "normal" index, but
     # create a "covering" index instead.
 
+    # TODO: Consider using (collector_id, debtor_id, turn_id) primary
+    # key instead!
     collector_id = db.Column(db.BigInteger, primary_key=True)
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)

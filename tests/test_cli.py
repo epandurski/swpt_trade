@@ -2716,6 +2716,82 @@ def test_run_phase3_subphase5(
         collection_deadline=current_ts + timedelta(days=200),
         worker_turn_subphase=5,
     )
+    db.session.add(
+        m.UsefulCollector(
+            collector_id=0x0000010000000001,
+            debtor_id=666,
+            account_id='666',
+            disabled_at=current_ts - timedelta(days=2),
+        )
+    )
+    db.session.add(
+        m.UsefulCollector(
+            collector_id=0x0000010000000001,
+            debtor_id=777,
+            account_id='777',
+            disabled_at=None,
+        )
+    )
+    db.session.add(
+        m.UsefulCollector(
+            collector_id=0x0000010000000001,
+            debtor_id=888,
+            account_id='888',
+            disabled_at=None,
+        )
+    )
+    db.session.add(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000001,
+            debtor_id=666,
+            collection_disabled_since=None,
+        )
+    )
+    db.session.add(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000001,
+            debtor_id=777,
+            collection_disabled_since=current_ts,
+        )
+    )
+    db.session.add(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000001,
+            debtor_id=999,
+            collection_disabled_since=current_ts - timedelta(days=1000),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=990),
+        )
+    )
+    db.session.add(
+        m.AccountLock(
+            creditor_id=0x0000010000000001,
+            debtor_id=999,
+            turn_id=1,
+            collector_id=789,
+            amount=500,
+            max_locked_amount=1500,
+        )
+    )
+    db.session.add(
+        m.DispatchingStatus(
+            collector_id=0x0000010000000001,
+            turn_id=1,
+            debtor_id=999,
+            amount_to_collect=1000,
+            total_collected_amount=1000,
+            amount_to_send=7,
+            amount_to_receive=0,
+            number_to_receive=0,
+            total_received_amount=0,
+            all_received=True,
+            amount_to_dispatch=11,
+            awaiting_signal_flag=False,
+            started_sending=True,
+            all_sent=True,
+            started_dispatching=True,
+        )
+    )
     db.session.add(wt1)
     db.session.flush()
 
@@ -2874,6 +2950,23 @@ def test_run_phase3_subphase5(
     assert len(m.CollectorSending.query.all()) == 1
     assert len(m.CollectorReceiving.query.all()) == 1
     assert len(m.CollectorDispatching.query.all()) == 1
+
+    ncas = m.NeededWorkerAccount.query.all()
+    ncas.sort(key=lambda x: x.debtor_id)
+    assert len(ncas) == 3
+    assert ncas[0].creditor_id == 0x0000010000000001
+    assert ncas[0].debtor_id == 666
+    assert ncas[0].collection_disabled_since == current_ts - timedelta(days=2)
+    assert ncas[0].blocked_amount is None
+    assert ncas[1].creditor_id == 0x0000010000000001
+    assert ncas[1].debtor_id == 777
+    assert ncas[1].collection_disabled_since is None
+    assert ncas[1].blocked_amount is None
+    assert ncas[2].creditor_id == 0x0000010000000001
+    assert ncas[2].debtor_id == 999
+    assert ncas[2].collection_disabled_since == current_ts - timedelta(days=1000)
+    assert ncas[2].blocked_amount == 1518
+    assert ncas[2].blocked_amount_ts >= current_ts
 
 
 @pytest.mark.parametrize("realm", ["0.#", "1.#"])

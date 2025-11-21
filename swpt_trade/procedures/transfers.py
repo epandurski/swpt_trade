@@ -176,6 +176,7 @@ def process_candidate_offer_signal(
         account_lock.collector_id = collector.collector_id
         account_lock.initiated_at = current_ts
         account_lock.amount = amount
+        account_lock.max_locked_amount = max_locked_amount
         account_lock.transfer_id = None
         account_lock.finalized_at = None
         account_lock.released_at = None
@@ -191,6 +192,7 @@ def process_candidate_offer_signal(
                 coordinator_request_id=coordinator_request_id,
                 collector_id=collector.collector_id,
                 initiated_at=current_ts,
+                max_locked_amount=max_locked_amount,
                 amount=amount,
             )
             db.session.add(account_lock)
@@ -574,6 +576,7 @@ def update_worker_collecting_record(
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
         db.session.execute(
             update(WorkerCollecting)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     WorkerCollecting.collector_id == collector_id,
@@ -660,6 +663,7 @@ def update_worker_receiving_record(
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
         db.session.execute(
             update(WorkerReceiving)
+            .execution_options(synchronize_session=False)
             .where(
                 and_(
                     WorkerReceiving.to_collector_id == to_collector_id,
@@ -1446,7 +1450,9 @@ def process_start_sending_signal(
         )
 
         db.session.execute(
-            insert(TransferAttempt).from_select(
+            insert(TransferAttempt)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
                     "turn_id",
@@ -1477,7 +1483,9 @@ def process_start_sending_signal(
             )
         )
         db.session.execute(
-            insert(AccountIdRequestSignal).from_select(
+            insert(AccountIdRequestSignal)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
                     "turn_id",
@@ -1570,7 +1578,9 @@ def process_start_dispatching_signal(
             nominal_amount_expression >= 1.0,
         )
         db.session.execute(
-            insert(TransferAttempt).from_select(
+            insert(TransferAttempt)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
                     "turn_id",
@@ -1601,7 +1611,9 @@ def process_start_dispatching_signal(
             )
         )
         db.session.execute(
-            insert(AccountIdRequestSignal).from_select(
+            insert(AccountIdRequestSignal)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
                     "turn_id",

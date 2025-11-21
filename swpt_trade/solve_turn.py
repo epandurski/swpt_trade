@@ -25,7 +25,7 @@ from swpt_trade import procedures
 from swpt_trade.solver import Solver
 from swpt_trade.utils import batched, calc_hash
 
-INSERT_BATCH_SIZE = 50000
+INSERT_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 
 COLLECTOR_ACCOUNT_PK = tuple_(
@@ -193,7 +193,8 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.takings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
             insert(CreditorTaking).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -208,7 +209,8 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             insert(CollectorCollecting).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -229,7 +231,8 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
     ):
         db.session.execute(
             insert(CollectorSending).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -244,7 +247,8 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             insert(CollectorReceiving).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -263,7 +267,8 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.givings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
             insert(CollectorDispatching).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -278,7 +283,8 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             insert(CreditorGiving).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -346,7 +352,9 @@ def _detect_overloaded_currencies(turn_id: int) -> None:
         .subquery(name="overloads")
     )
     db.session.execute(
-        insert(OverloadedCurrency).from_select(
+        insert(OverloadedCurrency)
+        .execution_options(synchronize_session=False)
+        .from_select(
             [
                 "turn_id",
                 "debtor_id",
@@ -454,6 +462,7 @@ def _disable_extra_collector_accounts() -> None:
         if waiting_to_be_disabled:
             db.session.execute(
                 update(CollectorAccount)
+                .execution_options(synchronize_session=False)
                 .where(
                     and_(
                         COLLECTOR_ACCOUNT_PK.in_(waiting_to_be_disabled),
