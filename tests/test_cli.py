@@ -2792,6 +2792,44 @@ def test_run_phase3_subphase5(
             started_dispatching=True,
         )
     )
+    db.session.add(
+        m.DispatchingStatus(
+            collector_id=0x0000010000000001,
+            turn_id=2,
+            debtor_id=999,
+            amount_to_collect=1000,
+            total_collected_amount=1000,
+            amount_to_send=3,
+            amount_to_receive=0,
+            number_to_receive=0,
+            total_received_amount=0,
+            all_received=True,
+            amount_to_dispatch=1,
+            awaiting_signal_flag=False,
+            started_sending=True,
+            all_sent=True,
+            started_dispatching=True,
+        )
+    )
+    db.session.add(
+        m.DispatchingStatus(
+            collector_id=0x0000010000000001,
+            turn_id=3,
+            debtor_id=995,
+            amount_to_collect=1000,
+            total_collected_amount=1000,
+            amount_to_send=3,
+            amount_to_receive=0,
+            number_to_receive=0,
+            total_received_amount=0,
+            all_received=True,
+            amount_to_dispatch=1,
+            awaiting_signal_flag=False,
+            started_sending=True,
+            all_sent=True,
+            started_dispatching=True,
+        )
+    )
     db.session.add(wt1)
     db.session.flush()
 
@@ -2965,7 +3003,7 @@ def test_run_phase3_subphase5(
     assert ncas[2].creditor_id == 0x0000010000000001
     assert ncas[2].debtor_id == 999
     assert ncas[2].collection_disabled_since == current_ts - timedelta(days=1000)
-    assert ncas[2].blocked_amount == 1518
+    assert ncas[2].blocked_amount == 1522
     assert ncas[2].blocked_amount_ts >= current_ts
 
 

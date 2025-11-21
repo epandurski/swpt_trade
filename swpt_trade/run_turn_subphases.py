@@ -1243,6 +1243,8 @@ def _update_needed_worker_account_blocked_amounts() -> None:
         ds = DispatchingStatus
 
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                # TODO: This is wrong, it may count account locks more
+                # then once!
                 select(
                     nwa.creditor_id,
                     nwa.debtor_id,
