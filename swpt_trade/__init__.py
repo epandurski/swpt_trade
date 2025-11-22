@@ -401,7 +401,11 @@ def _check_config_sanity(c):  # pragma: nocover
             " small. Choose a more appropriate value."
         )
 
-    if c["APP_SURPLUS_BLOCKING_DELAY_DAYS"] < 7.0:
+    if (
+            c["APP_SURPLUS_BLOCKING_DELAY_DAYS"] < 7.0
+            or c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+            < (3 * parse_timedelta(c["TURN_PERIOD"])).days
+    ):
         raise RuntimeError(
             "The configured value for APP_SURPLUS_BLOCKING_DELAY_DAYS is too"
             " small. Choose a more appropriate value."
