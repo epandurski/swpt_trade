@@ -3,9 +3,9 @@ import math
 from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from itertools import groupby
-from sqlalchemy import select, insert, update, delete, text, bindparam
+from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.sql.expression import null, false, case, func, and_
+from sqlalchemy.sql.expression import null, false, case, cast, func, and_
 from sqlalchemy.sql.functions import coalesce
 from flask import current_app
 from swpt_pythonlib.utils import ShardingRealm
@@ -58,7 +58,7 @@ UPDATE_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
-
+NUMERIC = Numeric(36, 0)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -1217,87 +1217,120 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.commit()
 
-        _update_needed_worker_account_states()
+        _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
         worker_turn.worker_turn_subphase = 10
 
 
-def _update_needed_worker_account_states() -> None:
-    nwa = NeededWorkerAccount
-    uc = UsefulCollector
+def _update_needed_worker_account_disabled_since() -> None:
+    """Update the `collection_disabled_since` column of all worker
+    accounts.
+
+    When a collector account gets disabled on the solver server, this
+    fact must become known on the worker server which is responsible
+    for that collector (worker) account.
+    """
 
     db.session.execute(
-        update(nwa)
+        update(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
         .where(
-            nwa.creditor_id == uc.collector_id,
-            nwa.debtor_id == uc.debtor_id,
-            nwa.collection_disabled_since.is_distinct_from(uc.disabled_at),
+            NeededWorkerAccount.creditor_id == UsefulCollector.collector_id,
+            NeededWorkerAccount.debtor_id == UsefulCollector.debtor_id,
+            NeededWorkerAccount.collection_disabled_since.is_distinct_from(
+                UsefulCollector.disabled_at
+            ),
         )
-        .values(collection_disabled_since=uc.disabled_at)
+        .values(collection_disabled_since=UsefulCollector.disabled_at)
     )
 
 
 def _update_needed_worker_account_blocked_amounts() -> None:
+    """Calculate `blocked_amount` and `blocked_amount_ts` columns of
+    all worker accounts.
+
+    For some of the disabled collector accounts, there might be
+    pending transfers whose status we do not know yet. For the purpose
+    of determining the surplus amounts, we must always assume the
+    worst possible case. This worst possible case is represented by
+    the `NeededWorkerAccount.blocked_amount` column. It represents the
+    sum of all theoretically possible future withdrawals from the
+    worker account.
+    """
+
     current_ts = datetime.now(tz=timezone.utc)
     sbd = timedelta(
         days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
     )
     with db.engine.connect() as w_conn:
-        nwa = NeededWorkerAccount
-        al = AccountLock
-        ds = DispatchingStatus
+        locked_subq = (
+            # Unreleased locks for surplus amounts which the collector
+            # wanted to sell.
+            select(AccountLock.max_locked_amount)
+            .where(
+                AccountLock.creditor_id == NeededWorkerAccount.creditor_id,
+                AccountLock.debtor_id == NeededWorkerAccount.debtor_id,
+                AccountLock.released_at == null(),
+            )
+            .scalar_subquery()
+            .correlate(NeededWorkerAccount)
+        )
+        to_relay_subq = (
+            # Pending sending to other collector accounts, and
+            # dispatching to buyers.
+            select(
+                func.sum(
+                    cast(DispatchingStatus.amount_to_send, NUMERIC)
+                    + cast(DispatchingStatus.amount_to_dispatch, NUMERIC)
+                )
+            )
+            .where(
+                DispatchingStatus.collector_id
+                == NeededWorkerAccount.creditor_id,
+                DispatchingStatus.debtor_id
+                == NeededWorkerAccount.debtor_id,
+            )
+            .scalar_subquery()
+            .correlate(NeededWorkerAccount)
+        )
+        nwa_row_filter = and_(
+            # We must calculate the blocked amount only after the
+            # collection has been disabled for a week or two. This
+            # gives enough time for all pending transfers to be
+            # finalized, and ensures that we are aware of all trading
+            # turns in which the given worker account had
+            # participated.
+            NeededWorkerAccount.collection_disabled_since < current_ts - sbd,
 
+            # We should not try to calculate the blocked amount on
+            # worker accounts for which it has been calculated
+            # already. To decide if the calculated blocked amount is
+            # up-to-date, we use the `blocked_amount_ts` field.
+            NeededWorkerAccount.collection_disabled_since
+            > coalesce(NeededWorkerAccount.blocked_amount_ts, TS0) - sbd,
+        )
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
-                # TODO: This is wrong, it may count account locks more
-                # then once!
                 select(
-                    nwa.creditor_id,
-                    nwa.debtor_id,
-                    func.sum(
-                        coalesce(al.max_locked_amount, text("0"))
-                    ).label("locked"),
-                    func.sum(
-                        coalesce(ds.amount_to_send, text("0"))
-                    ).label("to_send"),
-                    func.sum(
-                        coalesce(ds.amount_to_dispatch, text("0"))
-                    ).label("to_dispatch"),
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                    coalesce(locked_subq, text("0")).label("locked"),
+                    coalesce(to_relay_subq, text("0")).label("to_relay"),
                 )
-                .select_from(nwa)
-                .join(
-                    al,
-                    and_(
-                        al.creditor_id == nwa.creditor_id,
-                        al.debtor_id == nwa.debtor_id,
-                        al.released_at == null(),
-                    ),
-                    isouter=True,
+                .where(nwa_row_filter)
+                .group_by(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
                 )
-                .join(
-                    ds,
-                    and_(
-                        ds.collector_id == nwa.creditor_id,
-                        ds.debtor_id == nwa.debtor_id,
-                    ),
-                    isouter=True,
-                )
-                .where(
-                    nwa.collection_disabled_since < current_ts - sbd,
-                    nwa.collection_disabled_since
-                    > coalesce(nwa.blocked_amount_ts, TS0) - sbd,
-                )
-                .group_by(nwa.creditor_id, nwa.debtor_id)
         ) as result:
-            tbl = NeededWorkerAccount.__table__
-            update_statement = (
-                update(tbl)
+            nwa = NeededWorkerAccount.__table__
+            nwa_update_statement = (
+                update(nwa)
                 .where(
-                    tbl.c.creditor_id == bindparam("b_creditor_id"),
-                    tbl.c.debtor_id == bindparam("b_debtor_id"),
-                    tbl.c.collection_disabled_since < current_ts - sbd,
-                    tbl.c.collection_disabled_since
-                    > coalesce(tbl.c.blocked_amount_ts, TS0) - sbd,
+                    nwa.c.creditor_id == bindparam("b_creditor_id"),
+                    nwa.c.debtor_id == bindparam("b_debtor_id"),
+                    nwa.c.collection_disabled_since < current_ts - sbd,
+                    nwa.c.collection_disabled_since
+                    > coalesce(nwa.c.blocked_amount_ts, TS0) - sbd,
                 )
                 .values(
                     blocked_amount=bindparam("b_blocked_amount"),
@@ -1310,12 +1343,10 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                         "b_creditor_id": row.creditor_id,
                         "b_debtor_id": row.debtor_id,
                         "b_blocked_amount": contain_principal_overflow(
-                            + row.locked
-                            + row.to_send
-                            + row.to_dispatch
+                            int(row.locked + row.to_relay)
                         ),
                     }
                     for row in rows
                 ]
                 if dicts_to_update:
-                    db.session.execute(update_statement, dicts_to_update)
+                    db.session.execute(nwa_update_statement, dicts_to_update)
