@@ -1337,11 +1337,8 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                     coalesce(locked_subq, text("0")).label("locked"),
                     coalesce(to_relay_subq, text("0")).label("to_relay"),
                 )
+                .select_from(NeededWorkerAccount)
                 .where(nwa_row_filter)
-                .group_by(
-                    NeededWorkerAccount.creditor_id,
-                    NeededWorkerAccount.debtor_id,
-                )
         ) as result:
             for rows in batched(result, UPDATE_BATCH_SIZE):
                 dicts_to_update = [
