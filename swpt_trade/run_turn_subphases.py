@@ -1259,9 +1259,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
     """
 
     current_ts = datetime.now(tz=timezone.utc)
-    sbd = timedelta(
-        days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
-    )
+    sbd = timedelta(days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
 
     # Unreleased locks for surplus amounts which the collector wanted
     # to sell.
@@ -1286,10 +1284,8 @@ def _update_needed_worker_account_blocked_amounts() -> None:
             )
         )
         .where(
-            DispatchingStatus.collector_id
-            == NeededWorkerAccount.creditor_id,
-            DispatchingStatus.debtor_id
-            == NeededWorkerAccount.debtor_id,
+            DispatchingStatus.collector_id == NeededWorkerAccount.creditor_id,
+            DispatchingStatus.debtor_id == NeededWorkerAccount.debtor_id,
         )
         .scalar_subquery()
         .correlate(NeededWorkerAccount)
