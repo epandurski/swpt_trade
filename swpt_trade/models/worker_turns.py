@@ -261,11 +261,9 @@ class DispatchingStatus(db.Model):
     # file should be edited so as not to create a "normal" index, but
     # create a "covering" index instead.
 
-    # TODO: Consider using (collector_id, debtor_id, turn_id) primary
-    # key instead!
     collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     inserted_at = db.Column(
         db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
     )
@@ -449,8 +447,8 @@ class WorkerCollecting(db.Model):
     # "covering" index instead.
 
     collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     amount = db.Column(db.BigInteger, nullable=False)
     collected = db.Column(db.BOOLEAN, nullable=False, default=False)
@@ -488,8 +486,8 @@ class WorkerSending(db.Model):
     # "covering" index instead.
 
     from_collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     to_collector_id = db.Column(db.BigInteger, primary_key=True)
     amount = db.Column(db.BigInteger, nullable=False)
     purge_after = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
@@ -517,8 +515,8 @@ class WorkerReceiving(db.Model):
     # "covering" index instead.
 
     to_collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     from_collector_id = db.Column(db.BigInteger, primary_key=True)
     expected_amount = db.Column(db.BigInteger, nullable=False)
     received_amount = db.Column(
@@ -565,8 +563,8 @@ class WorkerDispatching(db.Model):
     # "covering" index instead.
 
     collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     amount = db.Column(db.BigInteger, nullable=False)
     purge_after = db.Column(db.TIMESTAMP(timezone=True), nullable=False)

@@ -100,23 +100,23 @@ class DispatchingData:
     def _get_value(self, *args):
         return self._data[*args]
 
-    def register_collecting(self, collector_id, turn_id, debtor_id, amount):
+    def register_collecting(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[0] = contain_principal_overflow(value[0] + amount)
 
-    def register_sending(self, collector_id, turn_id, debtor_id, amount):
+    def register_sending(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[1] = contain_principal_overflow(value[1] + amount)
 
-    def register_receiving(self, collector_id, turn_id, debtor_id, amount):
+    def register_receiving(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[2] = contain_principal_overflow(value[2] + amount)
         value[3] += 1
 
-    def register_dispatching(self, collector_id, turn_id, debtor_id, amount):
+    def register_dispatching(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[4] = contain_principal_overflow(value[4] + amount)

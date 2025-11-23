@@ -580,8 +580,8 @@ def update_worker_collecting_record(
             .where(
                 and_(
                     WorkerCollecting.collector_id == collector_id,
-                    WorkerCollecting.turn_id == turn_id,
                     WorkerCollecting.debtor_id == debtor_id,
+                    WorkerCollecting.turn_id == turn_id,
                     WorkerCollecting.creditor_id == creditor_id,
                     WorkerCollecting.amount == acquired_amount,
                     WorkerCollecting.collected == false(),
@@ -624,8 +624,8 @@ def delete_worker_sending_record(
         .where(
             and_(
                 WorkerSending.from_collector_id == from_collector_id,
-                WorkerSending.turn_id == turn_id,
                 WorkerSending.debtor_id == debtor_id,
+                WorkerSending.turn_id == turn_id,
                 WorkerSending.to_collector_id == to_collector_id,
             )
         )
@@ -668,8 +668,8 @@ def update_worker_receiving_record(
             .where(
                 and_(
                     WorkerReceiving.to_collector_id == to_collector_id,
-                    WorkerReceiving.turn_id == turn_id,
                     WorkerReceiving.debtor_id == debtor_id,
+                    WorkerReceiving.turn_id == turn_id,
                     WorkerReceiving.from_collector_id == from_collector_id,
                     WorkerReceiving.received_amount == 0,
                 )
@@ -711,8 +711,8 @@ def delete_worker_dispatching_record(
         .where(
             and_(
                 WorkerDispatching.collector_id == collector_id,
-                WorkerDispatching.turn_id == turn_id,
                 WorkerDispatching.debtor_id == debtor_id,
+                WorkerDispatching.turn_id == turn_id,
                 WorkerDispatching.creditor_id == creditor_id,
             )
         )
@@ -1392,8 +1392,8 @@ def process_start_sending_signal(
         .outerjoin(WorkerTurn, WorkerTurn.turn_id == DispatchingStatus.turn_id)
         .filter(
             DispatchingStatus.collector_id == collector_id,
-            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.debtor_id == debtor_id,
+            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.started_sending == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
@@ -1411,8 +1411,8 @@ def process_start_sending_signal(
 
     worker_collectings_predicate = and_(
         WorkerCollecting.collector_id == collector_id,
-        WorkerCollecting.turn_id == turn_id,
         WorkerCollecting.debtor_id == debtor_id,
+        WorkerCollecting.turn_id == turn_id,
     )
     dispatching_status.total_collected_amount = contain_principal_overflow(
         int(
@@ -1448,8 +1448,8 @@ def process_start_sending_signal(
         )
         worker_sending_predicate = and_(
             WorkerSending.from_collector_id == collector_id,
-            WorkerSending.turn_id == turn_id,
             WorkerSending.debtor_id == debtor_id,
+            WorkerSending.turn_id == turn_id,
             nominal_amount_expression >= 1.0,
         )
 
@@ -1459,8 +1459,8 @@ def process_start_sending_signal(
             .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                     "nominal_amount",
@@ -1472,8 +1472,8 @@ def process_start_sending_signal(
                 ],
                 select(
                     WorkerSending.from_collector_id,
-                    WorkerSending.turn_id,
                     WorkerSending.debtor_id,
+                    WorkerSending.turn_id,
                     WorkerSending.to_collector_id,
                     false(),
                     nominal_amount_expression,
@@ -1492,15 +1492,15 @@ def process_start_sending_signal(
             .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                 ],
                 select(
                     WorkerSending.from_collector_id,
-                    WorkerSending.turn_id,
                     WorkerSending.debtor_id,
+                    WorkerSending.turn_id,
                     WorkerSending.to_collector_id,
                     false(),
                 )
@@ -1522,8 +1522,8 @@ def process_start_dispatching_signal(
         .outerjoin(WorkerTurn, WorkerTurn.turn_id == DispatchingStatus.turn_id)
         .filter(
             DispatchingStatus.collector_id == collector_id,
-            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.debtor_id == debtor_id,
+            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.all_sent == true(),
             DispatchingStatus.started_dispatching == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
@@ -1542,8 +1542,8 @@ def process_start_dispatching_signal(
 
     worker_receivings_predicate = and_(
         WorkerReceiving.to_collector_id == collector_id,
-        WorkerReceiving.turn_id == turn_id,
         WorkerReceiving.debtor_id == debtor_id,
+        WorkerReceiving.turn_id == turn_id,
     )
     dispatching_status.total_received_amount = contain_principal_overflow(
         int(
@@ -1579,8 +1579,8 @@ def process_start_dispatching_signal(
         )
         worker_dispatching_predicate = and_(
             WorkerDispatching.collector_id == collector_id,
-            WorkerDispatching.turn_id == turn_id,
             WorkerDispatching.debtor_id == debtor_id,
+            WorkerDispatching.turn_id == turn_id,
             nominal_amount_expression >= 1.0,
         )
         db.session.execute(
@@ -1589,8 +1589,8 @@ def process_start_dispatching_signal(
             .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                     "nominal_amount",
@@ -1602,8 +1602,8 @@ def process_start_dispatching_signal(
                 ],
                 select(
                     WorkerDispatching.collector_id,
-                    WorkerDispatching.turn_id,
                     WorkerDispatching.debtor_id,
+                    WorkerDispatching.turn_id,
                     WorkerDispatching.creditor_id,
                     true(),
                     nominal_amount_expression,
@@ -1622,15 +1622,15 @@ def process_start_dispatching_signal(
             .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                 ],
                 select(
                     WorkerDispatching.collector_id,
-                    WorkerDispatching.turn_id,
                     WorkerDispatching.debtor_id,
+                    WorkerDispatching.turn_id,
                     WorkerDispatching.creditor_id,
                     true(),
                 )

@@ -14,14 +14,14 @@ class WorkerReceivingsScanner(TableScanner):
     table = WorkerReceiving.__table__
     pk = tuple_(
         table.c.to_collector_id,
-        table.c.turn_id,
         table.c.debtor_id,
+        table.c.turn_id,
         table.c.from_collector_id,
     )
     columns = [
         WorkerReceiving.to_collector_id,
-        WorkerReceiving.turn_id,
         WorkerReceiving.debtor_id,
+        WorkerReceiving.turn_id,
         WorkerReceiving.from_collector_id,
         WorkerReceiving.received_amount,
         WorkerReceiving.purge_after,
@@ -55,8 +55,8 @@ class WorkerReceivingsScanner(TableScanner):
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
         c_to_collector_id = c.to_collector_id
-        c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
+        c_turn_id = c.turn_id
         c_from_collector_id = c.from_collector_id
 
         def belongs_to_parent_shard(row) -> bool:
@@ -71,8 +71,8 @@ class WorkerReceivingsScanner(TableScanner):
         pks_to_delete = [
             (
                 row[c_to_collector_id],
-                row[c_turn_id],
                 row[c_debtor_id],
+                row[c_turn_id],
                 row[c_from_collector_id],
             )
             for row in rows
@@ -93,8 +93,8 @@ class WorkerReceivingsScanner(TableScanner):
     def _delete_stale_records(self, rows, current_ts):
         c = self.table.c
         c_to_collector_id = c.to_collector_id
-        c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
+        c_turn_id = c.turn_id
         c_from_collector_id = c.from_collector_id
         c_received_amount = c.received_amount
         c_purge_after = c.purge_after
@@ -108,8 +108,8 @@ class WorkerReceivingsScanner(TableScanner):
         pks_to_delete = [
             (
                 row[c_to_collector_id],
-                row[c_turn_id],
                 row[c_debtor_id],
+                row[c_turn_id],
                 row[c_from_collector_id],
             )
             for row in rows

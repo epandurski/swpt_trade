@@ -863,8 +863,8 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
             dicts_to_insert = [
                 {
                     "collector_id": row.collector_id,
-                    "turn_id": turn_id,
                     "debtor_id": row.debtor_id,
+                    "turn_id": turn_id,
                     "creditor_id": row.creditor_id,
                     "amount": row.amount,
                     "collected": False,
@@ -887,8 +887,8 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 for d in dicts_to_insert:
                     statuses.register_collecting(
                         d["collector_id"],
-                        d["turn_id"],
                         d["debtor_id"],
+                        d["turn_id"],
                         d["amount"],
                     )
 
@@ -948,8 +948,8 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 for d in dicts_to_insert:
                     statuses.register_sending(
                         d["from_collector_id"],
-                        d["turn_id"],
                         d["debtor_id"],
+                        d["turn_id"],
                         d["amount"],
                     )
 
@@ -1010,8 +1010,8 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 for d in dicts_to_insert:
                     statuses.register_receiving(
                         d["to_collector_id"],
-                        d["turn_id"],
                         d["debtor_id"],
+                        d["turn_id"],
                         d["expected_amount"],
                     )
 
@@ -1050,8 +1050,8 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
             dicts_to_insert = [
                 {
                     "collector_id": row.collector_id,
-                    "turn_id": turn_id,
                     "debtor_id": row.debtor_id,
+                    "turn_id": turn_id,
                     "creditor_id": row.creditor_id,
                     "amount": row.amount,
                     "purge_after": purge_after,
@@ -1073,8 +1073,8 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 for d in dicts_to_insert:
                     statuses.register_dispatching(
                         d["collector_id"],
-                        d["turn_id"],
                         d["debtor_id"],
+                        d["turn_id"],
                         d["amount"],
                     )
 

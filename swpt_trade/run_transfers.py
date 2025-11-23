@@ -30,8 +30,8 @@ from swpt_trade.utils import batched
 
 DISPATCHING_STATUS_PK = tuple_(
     DispatchingStatus.collector_id,
-    DispatchingStatus.turn_id,
     DispatchingStatus.debtor_id,
+    DispatchingStatus.turn_id,
 )
 DELAYED_ACCOUNT_TRANSFER_PK = tuple_(
     DelayedAccountTransfer.turn_id,
@@ -111,8 +111,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
         .select_from(WorkerCollecting)
         .where(
             WorkerCollecting.collector_id == DispatchingStatus.collector_id,
-            WorkerCollecting.turn_id == DispatchingStatus.turn_id,
             WorkerCollecting.debtor_id == DispatchingStatus.debtor_id,
+            WorkerCollecting.turn_id == DispatchingStatus.turn_id,
             WorkerCollecting.collected == false(),
         )
     ).exists()
@@ -121,8 +121,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
                     and_(
@@ -141,8 +141,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
                             and_(
@@ -174,8 +174,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                         [
                             {
                                 "collector_id": row.collector_id,
-                                "turn_id": row.turn_id,
                                 "debtor_id": row.debtor_id,
+                                "turn_id": row.turn_id,
                                 "inserted_at": current_ts,
                             }
                             for row in locked_rows
@@ -192,8 +192,8 @@ def update_dispatching_statuses_with_everything_sent() -> None:
         .select_from(WorkerSending)
         .where(
             WorkerSending.from_collector_id == DispatchingStatus.collector_id,
-            WorkerSending.turn_id == DispatchingStatus.turn_id,
             WorkerSending.debtor_id == DispatchingStatus.debtor_id,
+            WorkerSending.turn_id == DispatchingStatus.turn_id,
         )
     ).exists()
 
@@ -201,8 +201,8 @@ def update_dispatching_statuses_with_everything_sent() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
                     DispatchingStatus.started_sending == true(),
@@ -219,8 +219,8 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
                             and_(
@@ -251,8 +251,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
         .select_from(WorkerReceiving)
         .where(
             WorkerReceiving.to_collector_id == DispatchingStatus.collector_id,
-            WorkerReceiving.turn_id == DispatchingStatus.turn_id,
             WorkerReceiving.debtor_id == DispatchingStatus.debtor_id,
+            WorkerReceiving.turn_id == DispatchingStatus.turn_id,
             WorkerReceiving.received_amount == text("0"),
         )
     ).exists()
@@ -261,8 +261,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
                     and_(
@@ -282,8 +282,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
                             and_(
@@ -316,8 +316,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                         [
                             {
                                 "collector_id": row.collector_id,
-                                "turn_id": row.turn_id,
                                 "debtor_id": row.debtor_id,
+                                "turn_id": row.turn_id,
                                 "inserted_at": current_ts,
                             }
                             for row in locked_rows
@@ -334,8 +334,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
         .select_from(WorkerDispatching)
         .where(
             WorkerDispatching.collector_id == DispatchingStatus.collector_id,
-            WorkerDispatching.turn_id == DispatchingStatus.turn_id,
             WorkerDispatching.debtor_id == DispatchingStatus.debtor_id,
+            WorkerDispatching.turn_id == DispatchingStatus.turn_id,
         )
     ).exists()
 
@@ -343,8 +343,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
                     and_(
@@ -362,8 +362,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
                             and_(

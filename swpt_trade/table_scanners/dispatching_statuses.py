@@ -12,11 +12,11 @@ atomic: Callable[[T], T] = db.atomic
 
 class DispatchingStatusesScanner(ParentRecordsCleaner):
     table = DispatchingStatus.__table__
-    pk = tuple_(table.c.collector_id, table.c.turn_id, table.c.debtor_id)
+    pk = tuple_(table.c.collector_id, table.c.debtor_id, table.c.turn_id)
     columns = [
         DispatchingStatus.collector_id,
-        DispatchingStatus.turn_id,
         DispatchingStatus.debtor_id,
+        DispatchingStatus.turn_id,
     ]
 
     def __init__(self):
@@ -43,8 +43,8 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
         c_collector_id = c.collector_id
-        c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
+        c_turn_id = c.turn_id
 
         def belongs_to_parent_shard(row) -> bool:
             collector_id = row[c_collector_id]
@@ -54,7 +54,7 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
             )
 
         pks_to_delete = [
-            (row[c_collector_id], row[c_turn_id], row[c_debtor_id])
+            (row[c_collector_id], row[c_debtor_id], row[c_turn_id])
             for row in rows
             if belongs_to_parent_shard(row)
         ]

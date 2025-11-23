@@ -300,12 +300,12 @@ def test_parse_transfer_note():
 
 def test_dispatching_data():
     dd = DispatchingData(2)
-    dd.register_collecting(1, 2, 3, 100)
-    dd.register_collecting(1, 2, 3, 150)
-    dd.register_collecting(1, 2, 4, 300)
-    dd.register_sending(1, 2, 3, 500)
-    dd.register_receiving(1, 2, 3, 1000)
-    dd.register_dispatching(1, 2, 3, 2000)
+    dd.register_collecting(1, 3, 2, 100)
+    dd.register_collecting(1, 3, 2, 150)
+    dd.register_collecting(1, 4, 2, 300)
+    dd.register_sending(1, 3, 2, 500)
+    dd.register_receiving(1, 3, 2, 1000)
+    dd.register_dispatching(1, 3, 2, 2000)
 
     ll = list(dd.statuses_iter())
     ll.sort(key=lambda x: (x["collector_id"], x["turn_id"], x["debtor_id"]))
