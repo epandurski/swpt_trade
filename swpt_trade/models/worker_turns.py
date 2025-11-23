@@ -80,14 +80,14 @@ class RecentlyNeededCollector(db.Model):
     )
 
 
-class UsefulCollector(db.Model):
+class UsableCollector(db.Model):
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
     account_id = db.Column(db.String, nullable=False)
     disabled_at = db.Column(db.TIMESTAMP(timezone=True))
     __table_args__ = (
         db.Index(
-            "idx_useful_collector_collector_id",
+            "idx_usable_collector_collector_id",
             collector_id,
             debtor_id,
             unique=True,

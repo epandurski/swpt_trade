@@ -1941,7 +1941,7 @@ def test_run_phase2_subphase0(
     db.session.add(wt1)
     if has_active_collectors:
         db.session.add(
-            m.UsefulCollector(
+            m.UsableCollector(
                 debtor_id=999,
                 collector_id=0x0000010000000000,
                 account_id="TestCollectorAccountId",
@@ -2159,7 +2159,7 @@ def test_run_phase2_subphase0(
     ncs = m.NeededCollectorSignal.query.all()
     assert len(ncs) == 1
     assert ncs[0].debtor_id == 888
-    acs = m.UsefulCollector.query.all()
+    acs = m.UsableCollector.query.all()
     assert len(acs) == 1
     assert acs[0].debtor_id == 999
     assert acs[0].collector_id == 0x0000010000000000
@@ -2717,7 +2717,7 @@ def test_run_phase3_subphase5(
         worker_turn_subphase=5,
     )
     db.session.add(
-        m.UsefulCollector(
+        m.UsableCollector(
             collector_id=0x0000010000000001,
             debtor_id=666,
             account_id='666',
@@ -2725,7 +2725,7 @@ def test_run_phase3_subphase5(
         )
     )
     db.session.add(
-        m.UsefulCollector(
+        m.UsableCollector(
             collector_id=0x0000010000000001,
             debtor_id=777,
             account_id='777',
@@ -2733,7 +2733,7 @@ def test_run_phase3_subphase5(
         )
     )
     db.session.add(
-        m.UsefulCollector(
+        m.UsableCollector(
             collector_id=0x0000010000000001,
             debtor_id=888,
             account_id='888',

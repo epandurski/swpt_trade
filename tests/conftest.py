@@ -68,7 +68,7 @@ def db_session(app):
         "TRUNCATE TABLE needed_worker_account",
         "TRUNCATE TABLE account_lock",
         "TRUNCATE TABLE recently_needed_collector",
-        "TRUNCATE TABLE useful_collector",
+        "TRUNCATE TABLE usable_collector",
         "TRUNCATE TABLE interest_rate_change",
         "DELETE FROM worker_turn",
         "TRUNCATE TABLE creditor_participation",

@@ -27,7 +27,7 @@ from swpt_trade.models import (
     RecentlyNeededCollector,
     WorkerTurn,
     AccountLock,
-    UsefulCollector,
+    UsableCollector,
     CreditorParticipation,
     DispatchingStatus,
     WorkerCollecting,
@@ -1453,7 +1453,7 @@ def test_process_candidate_offer_signal(
     db_session.add(wt1)
     db_session.add(wt2)
     db_session.add(
-        UsefulCollector(
+        UsableCollector(
             debtor_id=666,
             collector_id=999,
             account_id="TestCollectorAccount999",
@@ -1694,7 +1694,7 @@ def wt_2_5(db_session, current_ts):
 @pytest.fixture(scope="function")
 def collector_id(db_session, current_ts):
     db_session.add(
-        UsefulCollector(
+        UsableCollector(
             debtor_id=666,
             collector_id=999,
             account_id="TestCollectorAccount999",

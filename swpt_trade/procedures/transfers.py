@@ -32,7 +32,7 @@ from swpt_trade.models import (
     cr_seq,
     WorkerTurn,
     AccountLock,
-    UsefulCollector,
+    UsableCollector,
     PrepareTransferSignal,
     FinalizeTransferSignal,
     TriggerTransferSignal,
@@ -132,12 +132,12 @@ def process_candidate_offer_signal(
 
     active_collectors = db.session.execute(
         select(
-            UsefulCollector.collector_id,
-            UsefulCollector.account_id,
+            UsableCollector.collector_id,
+            UsableCollector.account_id,
         )
         .where(
-            UsefulCollector.debtor_id == debtor_id,
-            UsefulCollector.disabled_at == null(),
+            UsableCollector.debtor_id == debtor_id,
+            UsableCollector.disabled_at == null(),
         )
     ).all()
 

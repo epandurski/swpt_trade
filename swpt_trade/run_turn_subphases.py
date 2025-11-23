@@ -35,7 +35,7 @@ from swpt_trade.models import (
     ReviseAccountLockSignal,
     CollectorAccount,
     HoardedCurrency,
-    UsefulCollector,
+    UsableCollector,
     AccountLock,
     SellOffer,
     BuyOffer,
@@ -262,7 +262,7 @@ def run_phase2_subphase0(turn_id: int) -> None:
                 turn_id,
                 worker_turn.collection_deadline,
             )
-            _copy_useful_collectors(bp)
+            _copy_usable_collectors(bp)
             _insert_needed_collector_signals(bp)
 
         worker_turn.worker_turn_subphase = 5
@@ -517,12 +517,9 @@ def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
         )
 
 
-def _copy_useful_collectors(bp: BidProcessor) -> None:
+def _copy_usable_collectors(bp: BidProcessor) -> None:
     with db.engines["solver"].connect() as s_conn:
-        db.session.execute(
-            text("LOCK TABLE useful_collector IN SHARE ROW EXCLUSIVE MODE")
-        )
-        UsefulCollector.query.delete(synchronize_session=False)
+        UsableCollector.query.delete(synchronize_session=False)
 
         with s_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -548,7 +545,7 @@ def _copy_useful_collectors(bp: BidProcessor) -> None:
                 ]
                 if dicts_to_insert:
                     db.session.execute(
-                        insert(UsefulCollector).execution_options(
+                        insert(UsableCollector).execution_options(
                             insertmanyvalues_page_size=INSERT_BATCH_SIZE,
                             synchronize_session=False,
                         ),
@@ -1235,13 +1232,13 @@ def _update_needed_worker_account_disabled_since() -> None:
         update(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
         .where(
-            NeededWorkerAccount.creditor_id == UsefulCollector.collector_id,
-            NeededWorkerAccount.debtor_id == UsefulCollector.debtor_id,
+            NeededWorkerAccount.creditor_id == UsableCollector.collector_id,
+            NeededWorkerAccount.debtor_id == UsableCollector.debtor_id,
             NeededWorkerAccount.collection_disabled_since.is_distinct_from(
-                UsefulCollector.disabled_at
+                UsableCollector.disabled_at
             ),
         )
-        .values(collection_disabled_since=UsefulCollector.disabled_at)
+        .values(collection_disabled_since=UsableCollector.disabled_at)
     )
 
 
