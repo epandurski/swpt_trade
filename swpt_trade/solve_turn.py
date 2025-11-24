@@ -23,7 +23,7 @@ from swpt_trade.models import (
 )
 from swpt_trade import procedures
 from swpt_trade.solver import Solver
-from swpt_trade.utils import batched, calc_hash
+from swpt_trade.utils import batched, calc_hash, get_primary_collector_id
 
 INSERT_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
@@ -456,13 +456,17 @@ def _disable_extra_collector_accounts() -> None:
     """
 
     current_ts = datetime.now(tz=timezone.utc)
+    cfg = current_app.config
+    min_collector_id = cfg["MIN_COLLECTOR_ID"]
+    max_collector_id = cfg["MAX_COLLECTOR_ID"]
     activity_cutoff_ts = current_ts - timedelta(
-        days=current_app.config["APP_COLLECTOR_ACTIVITY_MIN_DAYS"]
+        days=cfg["APP_COLLECTOR_ACTIVITY_MIN_DAYS"]
     )
     waiting_to_be_disabled = []
+    waiting_to_be_ensured_to_exist = set()
 
     @atomic
-    def disable_waiting():
+    def process_waiting():
         if waiting_to_be_disabled:
             db.session.execute(
                 update(CollectorAccount)
@@ -480,6 +484,12 @@ def _disable_extra_collector_accounts() -> None:
             )
             waiting_to_be_disabled.clear()
 
+        if waiting_to_be_ensured_to_exist:
+            procedures.insert_collector_accounts(
+                waiting_to_be_ensured_to_exist
+            )
+            waiting_to_be_ensured_to_exist.clear()
+
     with db.engines['solver'].connect() as conn:
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -492,6 +502,7 @@ def _disable_extra_collector_accounts() -> None:
                 .order_by(CollectorAccount.debtor_id)
         ) as result:
             for debtor_id, group in groupby(result, lambda r: r.debtor_id):
+                primary_collector_id = None
                 rows = list(group)
                 rows.sort(
                     key=lambda x: (
@@ -509,9 +520,32 @@ def _disable_extra_collector_accounts() -> None:
                         or row.latest_status_change_at > activity_cutoff_ts
                     ):
                         break
-                    waiting_to_be_disabled.append(
-                        (debtor_id, row.collector_id)
-                    )
-                    if len(waiting_to_be_disabled) > 5000:  # pragma: no cover
-                        disable_waiting()
-            disable_waiting()
+
+                    collector_id = row.collector_id
+                    waiting_to_be_disabled.append((debtor_id, collector_id))
+
+                    # NOTE: Each disabled collector account will
+                    # eventually be activated again. At the time of
+                    # activation, an attempt may be made to transfer
+                    # the calculated surplus amount to another
+                    # collector account (the primary collector
+                    # account). Here we ensure that the primary
+                    # collector account exists. In some rare cases, it
+                    # may happen that the creation of the primary
+                    # collector account has failed, and the account
+                    # has been deleted.
+                    if primary_collector_id is None:
+                        primary_collector_id = get_primary_collector_id(
+                            debtor_id=debtor_id,
+                            min_collector_id=min_collector_id,
+                            max_collector_id=max_collector_id,
+                        )
+                    if collector_id != primary_collector_id:
+                        waiting_to_be_ensured_to_exist.add(
+                            (debtor_id, primary_collector_id)
+                        )
+
+                    if len(waiting_to_be_disabled) > INSERT_BATCH_SIZE:
+                        process_waiting()  # pragma: no cover
+
+            process_waiting()

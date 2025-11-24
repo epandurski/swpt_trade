@@ -1,5 +1,5 @@
 from swpt_trade.solve_turn import try_to_advance_turn_to_phase3
-from swpt_trade.utils import calc_hash
+from swpt_trade.utils import calc_hash, get_primary_collector_id
 from swpt_trade.models import (
     CollectorAccount,
     Turn,
@@ -264,15 +264,26 @@ def test_try_to_advance_turn_to_phase3(db_session):
     max_collectors = 1 + cfg["MAX_COLLECTOR_ID"] - cfg["MIN_COLLECTOR_ID"]
     cas = CollectorAccount.query.all()
     cas.sort(key=lambda row: (row.debtor_id, row.collector_id))
-    assert len(cas) == 4 + max_collectors
-    assert cas[0].debtor_id == cas[1].debtor_id == 101
+    assert len(cas) == 3 + 2 + max_collectors
+    assert cas[0].debtor_id == cas[1].debtor_id == cas[2].debtor_id == 101
     assert cas[0].status == 3
     assert cas[1].status == 2
-    assert cas[2].debtor_id == cas[3].debtor_id == 102
-    assert cas[2].status == 3
-    assert cas[3].status == 0
-    assert cas[4].debtor_id == cas[-1].debtor_id == 103
+    assert cas[2].status == 0
+    assert cas[2].collector_id == get_primary_collector_id(
+        debtor_id=101,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+    )
+    assert cas[3].debtor_id == cas[4].debtor_id == 102
+    assert cas[3].status == 3
     assert cas[4].status == 0
+    assert cas[4].collector_id == get_primary_collector_id(
+        debtor_id=102,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+    )
+    assert cas[5].debtor_id == cas[-1].debtor_id == 103
+    assert cas[5].status == 0
 
     ocs = OverloadedCurrency.query.all()
     assert len(ocs) == 0

@@ -293,3 +293,18 @@ def pseudorandom_id_generator(
     rgen.seed(seed, version=2)
     while True:
         yield rgen.randint(min_id, max_id)
+
+
+def get_primary_collector_id(
+        *,
+        debtor_id: int,
+        min_collector_id: int,
+        max_collector_id: int,
+) -> int:
+    return next(
+        pseudorandom_id_generator(
+            seed=debtor_id,
+            min_id=min_collector_id,
+            max_id=max_collector_id,
+        )
+    )
