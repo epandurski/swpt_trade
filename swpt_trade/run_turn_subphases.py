@@ -1183,6 +1183,8 @@ def run_phase3_subphase5(turn_id: int) -> None:
 
         _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
+        _update_worker_account_surplus_amounts()
+        _detect_broken_needed_worker_accounts()
 
         worker_turn.worker_turn_subphase = 10
 
@@ -1314,3 +1316,19 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                 ]
                 if dicts_to_update:
                     db.session.execute(nwa_update_statement, dicts_to_update)
+
+
+def _update_worker_account_surplus_amounts() -> None:
+    # TODO: join disabled `NeededWorkerAccount`s with their
+    # corresponding WorkerAccount (account_id != "", and proper
+    # timestamps), and set the surplus amount, also, set the status of
+    # the solver's collector account to 2.
+    pass
+
+
+def _detect_broken_needed_worker_accounts() -> None:
+    # TODO: Find disabled `NeededWorkerAccount`s that do not have a
+    # corresponding WorkerAccount (or its account_id == ""). Delete
+    # those, and their corresponding InterestRateChange records, also,
+    # set the status of the solver's collector account to 1.
+    pass
