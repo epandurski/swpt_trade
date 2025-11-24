@@ -125,11 +125,9 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                     DispatchingStatus.turn_id,
                 )
                 .where(
-                    and_(
-                        DispatchingStatus.started_sending == false(),
-                        DispatchingStatus.awaiting_signal_flag == false(),
-                        not_(pending_collectings_subquery),
-                    )
+                    DispatchingStatus.started_sending == false(),
+                    DispatchingStatus.awaiting_signal_flag == false(),
+                    not_(pending_collectings_subquery),
                 )
         ) as result:
             for rows in batched(result, INSERT_BATCH_SIZE):
@@ -145,13 +143,9 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                             DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.started_sending
-                                == false(),
-                                DispatchingStatus.awaiting_signal_flag
-                                == false(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.started_sending == false(),
+                            DispatchingStatus.awaiting_signal_flag == false(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -223,11 +217,9 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                             DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.started_sending == true(),
-                                DispatchingStatus.all_sent == false(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.started_sending == true(),
+                            DispatchingStatus.all_sent == false(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -265,12 +257,10 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                     DispatchingStatus.turn_id,
                 )
                 .where(
-                    and_(
-                        DispatchingStatus.all_sent == true(),
-                        DispatchingStatus.started_dispatching == false(),
-                        DispatchingStatus.awaiting_signal_flag == false(),
-                        not_(pending_receivings_subquery),
-                    )
+                    DispatchingStatus.all_sent == true(),
+                    DispatchingStatus.started_dispatching == false(),
+                    DispatchingStatus.awaiting_signal_flag == false(),
+                    not_(pending_receivings_subquery),
                 )
         ) as result:
             for rows in batched(result, INSERT_BATCH_SIZE):
@@ -286,14 +276,10 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                             DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.all_sent == true(),
-                                DispatchingStatus.started_dispatching
-                                == false(),
-                                DispatchingStatus.awaiting_signal_flag
-                                == false(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.all_sent == true(),
+                            DispatchingStatus.started_dispatching == false(),
+                            DispatchingStatus.awaiting_signal_flag == false(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -347,10 +333,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     DispatchingStatus.turn_id,
                 )
                 .where(
-                    and_(
-                        DispatchingStatus.started_dispatching == true(),
-                        not_(pending_dispatchings_subquery),
-                    )
+                    DispatchingStatus.started_dispatching == true(),
+                    not_(pending_dispatchings_subquery),
                 )
         ) as result:
             for rows in batched(result, INSERT_BATCH_SIZE):
@@ -366,11 +350,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                             DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.started_dispatching
-                                == true(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.started_dispatching == true(),
                         )
                         .with_for_update(skip_locked=True)
                     )

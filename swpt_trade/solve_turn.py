@@ -3,7 +3,7 @@ from typing import TypeVar, Callable
 from itertools import groupby
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, update, delete, func, union_all
-from sqlalchemy.sql.expression import text, and_, tuple_
+from sqlalchemy.sql.expression import text, tuple_
 from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -155,40 +155,32 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
             delete(CurrencyInfo)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == CurrencyInfo.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == CurrencyInfo.turn_id,
+                Turn.phase >= 3,
             )
         )
         db.session.execute(
             delete(SellOffer)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == SellOffer.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == SellOffer.turn_id,
+                Turn.phase >= 3,
             )
         )
         db.session.execute(
             delete(BuyOffer)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == BuyOffer.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == BuyOffer.turn_id,
+                Turn.phase >= 3,
             )
         )
         db.session.execute(
             delete(HoardedCurrency)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == HoardedCurrency.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == HoardedCurrency.turn_id,
+                Turn.phase >= 3,
             )
         )
 
@@ -472,10 +464,8 @@ def _disable_extra_collector_accounts() -> None:
                 update(CollectorAccount)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        COLLECTOR_ACCOUNT_PK.in_(waiting_to_be_disabled),
-                        CollectorAccount.status == 2,
-                    )
+                    COLLECTOR_ACCOUNT_PK.in_(waiting_to_be_disabled),
+                    CollectorAccount.status == 2,
                 )
                 .values(
                     status=3,

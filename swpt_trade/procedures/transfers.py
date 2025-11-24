@@ -578,14 +578,12 @@ def update_worker_collecting_record(
             update(WorkerCollecting)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    WorkerCollecting.collector_id == collector_id,
-                    WorkerCollecting.debtor_id == debtor_id,
-                    WorkerCollecting.turn_id == turn_id,
-                    WorkerCollecting.creditor_id == creditor_id,
-                    WorkerCollecting.amount == acquired_amount,
-                    WorkerCollecting.collected == false(),
-                )
+                WorkerCollecting.collector_id == collector_id,
+                WorkerCollecting.debtor_id == debtor_id,
+                WorkerCollecting.turn_id == turn_id,
+                WorkerCollecting.creditor_id == creditor_id,
+                WorkerCollecting.amount == acquired_amount,
+                WorkerCollecting.collected == false(),
             )
             .values(collected=True)
         )
@@ -622,12 +620,10 @@ def delete_worker_sending_record(
         delete(WorkerSending)
         .execution_options(synchronize_session=False)
         .where(
-            and_(
-                WorkerSending.from_collector_id == from_collector_id,
-                WorkerSending.debtor_id == debtor_id,
-                WorkerSending.turn_id == turn_id,
-                WorkerSending.to_collector_id == to_collector_id,
-            )
+            WorkerSending.from_collector_id == from_collector_id,
+            WorkerSending.debtor_id == debtor_id,
+            WorkerSending.turn_id == turn_id,
+            WorkerSending.to_collector_id == to_collector_id,
         )
     )
 
@@ -666,13 +662,11 @@ def update_worker_receiving_record(
             update(WorkerReceiving)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    WorkerReceiving.to_collector_id == to_collector_id,
-                    WorkerReceiving.debtor_id == debtor_id,
-                    WorkerReceiving.turn_id == turn_id,
-                    WorkerReceiving.from_collector_id == from_collector_id,
-                    WorkerReceiving.received_amount == 0,
-                )
+                WorkerReceiving.to_collector_id == to_collector_id,
+                WorkerReceiving.debtor_id == debtor_id,
+                WorkerReceiving.turn_id == turn_id,
+                WorkerReceiving.from_collector_id == from_collector_id,
+                WorkerReceiving.received_amount == 0,
             )
             .values(received_amount=acquired_amount)
         )
@@ -709,12 +703,10 @@ def delete_worker_dispatching_record(
         delete(WorkerDispatching)
         .execution_options(synchronize_session=False)
         .where(
-            and_(
-                WorkerDispatching.collector_id == collector_id,
-                WorkerDispatching.debtor_id == debtor_id,
-                WorkerDispatching.turn_id == turn_id,
-                WorkerDispatching.creditor_id == creditor_id,
-            )
+            WorkerDispatching.collector_id == collector_id,
+            WorkerDispatching.debtor_id == debtor_id,
+            WorkerDispatching.turn_id == turn_id,
+            WorkerDispatching.creditor_id == creditor_id,
         )
     )
 
@@ -825,10 +817,8 @@ def process_account_id_request_signal(
                 TradingPolicy.latest_ledger_update_id,
             )
             .where(
-                and_(
-                    TradingPolicy.creditor_id == creditor_id,
-                    TradingPolicy.debtor_id == debtor_id,
-                )
+                TradingPolicy.creditor_id == creditor_id,
+                TradingPolicy.debtor_id == debtor_id,
             )
         ).one_or_none()
 
@@ -838,11 +828,9 @@ def process_account_id_request_signal(
                 WorkerAccount.creation_date - DATE0,
             )
             .where(
-                and_(
-                    WorkerAccount.creditor_id == creditor_id,
-                    WorkerAccount.debtor_id == debtor_id,
-                    WorkerAccount.account_id != "",
-                )
+                WorkerAccount.creditor_id == creditor_id,
+                WorkerAccount.debtor_id == debtor_id,
+                WorkerAccount.account_id != "",
             )
         ).one_or_none()
 
@@ -1095,10 +1083,8 @@ def _get_demurrage_info(attempt: TransferAttempt) -> DemurrageInfo:
                     WorkerAccount.last_interest_rate_change_ts,
                 )
                 .where(
-                    and_(
-                        WorkerAccount.creditor_id == collector_id,
-                        WorkerAccount.debtor_id == debtor_id,
-                    )
+                    WorkerAccount.creditor_id == collector_id,
+                    WorkerAccount.debtor_id == debtor_id,
                 )
             )
             .one()
@@ -1116,10 +1102,8 @@ def _get_demurrage_info(attempt: TransferAttempt) -> DemurrageInfo:
                 InterestRateChange.change_ts,
             )
             .where(
-                and_(
-                    InterestRateChange.creditor_id == collector_id,
-                    InterestRateChange.debtor_id == debtor_id,
-                )
+                InterestRateChange.creditor_id == collector_id,
+                InterestRateChange.debtor_id == debtor_id,
             )
             .order_by(InterestRateChange.change_ts.desc())
         )

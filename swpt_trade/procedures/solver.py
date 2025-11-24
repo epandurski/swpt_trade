@@ -156,20 +156,16 @@ def try_to_advance_turn_to_phase2(
             delete(DebtorInfo)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == DebtorInfo.turn_id,
-                    Turn.phase >= 2,
-                )
+                Turn.turn_id == DebtorInfo.turn_id,
+                Turn.phase >= 2,
             )
         )
         db.session.execute(
             delete(ConfirmedDebtor)
             .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == ConfirmedDebtor.turn_id,
-                    Turn.phase >= 2,
-                )
+                Turn.turn_id == ConfirmedDebtor.turn_id,
+                Turn.phase >= 2,
             )
         )
 
@@ -236,11 +232,8 @@ def get_pristine_collectors(
             CollectorAccount.debtor_id, CollectorAccount.collector_id
         )
         .filter(
-            and_(
-                CollectorAccount.status == text("0"),
-                CollectorAccount.collector_hash.op("&")(hash_mask)
-                == hash_prefix,
-            )
+            CollectorAccount.status == text("0"),
+            CollectorAccount.collector_hash.op("&")(hash_mask) == hash_prefix,
         )
     )
     if max_count is not None:
@@ -383,9 +376,7 @@ def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
         delete(OverloadedCurrency)
         .execution_options(synchronize_session=False)
         .where(
-            and_(
-                OverloadedCurrency.turn_id == turn_id,
-                OverloadedCurrency.debtor_id == debtor_id,
-            )
+            OverloadedCurrency.turn_id == turn_id,
+            OverloadedCurrency.debtor_id == debtor_id,
         )
     )

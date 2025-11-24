@@ -191,16 +191,13 @@ def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
                     TradingPolicy.peg_exchange_rate,
                 )
                 .where(
-                    and_(
-                        TradingPolicy.creditor_id == owner_creditor_id,
-                        TradingPolicy.account_id != "",
-                        TradingPolicy.account_id_is_obsolete == false(),
-                        TradingPolicy.config_flags.op("&")(DELETION_FLAG) == 0,
-                        TradingPolicy.policy_name != null(),
-                        TradingPolicy.principal < TradingPolicy.min_principal,
-                        TradingPolicy.min_principal
-                        <= TradingPolicy.max_principal,
-                    )
+                    TradingPolicy.creditor_id == owner_creditor_id,
+                    TradingPolicy.account_id != "",
+                    TradingPolicy.account_id_is_obsolete == false(),
+                    TradingPolicy.config_flags.op("&")(DELETION_FLAG) == 0,
+                    TradingPolicy.policy_name != null(),
+                    TradingPolicy.principal < TradingPolicy.min_principal,
+                    TradingPolicy.min_principal <= TradingPolicy.max_principal,
                 )
         ) as result:
             for rows in batched(result, INSERT_BATCH_SIZE):
@@ -612,13 +609,11 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
                 AccountLock.collector_id,
             )
             .where(
-                and_(
-                    AccountLock.turn_id == turn_id,
-                    AccountLock.released_at == null(),
-                    AccountLock.transfer_id != null(),
-                    AccountLock.finalized_at == null(),
-                    AccountLock.amount < 0,
-                )
+                AccountLock.turn_id == turn_id,
+                AccountLock.released_at == null(),
+                AccountLock.transfer_id != null(),
+                AccountLock.finalized_at == null(),
+                AccountLock.amount < 0,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -665,13 +660,11 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
                 AccountLock.amount,
             )
             .where(
-                and_(
-                    AccountLock.turn_id == turn_id,
-                    AccountLock.released_at == null(),
-                    AccountLock.transfer_id != null(),
-                    AccountLock.finalized_at == null(),
-                    AccountLock.amount > 0,
-                )
+                AccountLock.turn_id == turn_id,
+                AccountLock.released_at == null(),
+                AccountLock.transfer_id != null(),
+                AccountLock.finalized_at == null(),
+                AccountLock.amount > 0,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -750,11 +743,8 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 CreditorTaking.collector_id,
             )
             .where(
-                and_(
-                    CreditorTaking.turn_id == turn_id,
-                    CreditorTaking.creditor_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                )
+                CreditorTaking.turn_id == turn_id,
+                CreditorTaking.creditor_hash.op("&")(hash_mask) == hash_prefix,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -797,12 +787,9 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 CreditorGiving.collector_id,
             )
             .where(
-                and_(
-                    CreditorGiving.turn_id == turn_id,
-                    CreditorGiving.creditor_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CreditorGiving.amount > 1,
-                )
+                CreditorGiving.turn_id == turn_id,
+                CreditorGiving.creditor_hash.op("&")(hash_mask) == hash_prefix,
+                CreditorGiving.amount > 1,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -850,13 +837,11 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 CollectorCollecting.collector_id,
             )
             .where(
-                and_(
-                    CollectorCollecting.turn_id == turn_id,
-                    CollectorCollecting.collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorCollecting.creditor_id
-                    != CollectorCollecting.collector_id,
-                )
+                CollectorCollecting.turn_id == turn_id,
+                CollectorCollecting.collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorCollecting.creditor_id
+                != CollectorCollecting.collector_id,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -913,12 +898,10 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 CollectorSending.amount,
             )
             .where(
-                and_(
-                    CollectorSending.turn_id == turn_id,
-                    CollectorSending.from_collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorSending.amount > 1,
-                )
+                CollectorSending.turn_id == turn_id,
+                CollectorSending.from_collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorSending.amount > 1,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -974,12 +957,10 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 CollectorReceiving.amount,
             )
             .where(
-                and_(
-                    CollectorReceiving.turn_id == turn_id,
-                    CollectorReceiving.to_collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorReceiving.amount > 1,
-                )
+                CollectorReceiving.turn_id == turn_id,
+                CollectorReceiving.to_collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorReceiving.amount > 1,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -1036,14 +1017,12 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 CollectorDispatching.collector_id,
             )
             .where(
-                and_(
-                    CollectorDispatching.turn_id == turn_id,
-                    CollectorDispatching.collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorDispatching.amount > 1,
-                    CollectorDispatching.creditor_id
-                    != CollectorDispatching.collector_id,
-                )
+                CollectorDispatching.turn_id == turn_id,
+                CollectorDispatching.collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorDispatching.amount > 1,
+                CollectorDispatching.creditor_id
+                != CollectorDispatching.collector_id,
             )
     ) as result:
         for rows in batched(result, INSERT_BATCH_SIZE):
@@ -1150,66 +1129,54 @@ def run_phase3_subphase5(turn_id: int) -> None:
                 delete(CreditorTaking)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CreditorTaking.turn_id == turn_id,
-                        CreditorTaking.creditor_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CreditorTaking.turn_id == turn_id,
+                    CreditorTaking.creditor_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CreditorGiving)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CreditorGiving.turn_id == turn_id,
-                        CreditorGiving.creditor_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CreditorGiving.turn_id == turn_id,
+                    CreditorGiving.creditor_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorCollecting)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorCollecting.turn_id == turn_id,
-                        CollectorCollecting.collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorCollecting.turn_id == turn_id,
+                    CollectorCollecting.collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorSending)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorSending.turn_id == turn_id,
-                        CollectorSending.from_collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorSending.turn_id == turn_id,
+                    CollectorSending.from_collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorReceiving)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorReceiving.turn_id == turn_id,
-                        CollectorReceiving.to_collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorReceiving.turn_id == turn_id,
+                    CollectorReceiving.to_collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorDispatching)
                 .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorDispatching.turn_id == turn_id,
-                        CollectorDispatching.collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorDispatching.turn_id == turn_id,
+                    CollectorDispatching.collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.commit()
