@@ -402,7 +402,8 @@ def _check_config_sanity(c):  # pragma: nocover
         )
 
     if (
-            c["APP_SURPLUS_BLOCKING_DELAY_DAYS"] < 7.0
+            c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+            < c["APP_EXTREME_MESSAGE_DELAY_DAYS"]
             or c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
             < (3 * parse_timedelta(c["TURN_PERIOD"])).days
     ):
