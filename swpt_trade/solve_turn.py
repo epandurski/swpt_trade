@@ -26,6 +26,7 @@ from swpt_trade.solver import Solver
 from swpt_trade.utils import batched, calc_hash, get_primary_collector_id
 
 INSERT_BATCH_SIZE = 5000
+DELETE_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 
 COLLECTOR_ACCOUNT_PK = tuple_(
@@ -60,7 +61,8 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     # trading turn, but should generally be run near the end of each
     # turn.
     _strengthen_overloaded_currencies()
-    _disable_extra_collector_accounts()
+    _disable_some_collector_accounts()
+    _delete_stuck_collector_accounts()
 
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
@@ -436,7 +438,7 @@ def _saturate_hoarded_currencies(turn_id: int) -> None:
                 )
 
 
-def _disable_extra_collector_accounts() -> None:
+def _disable_some_collector_accounts() -> None:
     """Try to disable some of the active collector accounts (status ==
     2), so that the surplus amounts accumulated on them can be
     detected.
@@ -539,3 +541,50 @@ def _disable_extra_collector_accounts() -> None:
                         process_waiting()  # pragma: no cover
 
             process_waiting()
+
+
+def _delete_stuck_collector_accounts() -> None:
+    """Delete collector accounts which are stuck at `status==1` for
+    quite a long time.
+
+    Collector accounts could become stuck at `status==1` if the issued
+    `ConfigureAccount` SMP message has been lost (Which must never
+    happen under normal circumstances.), or when an otherwise
+    successfully created worker account has been, for some reason,
+    removed (purged) from the accounting authority server.
+    """
+
+    current_ts = datetime.now(tz=timezone.utc)
+    cutoff_ts = current_ts - timedelta(
+        days=2 * current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+    )
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    CollectorAccount.debtor_id,
+                    CollectorAccount.collector_id,
+                )
+                .where(
+                    CollectorAccount.status == text("1"),
+                    CollectorAccount.latest_status_change_at < cutoff_ts,
+                )
+        ) as result:
+            for rows in batched(result, DELETE_BATCH_SIZE):
+                to_delete = (
+                    db.session.execute(
+                        select(
+                            CollectorAccount.debtor_id,
+                            CollectorAccount.collector_id,
+                        )
+                        .where(COLLECTOR_ACCOUNT_PK.in_(rows))
+                        .with_for_update(skip_locked=True)
+                    )
+                    .all()
+                )
+                if to_delete:
+                    db.session.execute(
+                        delete(CollectorAccount)
+                        .execution_options(synchronize_session=False)
+                        .where(COLLECTOR_ACCOUNT_PK.in_(to_delete))
+                    )
+                db.session.commit()

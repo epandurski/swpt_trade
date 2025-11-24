@@ -1183,6 +1183,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
 
         _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
+
         worker_turn.worker_turn_subphase = 10
 
 

@@ -36,12 +36,6 @@ class CollectorAccount(db.Model):
     #    the superfluous collector accounts (they've had their
     #    "status"es set to "3" already) should be deleted.
 
-    # TODO: Consider implementing some logic that detects and
-    #       eventually deletes `CollectorAccount` rows which are stuck
-    #       at `status==1` for quite a long time. This could happen if
-    #       the issued `ConfigureAccount` SMP message has been lost.
-    #       (Which must never happen under normal circumstances.)
-
     __bind_key__ = "solver"
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)

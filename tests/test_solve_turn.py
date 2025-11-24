@@ -82,6 +82,18 @@ def test_try_to_advance_turn_to_phase3(db_session):
         )
     )
     db_session.add(
+        CollectorAccount(
+            debtor_id=109, collector_id=1001, account_id="991", status=1,
+            latest_status_change_at=TS0,
+        )
+    )
+    db_session.add(
+        CollectorAccount(
+            debtor_id=109, collector_id=1002, account_id="991", status=1,
+            latest_status_change_at=TS0,
+        )
+    )
+    db_session.add(
         SellOffer(
             turn_id=turn_id,
             creditor_id=1,
@@ -136,7 +148,7 @@ def test_try_to_advance_turn_to_phase3(db_session):
 
     ca = CollectorAccount.query.all()
     ca.sort(key=lambda row: row.collector_id)
-    assert len(ca) == 3
+    assert len(ca) == 5
     assert ca[0].collector_id == 997
     assert ca[0].collector_hash == calc_hash(ca[0].collector_id)
     assert ca[0].status == 2
@@ -146,6 +158,12 @@ def test_try_to_advance_turn_to_phase3(db_session):
     assert ca[2].collector_id == 999
     assert ca[2].collector_hash == calc_hash(ca[2].collector_id)
     assert ca[2].status == 2
+    assert ca[3].collector_id == 1001
+    assert ca[3].collector_hash == calc_hash(ca[3].collector_id)
+    assert ca[3].status == 1
+    assert ca[4].collector_id == 1002
+    assert ca[4].collector_hash == calc_hash(ca[4].collector_id)
+    assert ca[4].status == 1
 
     try_to_advance_turn_to_phase3(turn)
 
