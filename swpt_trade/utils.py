@@ -289,7 +289,7 @@ def pseudorandom_id_generator(
 ) -> Iterable[int]:
     assert min_id <= max_id
 
-    rgen = Random()
+    rgen = Random(0)
     rgen.seed(seed, version=2)
     while True:
         yield rgen.randint(min_id, max_id)
