@@ -567,21 +567,6 @@ def _on_confirm_debtor_signal(
     )
 
 
-def _on_activate_collector_signal(
-    debtor_id: int,
-    creditor_id: int,
-    account_id: str,
-    ts: datetime,
-    *args,
-    **kwargs
-) -> None:
-    procedures.activate_collector(
-        debtor_id=debtor_id,
-        collector_id=creditor_id,
-        account_id=account_id,
-    )
-
-
 def _on_candidate_offer_signal(
     turn_id: int,
     debtor_id: int,
@@ -787,10 +772,6 @@ _MESSAGE_TYPES = {
     "ConfirmDebtor": (
         schemas.ConfirmDebtorMessageSchema(),
         _on_confirm_debtor_signal,
-    ),
-    "ActivateCollector": (
-        schemas.ActivateCollectorMessageSchema(),
-        _on_activate_collector_signal,
     ),
     "CandidateOffer": (
         schemas.CandidateOfferMessageSchema(),

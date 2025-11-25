@@ -15,7 +15,6 @@ from swpt_trade.models import (
     DebtorLocatorClaim,
     FetchDebtorInfoSignal,
     DiscoverDebtorSignal,
-    ActivateCollectorSignal,
     ConfigureAccountSignal,
     PrepareTransferSignal,
     FinalizeTransferSignal,
@@ -35,6 +34,7 @@ from swpt_trade.models import (
     WorkerSending,
     WorkerDispatching,
     TransferAttempt,
+    CollectorStatusChange,
     TS0,
     DATE0,
     MAX_INT32,
@@ -769,118 +769,6 @@ def test_process_updated_flags_signal(db_session, current_ts):
     assert tps[0].config_flags == 4567
 
 
-@pytest.mark.parametrize("status", [0, 1])
-def test_activate_collector(db_session, current_ts, status):
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=123,
-            status=status,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=777,
-            collector_id=123,
-            status=status,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=321,
-            status=status,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.commit()
-
-    # non-existing account
-    assert not p.activate_collector(
-        debtor_id=666,
-        collector_id=999,
-        account_id="acconut999",
-    )
-
-    # existing account
-    assert p.activate_collector(
-        debtor_id=666,
-        collector_id=123,
-        account_id="acconut123",
-    )
-
-    # already activated account
-    assert not p.activate_collector(
-        debtor_id=666,
-        collector_id=123,
-        account_id="changed-acconut-id",
-    )
-
-    cas = CollectorAccount.query.all()
-    cas.sort(key=lambda r: (r.debtor_id, r.collector_id))
-    assert len(cas) == 3
-    assert cas[0].status == 2
-    assert cas[0].account_id == "acconut123"
-    assert cas[0].latest_status_change_at >= current_ts
-    assert cas[1].status == status
-    assert cas[1].account_id == ""
-    assert cas[2].status == status
-    assert cas[2].account_id == ""
-
-
-def test_mark_requested_collector(db_session, current_ts):
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=123,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=777,
-            collector_id=123,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=321,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.commit()
-
-    # non-existing account
-    assert not p.mark_requested_collector(
-        debtor_id=666,
-        collector_id=999,
-    )
-
-    # existing account
-    assert p.mark_requested_collector(
-        debtor_id=666,
-        collector_id=123,
-    )
-
-    # already marked account
-    assert not p.mark_requested_collector(
-        debtor_id=666,
-        collector_id=123,
-    )
-
-    cas = CollectorAccount.query.all()
-    cas.sort(key=lambda r: (r.debtor_id, r.collector_id))
-    assert len(cas) == 3
-    assert cas[0].status == 1
-    assert cas[0].latest_status_change_at >= current_ts
-    assert cas[1].status == 0
-    assert cas[2].status == 0
-
-
 def test_insert_collector_accounts(db_session):
     p.insert_collector_accounts([(666, 1000)])
     p.insert_collector_accounts([(666, 1000), (666, 1001)])
@@ -1100,7 +988,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.last_change_seqnum == 1
     assert wa.interest_rate == 0.0
     assert len(DiscoverDebtorSignal.query.all()) == 0
-    assert len(ActivateCollectorSignal.query.all()) == 0
+    assert len(CollectorStatusChange.query.all()) == 0
     assert len(ConfigureAccountSignal.query.all()) == 0
     ircs = InterestRateChange.query.all()
     ircs.sort(key=lambda t: (
@@ -1135,7 +1023,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.last_change_seqnum == 1
     assert wa.interest_rate == 0.0
     assert len(DiscoverDebtorSignal.query.all()) == 0
-    assert len(ActivateCollectorSignal.query.all()) == 0
+    assert len(CollectorStatusChange.query.all()) == 0
     assert len(ConfigureAccountSignal.query.all()) == 0
     assert len(InterestRateChange.query.all()) == 3
 
@@ -1157,10 +1045,11 @@ def test_process_account_update_signal(db_session, current_ts):
     assert dds.debtor_id == 666
     assert dds.iri == "https://example.com/666"
     assert dds.force_locator_refetch is True
-    acs = ActivateCollectorSignal.query.one()
-    assert acs.debtor_id == 666
-    assert acs.creditor_id == 123
-    assert acs.account_id == "Account123"
+    csc = CollectorStatusChange.query.one()
+    assert csc.collector_id == 123
+    assert csc.debtor_id == 666
+    assert csc.to_status == 2
+    assert csc.account_id == "Account123"
     assert len(ConfigureAccountSignal.query.all()) == 0
     assert len(InterestRateChange.query.all()) == 3
 
@@ -1178,7 +1067,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.last_change_ts == current_ts
     assert wa.last_change_seqnum == 2
     assert len(DiscoverDebtorSignal.query.all()) == 1
-    assert len(ActivateCollectorSignal.query.all()) == 1
+    assert len(CollectorStatusChange.query.all()) == 1
     cas = ConfigureAccountSignal.query.one()
     assert cas.debtor_id == 666
     assert cas.creditor_id == 124
@@ -1230,7 +1119,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.transfer_note_max_bytes == 500
     assert wa.last_heartbeat_ts == current_ts
     assert len(ConfigureAccountSignal.query.all()) == 1
-    assert len(ActivateCollectorSignal.query.all()) == 2
+    assert len(CollectorStatusChange.query.all()) == 2
     assert len(DiscoverDebtorSignal.query.all()) == 2
     ircs = InterestRateChange.query.all()
     ircs.sort(key=lambda t: (

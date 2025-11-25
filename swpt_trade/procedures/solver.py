@@ -243,55 +243,6 @@ def get_pristine_collectors(
 
 
 @atomic
-def mark_requested_collector(
-        *,
-        debtor_id: int,
-        collector_id: int,
-) -> bool:
-    current_ts = datetime.now(tz=timezone.utc)
-    updated_rows = (
-        CollectorAccount.query
-        .filter_by(debtor_id=debtor_id, collector_id=collector_id, status=0)
-        .update(
-            {
-                CollectorAccount.status: 1,  # requested account creation
-                CollectorAccount.latest_status_change_at: current_ts,
-            },
-            synchronize_session=False,
-        )
-    )
-    assert updated_rows <= 1
-    return updated_rows > 0
-
-
-@atomic
-def activate_collector(
-        *,
-        debtor_id: int,
-        collector_id: int,
-        account_id: str,
-) -> bool:
-    assert account_id
-
-    current_ts = datetime.now(tz=timezone.utc)
-    updated_rows = (
-        CollectorAccount.query
-        .filter_by(debtor_id=debtor_id, collector_id=collector_id)
-        .filter(CollectorAccount.status <= 1)
-        .update(
-            {
-                CollectorAccount.account_id: account_id,
-                CollectorAccount.status: 2,  # assigned account ID
-                CollectorAccount.latest_status_change_at: current_ts,
-            },
-            synchronize_session=False,
-        )
-    )
-    assert updated_rows <= 1
-    return updated_rows > 0
-
-
-@atomic
 def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
     db.session.execute(
         postgresql.insert(CollectorAccount)

@@ -110,27 +110,6 @@ class ConfirmDebtorMessageSchema(ValidateTypeMixin, Schema):
     ts = fields.DateTime(required=True)
 
 
-class ActivateCollectorMessageSchema(ValidateTypeMixin, Schema):
-    """``ActivateCollector`` message schema."""
-
-    class Meta:
-        unknown = EXCLUDE
-
-    type = fields.String(required=True)
-    debtor_id = fields.Integer(
-        required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
-    )
-    creditor_id = fields.Integer(
-        required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
-    )
-    account_id = fields.String(
-        required=True, validate=validate.Length(
-            min=1, max=ACCOUNT_ID_MAX_BYTES
-        )
-    )
-    ts = fields.DateTime(required=True)
-
-
 class CandidateOfferMessageSchema(ValidateTypeMixin, Schema):
     """``CandidateOffer`` message schema."""
 

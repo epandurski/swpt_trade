@@ -1478,8 +1478,8 @@ def test_handle_pristine_collectors(
     db.session.add(wa2)
     db.session.add(ca3)
     db.session.add(nwa3)
-    db.session.commit()
     db.session.add(ca4)
+    db.session.commit()
 
     assert len(m.CollectorAccount.query.all()) == 4
     runner = app.test_cli_runner()
@@ -1493,17 +1493,13 @@ def test_handle_pristine_collectors(
         ]
     )
     assert result.exit_code == 0
-    cas = m.CollectorAccount.query.all()
-    cas.sort(key=lambda x: (x.debtor_id, x.collector_id))
-    assert len(cas) == 4
-    assert cas[0].status == 1
-    assert cas[0].account_id == ""
-    assert cas[1].status == 1
-    assert cas[1].account_id == ""
-    assert cas[2].status == 1
-    assert cas[2].account_id == ""
-    assert cas[3].status == 0
-    assert cas[3].account_id == ""
+    cscs = m.CollectorStatusChange.query.all()
+    cscs.sort(key=lambda x: (x.debtor_id, x.collector_id))
+    assert len(cscs) == 2
+    assert cscs[0].to_status == 1
+    assert cscs[0].collector_id == 123
+    assert cscs[1].to_status == 1
+    assert cscs[1].collector_id == 128
 
     ca_signals = m.ConfigureAccountSignal.query.all()
     ca_signals.sort(key=lambda x: (x.debtor_id, x.creditor_id))
@@ -1520,6 +1516,129 @@ def test_handle_pristine_collectors(
     assert ca_signals[1].negligible_amount == 1e30
     assert ca_signals[1].config_data == ""
     assert ca_signals[1].config_flags == 0
+
+
+def test_apply_collectors_status_change(
+        app,
+        db_session,
+        restore_sharding_realm,
+        current_ts,
+):
+    app.config["SHARDING_REALM"] = sr = ShardingRealm("1.#")
+    app.config["DELETE_PARENT_SHARD_RECORDS"] = False
+
+    assert sr.match(123)
+    assert sr.match(127)
+    assert sr.match(128)
+    assert sr.match(130)
+    assert not sr.match(129)
+
+    ca0 = m.CollectorAccount(
+        debtor_id=666, collector_id=123, status=0
+    )
+    ca1 = m.CollectorAccount(
+        debtor_id=666, collector_id=127, status=1
+    )
+    ca2 = m.CollectorAccount(
+        debtor_id=777, collector_id=128, status=3, account_id="777-128"
+    )
+    ca3 = m.CollectorAccount(
+        debtor_id=888, collector_id=128, status=3, account_id="888-128"
+    )
+    ca4 = m.CollectorAccount(
+        debtor_id=888, collector_id=129, status=3, account_id="888-129"
+    )
+    ca5 = m.CollectorAccount(
+        debtor_id=888, collector_id=130, status=2, account_id="888-130"
+    )
+    db.session.add(ca0)
+    db.session.add(ca1)
+    db.session.add(ca2)
+    db.session.add(ca3)
+    db.session.add(ca4)
+    db.session.add(ca5)
+    db.session.commit()
+
+    db.session.add(
+        m.CollectorStatusChange(
+            collector_id=123,
+            debtor_id=666,
+            from_status=0,
+            to_status=1,
+        )
+    )
+    db.session.add(
+        m.CollectorStatusChange(
+            collector_id=127,
+            debtor_id=666,
+            from_status=1,
+            to_status=2,
+            account_id="test_account_id",
+        )
+    )
+    db.session.add(
+        m.CollectorStatusChange(
+            collector_id=128,
+            debtor_id=777,
+            from_status=3,
+            to_status=2,
+        )
+    )
+    db.session.add(
+        m.CollectorStatusChange(
+            collector_id=128,
+            debtor_id=888,
+            from_status=3,
+            to_status=1,
+        )
+    )
+    db.session.add(
+        # Not in this shard.
+        m.CollectorStatusChange(
+            collector_id=129,
+            debtor_id=888,
+            from_status=3,
+            to_status=1,
+        )
+    )
+    db.session.add(
+        # Incorrect from_status.
+        m.CollectorStatusChange(
+            collector_id=130,
+            debtor_id=888,
+            from_status=3,
+            to_status=1,
+        )
+    )
+    db.session.commit()
+
+    assert len(m.CollectorAccount.query.all()) == 6
+    runner = app.test_cli_runner()
+    result = runner.invoke(
+        args=[
+            "swpt_trade",
+            "apply_collector_status_changes",
+            "--wait",
+            "0.000001",
+            "--quit-early",
+        ]
+    )
+    assert result.exit_code == 0
+    cas = m.CollectorAccount.query.all()
+    cas.sort(key=lambda x: (x.debtor_id, x.collector_id))
+    assert len(cas) == 6
+    assert cas[0].status == 1
+    assert cas[0].account_id == ""
+    assert cas[1].status == 2
+    assert cas[1].account_id == "test_account_id"
+    assert cas[2].status == 2
+    assert cas[2].account_id == "777-128"
+    assert cas[3].status == 1
+    assert cas[3].account_id == "888-128"
+    assert cas[4].status == 3
+    assert cas[4].account_id == "888-129"
+    assert cas[5].status == 2
+    assert cas[5].account_id == "888-130"
 
 
 def test_update_worker_turns(app, db_session, current_ts):

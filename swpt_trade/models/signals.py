@@ -278,37 +278,6 @@ class ConfirmDebtorSignal(Signal):
         return current_app.config["APP_FLUSH_CONFIRM_DEBTOR_BURST_COUNT"]
 
 
-class ActivateCollectorSignal(Signal):
-    """Mark a collector account as activated.
-
-    This signal informs that the given collector account has been
-    successfully created, and an account ID has been assigned to it.
-    """
-    exchange_name = TO_TRADE_EXCHANGE
-
-    class __marshmallow__(Schema):
-        type = fields.Constant("ActivateCollector")
-        debtor_id = fields.Integer()
-        creditor_id = fields.Integer()
-        account_id = fields.String()
-        inserted_at = fields.DateTime(data_key="ts")
-
-    __marshmallow_schema__ = __marshmallow__()
-
-    signal_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
-    debtor_id = db.Column(db.BigInteger, nullable=False)
-    account_id = db.Column(db.String, nullable=False)
-    creditor_id = db.Column(db.BigInteger, nullable=False)
-
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.creditor_id)
-
-    @classproperty
-    def signalbus_burst_count(self):
-        return current_app.config["APP_FLUSH_ACTIVATE_COLLECTOR_BURST_COUNT"]
-
-
 class CandidateOfferSignal(Signal):
     """Represent a candidate offer generated for a given trading turn.
 

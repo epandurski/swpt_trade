@@ -155,3 +155,30 @@ class InterestRateChange(db.Model):
             ),
         },
     )
+
+
+class CollectorStatusChange(db.Model):
+    collector_id = db.Column(db.BigInteger, primary_key=True)
+    change_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    debtor_id = db.Column(db.BigInteger, nullable=False)
+    from_status = db.Column(db.SmallInteger, nullable=False)
+    to_status = db.Column(db.SmallInteger, nullable=False)
+    account_id = db.Column(db.String)
+    __table_args__ = (
+        db.CheckConstraint(or_(
+            # Sent "ConfigureAccount" message:
+            and_(from_status == 0, to_status == 1, account_id == null()),
+            # Received account ID:
+            and_(from_status == 1, to_status == 2, account_id != null()),
+            # Calculated surplus amount:
+            and_(from_status == 3, to_status == 2, account_id == null()),
+            # Detected broken worker account:
+            and_(from_status == 3, to_status == 1, account_id == null()),
+        )),
+        {
+            "comment": (
+                'Represents a pending change in the status of a collector'
+                ' account on the solver server.'
+            ),
+        },
+    )

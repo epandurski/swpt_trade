@@ -12,8 +12,8 @@ from swpt_trade.models import (
     InterestRateChange,
     RecentlyNeededCollector,
     ConfigureAccountSignal,
-    ActivateCollectorSignal,
     DiscoverDebtorSignal,
+    CollectorStatusChange,
 )
 
 T = TypeVar("T")
@@ -78,6 +78,14 @@ def configure_worker_account(
                 seqnum=0,
                 negligible_amount=HUGE_NEGLIGIBLE_AMOUNT,
                 config_flags=DEFAULT_CONFIG_FLAGS,
+            )
+        )
+        db.session.add(
+            CollectorStatusChange(
+                collector_id=collector_id,
+                debtor_id=debtor_id,
+                from_status=0,
+                to_status=1,
             )
         )
 
@@ -221,9 +229,11 @@ def process_account_update_signal(
 
     if must_activate_collector:
         db.session.add(
-            ActivateCollectorSignal(
+            CollectorStatusChange(
+                collector_id=creditor_id,
                 debtor_id=debtor_id,
-                creditor_id=creditor_id,
+                from_status=1,
+                to_status=2,
                 account_id=account_id,
             )
         )

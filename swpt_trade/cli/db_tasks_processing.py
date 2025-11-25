@@ -17,6 +17,7 @@ from swpt_pythonlib.multiproc_utils import (
 )
 from swpt_trade.utils import u16_to_i16
 from swpt_trade import procedures
+from swpt_trade import sync_collectors
 from swpt_trade.run_transfers import process_rescheduled_transfers
 from .common import swpt_trade
 
@@ -82,9 +83,6 @@ def handle_pristine_collectors(threads, wait, quit_early):
             debtor_id=debtor_id,
             collector_id=collector_id,
             max_postponement=max_postponement,
-        )
-        procedures.mark_requested_collector(
-            debtor_id=debtor_id, collector_id=collector_id
         )
 
     logger = logging.getLogger(__name__)
@@ -189,3 +187,45 @@ def trigger_transfers(
         ),
     )
     sys.exit(1)
+
+
+@swpt_trade.command("apply_collector_status_changes")
+@with_appcontext
+@click.option(
+    "-w",
+    "--wait",
+    type=float,
+    help=(
+        "The minimal number of seconds between"
+        " the queries to obtain collector status changes."
+    ),
+)
+@click.option(
+    "--quit-early",
+    is_flag=True,
+    default=False,
+    help="Exit after some time (mainly useful during testing).",
+)
+def apply_collector_status_changes(wait, quit_early):
+    """Run a process which applies pending collector status changes.
+
+    If --wait is not specified, 1/4th of the value of the configuration
+    variable HANDLE_PRISTINE_COLLECTORS_PERIOD is taken. If it is
+    not set, the default number of seconds is 15.
+    """
+
+    wait = (
+        wait
+        if wait is not None
+        else current_app.config["HANDLE_PRISTINE_COLLECTORS_PERIOD"] / 4
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Started collector status changes processor.")
+    time.sleep(wait * random.random())
+    iteration_counter = 0
+
+    while not (quit_early and iteration_counter > 0):
+        iteration_counter += 1
+        started_at = time.time()
+        sync_collectors.process_collector_status_changes()
+        time.sleep(max(0.0, wait + started_at - time.time()))
