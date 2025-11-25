@@ -98,6 +98,10 @@ def test_can_start_new_turn():
 
 def test_batched():
     assert list(batched('', 3)) == []
+    assert list(batched('ABCDEF', 3)) == [
+        tuple("ABC"),
+        tuple("DEF"),
+    ]
     assert list(batched('ABCDEFG', 3)) == [
         tuple("ABC"),
         tuple("DEF"),

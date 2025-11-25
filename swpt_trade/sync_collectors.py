@@ -48,7 +48,6 @@ def process_collector_status_changes():
                 )
         ) as result:
             for rows in batched(result, UPDATE_BATCH_SIZE):
-                row_list = list(rows)
                 dicts_to_update = [
                     {
                         "b_collector_id": row.collector_id,
@@ -57,7 +56,7 @@ def process_collector_status_changes():
                         "b_to_status": row.to_status,
                         "b_account_id": row.account_id,
                     }
-                    for row in row_list
+                    for row in rows
                     if sharding_realm.match(row.collector_id)
                 ]
                 if dicts_to_update:
@@ -69,7 +68,7 @@ def process_collector_status_changes():
                     .execution_options(synchronize_session=False)
                     .where(
                         COLLECTOR_STATUS_CHANGE_PK.in_(
-                            (r.collector_id, r.change_id) for r in row_list
+                            (r.collector_id, r.change_id) for r in rows
                         )
                     )
                 )

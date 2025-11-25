@@ -210,24 +210,23 @@ def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
                     }
                     for row in rows
                 ]
-                if dicts_to_insert:
-                    try:
-                        s_conn.execute(
-                            insert(HoardedCurrency).execution_options(
-                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                                synchronize_session=False,
-                            ),
-                            dicts_to_insert,
-                        )
-                    except IntegrityError:
-                        logger = logging.getLogger(__name__)
-                        logger.warning(
-                            "An attempt has been made to insert an already"
-                            " existing hoarded currency row for turn %d.",
-                            turn_id,
-                        )
-                        s_conn.rollback()
-                        break
+                try:
+                    s_conn.execute(
+                        insert(HoardedCurrency).execution_options(
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
+                        ),
+                        dicts_to_insert,
+                    )
+                except IntegrityError:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        "An attempt has been made to insert an already"
+                        " existing hoarded currency row for turn %d.",
+                        turn_id,
+                    )
+                    s_conn.rollback()
+                    break
             else:
                 s_conn.commit()
 
@@ -762,14 +761,13 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 sharding_realm.match(r["creditor_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(CreditorParticipation).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    dicts_to_insert,
-                )
+            db.session.execute(
+                insert(CreditorParticipation).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
 
 
 def _copy_creditor_givings(s_conn, worker_turn):
@@ -807,14 +805,13 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 sharding_realm.match(r["creditor_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(CreditorParticipation).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    dicts_to_insert,
-                )
+            db.session.execute(
+                insert(CreditorParticipation).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
 
 
 def _copy_collector_collectings(s_conn, worker_turn, statuses):
@@ -861,21 +858,20 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerCollecting).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerCollecting).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_collecting(
+                    d["collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_collecting(
-                        d["collector_id"],
-                        d["debtor_id"],
-                        d["turn_id"],
-                        d["amount"],
-                    )
 
 
 def _copy_collector_sendings(s_conn, worker_turn, statuses):
@@ -920,21 +916,20 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["from_collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerSending).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerSending).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_sending(
+                    d["from_collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_sending(
-                        d["from_collector_id"],
-                        d["debtor_id"],
-                        d["turn_id"],
-                        d["amount"],
-                    )
 
 
 def _copy_collector_receivings(s_conn, worker_turn, statuses):
@@ -980,21 +975,20 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["to_collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerReceiving).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerReceiving).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_receiving(
+                    d["to_collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["expected_amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_receiving(
-                        d["to_collector_id"],
-                        d["debtor_id"],
-                        d["turn_id"],
-                        d["expected_amount"],
-                    )
 
 
 def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
@@ -1041,35 +1035,31 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerDispatching).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    dicts_to_insert,
-                )
-                for d in dicts_to_insert:
-                    statuses.register_dispatching(
-                        d["collector_id"],
-                        d["debtor_id"],
-                        d["turn_id"],
-                        d["amount"],
-                    )
-
-
-def _create_dispatching_statuses(worker_turn, statuses):
-    for status_dicts in batched(statuses.statuses_iter(), INSERT_BATCH_SIZE):
-        dicts_to_insert = list(status_dicts)
-
-        if dicts_to_insert:
             db.session.execute(
-                insert(DispatchingStatus).execution_options(
+                insert(WorkerDispatching).execution_options(
                     insertmanyvalues_page_size=INSERT_BATCH_SIZE,
                     synchronize_session=False,
                 ),
                 dicts_to_insert,
             )
+            for d in dicts_to_insert:
+                statuses.register_dispatching(
+                    d["collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["amount"],
+                )
+
+
+def _create_dispatching_statuses(worker_turn, statuses):
+    for status_dicts in batched(statuses.statuses_iter(), INSERT_BATCH_SIZE):
+        db.session.execute(
+            insert(DispatchingStatus).execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            status_dicts,
+        )
 
 
 def _insert_revise_account_lock_signals(worker_turn):
@@ -1314,8 +1304,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                     }
                     for row in rows
                 ]
-                if dicts_to_update:
-                    db.session.execute(nwa_update_statement, dicts_to_update)
+                db.session.execute(nwa_update_statement, dicts_to_update)
 
 
 def _update_worker_account_surplus_amounts() -> None:
