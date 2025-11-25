@@ -98,6 +98,13 @@ def test_can_start_new_turn():
 
 def test_batched():
     assert list(batched('', 3)) == []
+    assert list(batched('A', 3)) == [
+        tuple("A"),
+    ]
+    assert list(batched('ABCDE', 3)) == [
+        tuple("ABC"),
+        tuple("DE"),
+    ]
     assert list(batched('ABCDEF', 3)) == [
         tuple("ABC"),
         tuple("DEF"),
@@ -107,7 +114,6 @@ def test_batched():
         tuple("DEF"),
         tuple("G"),
     ]
-    assert list(batched('', 3)) == []
 
     with pytest.raises(ValueError):
         list(batched('ABCDEFG', 0))
