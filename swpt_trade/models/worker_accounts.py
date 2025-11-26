@@ -182,3 +182,16 @@ class CollectorStatusChange(db.Model):
             ),
         },
     )
+
+
+class NeededCollectorAccount(db.Model):
+    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    collector_id = db.Column(db.BigInteger, primary_key=True)
+    __table_args__ = (
+        {
+            "comment": (
+                'Represents the pending creation of a collector account'
+                ' on the solver server.'
+            ),
+        },
+    )

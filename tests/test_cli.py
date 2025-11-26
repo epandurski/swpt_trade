@@ -1518,7 +1518,7 @@ def test_handle_pristine_collectors(
     assert ca_signals[1].config_flags == 0
 
 
-def test_apply_collectors_status_change(
+def test_apply_collector_changes(
         app,
         db_session,
         restore_sharding_realm,
@@ -1533,30 +1533,30 @@ def test_apply_collectors_status_change(
     assert sr.match(130)
     assert not sr.match(129)
 
-    ca0 = m.CollectorAccount(
+    ca1 = m.CollectorAccount(
         debtor_id=666, collector_id=123, status=0
     )
-    ca1 = m.CollectorAccount(
+    ca2 = m.CollectorAccount(
         debtor_id=666, collector_id=127, status=1
     )
-    ca2 = m.CollectorAccount(
+    ca3 = m.CollectorAccount(
         debtor_id=777, collector_id=128, status=3, account_id="777-128"
     )
-    ca3 = m.CollectorAccount(
+    ca4 = m.CollectorAccount(
         debtor_id=888, collector_id=128, status=3, account_id="888-128"
     )
-    ca4 = m.CollectorAccount(
+    ca5 = m.CollectorAccount(
         debtor_id=888, collector_id=129, status=3, account_id="888-129"
     )
-    ca5 = m.CollectorAccount(
+    ca6 = m.CollectorAccount(
         debtor_id=888, collector_id=130, status=2, account_id="888-130"
     )
-    db.session.add(ca0)
     db.session.add(ca1)
     db.session.add(ca2)
     db.session.add(ca3)
     db.session.add(ca4)
     db.session.add(ca5)
+    db.session.add(ca6)
     db.session.commit()
 
     db.session.add(
@@ -1610,6 +1610,20 @@ def test_apply_collectors_status_change(
             to_status=1,
         )
     )
+
+    db.session.add(
+        m.NeededCollectorAccount(
+            debtor_id=123,
+            collector_id=1111,
+        )
+    )
+    db.session.add(
+        # Not in this shard.
+        m.NeededCollectorAccount(
+            debtor_id=129,
+            collector_id=2222,
+        )
+    )
     db.session.commit()
 
     assert len(m.CollectorAccount.query.all()) == 6
@@ -1617,7 +1631,7 @@ def test_apply_collectors_status_change(
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "apply_collector_status_changes",
+            "apply_collector_changes",
             "--wait",
             "0.000001",
             "--quit-early",
@@ -1626,19 +1640,41 @@ def test_apply_collectors_status_change(
     assert result.exit_code == 0
     cas = m.CollectorAccount.query.all()
     cas.sort(key=lambda x: (x.debtor_id, x.collector_id))
-    assert len(cas) == 6
-    assert cas[0].status == 1
+    assert len(cas) == 7
+    assert cas[0].status == 0
     assert cas[0].account_id == ""
-    assert cas[1].status == 2
-    assert cas[1].account_id == "test_account_id"
+    assert cas[0].debtor_id == 123
+    assert cas[0].collector_id == 1111
+
+    assert cas[1].status == 1
+    assert cas[1].account_id == ""
+    assert cas[1].debtor_id == 666
+    assert cas[1].collector_id == 123
+
     assert cas[2].status == 2
-    assert cas[2].account_id == "777-128"
-    assert cas[3].status == 1
-    assert cas[3].account_id == "888-128"
-    assert cas[4].status == 3
-    assert cas[4].account_id == "888-129"
-    assert cas[5].status == 2
-    assert cas[5].account_id == "888-130"
+    assert cas[2].account_id == "test_account_id"
+    assert cas[2].debtor_id == 666
+    assert cas[2].collector_id == 127
+
+    assert cas[3].status == 2
+    assert cas[3].account_id == "777-128"
+    assert cas[3].debtor_id == 777
+    assert cas[3].collector_id == 128
+
+    assert cas[4].status == 1
+    assert cas[4].account_id == "888-128"
+    assert cas[4].debtor_id == 888
+    assert cas[4].collector_id == 128
+
+    assert cas[5].status == 3
+    assert cas[5].account_id == "888-129"
+    assert cas[5].debtor_id == 888
+    assert cas[5].collector_id == 129
+
+    assert cas[6].status == 2
+    assert cas[6].account_id == "888-130"
+    assert cas[6].debtor_id == 888
+    assert cas[6].collector_id == 130
 
 
 def test_update_worker_turns(app, db_session, current_ts):
@@ -3121,7 +3157,9 @@ def test_run_phase3_subphase5(
     assert ncas[1].blocked_amount is None
     assert ncas[2].creditor_id == 0x0000010000000001
     assert ncas[2].debtor_id == 999
-    assert ncas[2].collection_disabled_since == current_ts - timedelta(days=1000)
+    assert (
+        ncas[2].collection_disabled_since == current_ts - timedelta(days=1000)
+    )
     assert ncas[2].blocked_amount == 1522
     assert ncas[2].blocked_amount_ts >= current_ts
 

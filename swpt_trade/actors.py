@@ -596,20 +596,13 @@ def _on_needed_collector_signal(
     **kwargs
 ) -> None:
     cfg = current_app.config
-
-    # NOTE: When there are more than one "worker" servers, it is quite
-    # likely that more than one signal will be received for a given
-    # debtor ID because every "worker" server may send such a signal.
-    # Here we try to detect such duplicated signals, and avoid making
-    # repetitive queries to the central database.
-    if not procedures.is_recently_needed_collector(debtor_id):
-        procedures.ensure_collector_accounts(
-            debtor_id=debtor_id,
-            min_collector_id=cfg["MIN_COLLECTOR_ID"],
-            max_collector_id=cfg["MAX_COLLECTOR_ID"],
-            number_of_accounts=cfg["DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
-        )
-        procedures.mark_as_recently_needed_collector(debtor_id, ts)
+    procedures.register_needed_colector(
+        debtor_id=debtor_id,
+        needed_at=ts,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+        number_of_accounts=cfg["DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
+    )
 
 
 def _on_revise_account_lock_signal(

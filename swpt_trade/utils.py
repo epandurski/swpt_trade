@@ -308,3 +308,42 @@ def get_primary_collector_id(
             max_id=max_collector_id,
         )
     )
+
+
+def generate_collector_account_pkeys(
+        *,
+        number_of_collector_account_pkeys: int,
+        debtor_id: int,
+        min_collector_id: int,
+        max_collector_id: int,
+        existing_collector_ids: set,
+) -> list[tuple[int, int]]:
+    assert number_of_collector_account_pkeys > 0
+
+    # NOTE: Because we rely on being able to randomly pick
+    # non-existing IDs between `min_collector_id` and
+    # `max_collector_id`, we can not utilize the range of available
+    # IDs at 100%. Here we ensure a 1/4 safety margin.
+    if (
+            number_of_collector_account_pkeys + len(existing_collector_ids)
+            > (1 + max_collector_id - min_collector_id) * 3 // 4
+    ):
+        raise RuntimeError(
+            "The number of available collector IDs is not big enough."
+        )
+
+    new_accounts = []
+    n = 0
+    for collector_id in pseudorandom_id_generator(
+            seed=debtor_id,
+            min_id=min_collector_id,
+            max_id=max_collector_id,
+    ):
+        if collector_id not in existing_collector_ids:
+            new_accounts.append((debtor_id, collector_id))
+            existing_collector_ids.add(collector_id)
+            n += 1
+            if n == number_of_collector_account_pkeys:
+                break
+
+    return new_accounts

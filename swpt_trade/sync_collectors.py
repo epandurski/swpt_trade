@@ -4,15 +4,25 @@ from sqlalchemy import select, update, delete, bindparam
 from sqlalchemy.sql.expression import func, tuple_
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
-from swpt_trade.models import CollectorAccount, CollectorStatusChange
+from swpt_trade.models import (
+    CollectorAccount,
+    CollectorStatusChange,
+    NeededCollectorAccount,
+)
+from swpt_trade import procedures
 from swpt_trade.utils import batched
 
 SELECT_BATCH_SIZE = 50000
 UPDATE_BATCH_SIZE = 5000
+INSERT_BATCH_SIZE = 5000
 
 COLLECTOR_STATUS_CHANGE_PK = tuple_(
     CollectorStatusChange.collector_id,
     CollectorStatusChange.change_id,
+)
+NEEDED_COLLECTOR_ACCOUNT_PK = tuple_(
+    NeededCollectorAccount.debtor_id,
+    NeededCollectorAccount.collector_id,
 )
 
 
@@ -71,5 +81,30 @@ def process_collector_status_changes():
                             (r.collector_id, r.change_id) for r in rows
                         )
                     )
+                )
+                db.session.commit()
+
+
+def create_needed_collector_accounts():
+    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    NeededCollectorAccount.debtor_id,
+                    NeededCollectorAccount.collector_id,
+                )
+        ) as result:
+            for rows in batched(result, INSERT_BATCH_SIZE):
+                to_insert = [
+                    row for row in rows if sharding_realm.match(row.debtor_id)
+                ]
+                if to_insert:
+                    procedures.insert_collector_accounts(to_insert)
+
+                db.session.execute(
+                    delete(NeededCollectorAccount)
+                    .execution_options(synchronize_session=False)
+                    .where(NEEDED_COLLECTOR_ACCOUNT_PK.in_(rows))
                 )
                 db.session.commit()

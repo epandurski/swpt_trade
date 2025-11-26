@@ -70,6 +70,7 @@ def db_session(app):
         "TRUNCATE TABLE usable_collector",
         "TRUNCATE TABLE interest_rate_change",
         "TRUNCATE TABLE collector_status_change",
+        "TRUNCATE TABLE needed_collector_account",
         "DELETE FROM worker_turn",
         "TRUNCATE TABLE creditor_participation",
         "TRUNCATE TABLE dispatching_status",

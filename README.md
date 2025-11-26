@@ -178,13 +178,6 @@ MAX_COLLECTOR_ID=0x00000100000003ff
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
 
-# The solver server maintains a pool of database connections
-# to the solver's PostgreSQL database server. This variable
-# determines the maximum number of connections in this pool. If
-# zero is specified (the default) there is no limit to the
-# connection pool's size.
-SOLVER_CLIENT_POOL_SIZE=0
-
 # Set the minimum level of severity for log messages ("info",
 # "warning", or "error"). The default is "warning".
 APP_LOG_LEVEL=info
@@ -259,13 +252,6 @@ WORKER_POSTGRES_URL=postgresql+psycopg://swpt_worker:swpt_worker@localhost:5435/
 
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
-
-# Each worker server maintains a pool of database connections to
-# the solver's PostgreSQL database server. This variable
-# determines the maximum number of connections in this pool. If
-# zero is specified (the default) there is no limit to the
-# connection pool's size.
-SOLVER_CLIENT_POOL_SIZE=0
 
 # Parameters for the communication with the RabbitMQ server which is
 # responsible for brokering SMP messages. The container will connect
@@ -410,13 +396,6 @@ OAUTH2_SUPERVISOR_USERNAME=creditors-supervisor
 
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
-
-# The admin API server maintains a pool of database connections
-# to the solver's PostgreSQL database server. This variable
-# determines the maximum number of connections in this pool. If
-# zero is specified (the default) there is no limit to the
-# connection pool's size.
-SOLVER_CLIENT_POOL_SIZE=0
 
 # The specified number of processes ("$WEBSERVER_PROCESSES") will
 # be spawned to handle "admin API" requests (default 1), each

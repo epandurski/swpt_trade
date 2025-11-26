@@ -1144,20 +1144,6 @@ def test_process_account_update_signal(db_session, current_ts):
     assert ircs[3].interest_rate == 5.0
 
 
-def test_mark_as_recently_needed_collector(db_session, current_ts):
-    assert len(RecentlyNeededCollector.query.all()) == 0
-    assert p.is_recently_needed_collector(666) is False
-    assert p.is_recently_needed_collector(777) is False
-    assert len(RecentlyNeededCollector.query.all()) == 0
-    p.mark_as_recently_needed_collector(666)
-    assert p.is_recently_needed_collector(666) is True
-    assert p.is_recently_needed_collector(777) is False
-    rncs = RecentlyNeededCollector.query.all()
-    assert len(rncs) == 1
-    assert rncs[0].debtor_id == 666
-    assert rncs[0].needed_at >= current_ts
-
-
 def test_try_to_compact_interest_rate_changes(db_session, current_ts):
     assert len(InterestRateChange.query.all()) == 0
     assert p.store_interest_rate_change(

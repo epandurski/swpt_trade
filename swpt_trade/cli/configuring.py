@@ -310,6 +310,7 @@ def verify_shard_content():
             verify_table(conn, models.WorkerReceiving.to_collector_id)
             verify_table(conn, models.WorkerSending.from_collector_id)
             verify_table(conn, models.CollectorStatusChange.collector_id)
+            verify_table(conn, models.NeededCollectorAccount.debtor_id)
             verify_table(
                 conn,
                 models.DebtorInfoDocument.debtor_info_locator,

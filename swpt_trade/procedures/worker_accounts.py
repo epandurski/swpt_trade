@@ -2,6 +2,7 @@ import math
 from typing import TypeVar, Callable, Optional
 from datetime import date, datetime, timezone, timedelta
 from swpt_pythonlib.utils import Seqnum
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -14,7 +15,9 @@ from swpt_trade.models import (
     ConfigureAccountSignal,
     DiscoverDebtorSignal,
     CollectorStatusChange,
+    NeededCollectorAccount,
 )
+from swpt_trade.utils import generate_collector_account_pkeys
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -355,8 +358,20 @@ def compact_interest_rate_changes(
 
 
 @atomic
-def is_recently_needed_collector(debtor_id: int) -> bool:
-    return (
+def register_needed_colector(
+        *,
+        debtor_id: int,
+        needed_at: datetime,
+        min_collector_id: int,
+        max_collector_id: int,
+        number_of_accounts: int,
+) -> None:
+    # NOTE: When there are more than one "worker" servers, it is quite
+    # likely that more than one `NeededCollectorSignal` will be
+    # received for a given debtor ID because every "worker" server may
+    # send such a signal. Here we try to avoid making repetitive
+    # queries to the central database.
+    has_been_recently_needed = (
         db.session.query(
             RecentlyNeededCollector.query
             .filter_by(debtor_id=debtor_id)
@@ -364,17 +379,7 @@ def is_recently_needed_collector(debtor_id: int) -> bool:
         )
         .scalar()
     )
-
-
-@atomic
-def mark_as_recently_needed_collector(
-        debtor_id: int,
-        needed_at: Optional[datetime] = None,
-) -> None:
-    if needed_at is None:
-        needed_at = datetime.now(tz=timezone.utc)
-
-    if not is_recently_needed_collector(debtor_id):
+    if not has_been_recently_needed:
         with db.retry_on_integrity_error():
             db.session.add(
                 RecentlyNeededCollector(
@@ -382,6 +387,26 @@ def mark_as_recently_needed_collector(
                     needed_at=needed_at,
                 )
             )
+        db.session.execute(
+            postgresql.insert(NeededCollectorAccount)
+            .execution_options(synchronize_session=False)
+            .on_conflict_do_nothing(
+                index_elements=[
+                    NeededCollectorAccount.debtor_id,
+                    NeededCollectorAccount.collector_id,
+                ]
+            ),
+            [
+                {"debtor_id": x, "collector_id": y}
+                for x, y in generate_collector_account_pkeys(
+                        number_of_collector_account_pkeys=number_of_accounts,
+                        debtor_id=debtor_id,
+                        min_collector_id=min_collector_id,
+                        max_collector_id=max_collector_id,
+                        existing_collector_ids=set(),
+                )
+            ]
+        )
 
 
 def _discard_unneeded_account(

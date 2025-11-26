@@ -189,7 +189,7 @@ def trigger_transfers(
     sys.exit(1)
 
 
-@swpt_trade.command("apply_collector_status_changes")
+@swpt_trade.command("apply_collector_changes")
 @with_appcontext
 @click.option(
     "-w",
@@ -197,7 +197,7 @@ def trigger_transfers(
     type=float,
     help=(
         "The minimal number of seconds between"
-        " the queries to obtain collector status changes."
+        " the queries to obtain collector changes."
     ),
 )
 @click.option(
@@ -206,8 +206,8 @@ def trigger_transfers(
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def apply_collector_status_changes(wait, quit_early):
-    """Run a process which applies pending collector status changes.
+def apply_collector_changes(wait, quit_early):
+    """Run a process which applies pending collector changes.
 
     If --wait is not specified, 1/4th of the value of the configuration
     variable HANDLE_PRISTINE_COLLECTORS_PERIOD is taken. If it is
@@ -220,7 +220,7 @@ def apply_collector_status_changes(wait, quit_early):
         else current_app.config["HANDLE_PRISTINE_COLLECTORS_PERIOD"] / 4
     )
     logger = logging.getLogger(__name__)
-    logger.info("Started collector status changes processor.")
+    logger.info("Started collector changes processor.")
     time.sleep(wait * random.random())
     iteration_counter = 0
 
@@ -228,4 +228,5 @@ def apply_collector_status_changes(wait, quit_early):
         iteration_counter += 1
         started_at = time.time()
         sync_collectors.process_collector_status_changes()
+        sync_collectors.create_needed_collector_accounts()
         time.sleep(max(0.0, wait + started_at - time.time()))

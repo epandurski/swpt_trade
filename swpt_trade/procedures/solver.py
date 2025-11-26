@@ -3,7 +3,10 @@ from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, delete, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
-from swpt_trade.utils import can_start_new_turn, pseudorandom_id_generator
+from swpt_trade.utils import (
+    can_start_new_turn,
+    generate_collector_account_pkeys,
+)
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TS0,
@@ -289,36 +292,18 @@ def ensure_collector_accounts(
 
     number_of_dead_accounts = sum(1 for x in accounts if x.status == 3)
     number_of_alive_accounts = len(accounts) - number_of_dead_accounts
+    number_of_missing_accounts = number_of_accounts - number_of_alive_accounts
 
-    if number_of_alive_accounts < number_of_accounts:
-        # NOTE: Because we rely on being able to randomly pick
-        # non-existing IDs between `min_collector_id` and
-        # `max_collector_id`, we can not utilize the range of
-        # available IDs at 100%. Here we ensure a 1/4 safety margin.
-        if (
-                number_of_accounts + number_of_dead_accounts
-                > (1 + max_collector_id - min_collector_id) * 3 // 4
-        ):
-            raise RuntimeError(
-                "The number of available collector IDs is not big enough."
+    if number_of_missing_accounts > 0:
+        insert_collector_accounts(
+            generate_collector_account_pkeys(
+                number_of_collector_account_pkeys=number_of_missing_accounts,
+                debtor_id=debtor_id,
+                min_collector_id=min_collector_id,
+                max_collector_id=max_collector_id,
+                existing_collector_ids=set(x.collector_id for x in accounts),
             )
-
-        new_collectors = []
-        existing_ids = set(x.collector_id for x in accounts)
-
-        for collector_id in pseudorandom_id_generator(
-                seed=debtor_id,
-                min_id=min_collector_id,
-                max_id=max_collector_id,
-        ):
-            if collector_id not in existing_ids:
-                new_collectors.append((debtor_id, collector_id))
-                existing_ids.add(collector_id)
-                number_of_alive_accounts += 1
-                if number_of_alive_accounts == number_of_accounts:
-                    break
-
-        insert_collector_accounts(new_collectors)
+        )
 
 
 @atomic
