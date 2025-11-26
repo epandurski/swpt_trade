@@ -42,38 +42,6 @@ SELECT_BATCH_SIZE = 50000
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
-ready_dalayed_account_transfers_query = (
-    select(
-        DelayedAccountTransfer.turn_id,
-        DelayedAccountTransfer.message_id,
-        DelayedAccountTransfer.creditor_id,
-        DelayedAccountTransfer.debtor_id,
-        DelayedAccountTransfer.creation_date,
-        DelayedAccountTransfer.transfer_number,
-        DelayedAccountTransfer.coordinator_type,
-        DelayedAccountTransfer.committed_at,
-        DelayedAccountTransfer.acquired_amount,
-        DelayedAccountTransfer.transfer_note_format,
-        DelayedAccountTransfer.transfer_note,
-        DelayedAccountTransfer.principal,
-        DelayedAccountTransfer.previous_transfer_number,
-        DelayedAccountTransfer.sender,
-        DelayedAccountTransfer.recipient,
-        DelayedAccountTransfer.ts,
-    )
-    .select_from(DelayedAccountTransfer)
-    .join(WorkerTurn, WorkerTurn.turn_id == DelayedAccountTransfer.turn_id)
-    .where(
-        or_(
-            WorkerTurn.phase > 3,
-            and_(
-                WorkerTurn.phase == 3,
-                WorkerTurn.worker_turn_subphase >= 5,
-            )
-        )
-    )
-    .with_for_update(of=DelayedAccountTransfer, skip_locked=True)
-)
 
 
 def process_rescheduled_transfers() -> int:
@@ -90,16 +58,99 @@ def process_rescheduled_transfers() -> int:
 
 
 def process_delayed_account_transfers() -> int:
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
     count = 0
-    batch_size = current_app.config[
-        "APP_DELAYED_ACCOUNT_TRANSFERS_BURST_COUNT"
-    ]
 
-    while True:
-        n = process_delayed_account_transfers_batch(batch_size)
-        count += n
-        if n < batch_size:
-            break
+    with db.engine.connect() as w_conn:
+        # NOTE: Each row in this cursor contains a lot of data.
+        # Therefore, we use `INSERT_BATCH_SIZE` here, because using
+        # the bigger `SELECT_BATCH_SIZE` may consume too much memory.
+        with w_conn.execution_options(yield_per=INSERT_BATCH_SIZE).execute(
+                select(
+                    DelayedAccountTransfer.turn_id,
+                    DelayedAccountTransfer.message_id,
+                    DelayedAccountTransfer.creditor_id,
+                    DelayedAccountTransfer.debtor_id,
+                    DelayedAccountTransfer.creation_date,
+                    DelayedAccountTransfer.transfer_number,
+                    DelayedAccountTransfer.coordinator_type,
+                    DelayedAccountTransfer.committed_at,
+                    DelayedAccountTransfer.acquired_amount,
+                    DelayedAccountTransfer.transfer_note_format,
+                    DelayedAccountTransfer.transfer_note,
+                    DelayedAccountTransfer.principal,
+                    DelayedAccountTransfer.previous_transfer_number,
+                    DelayedAccountTransfer.sender,
+                    DelayedAccountTransfer.recipient,
+                    DelayedAccountTransfer.ts,
+                )
+                .select_from(DelayedAccountTransfer)
+                .join(
+                    WorkerTurn,
+                    WorkerTurn.turn_id == DelayedAccountTransfer.turn_id,
+                )
+                .where(
+                    or_(
+                        WorkerTurn.phase > 3,
+                        and_(
+                            WorkerTurn.phase == 3,
+                            WorkerTurn.worker_turn_subphase >= 5,
+                        )
+                    )
+                )
+        ) as result:
+            for rows in batched(result, INSERT_BATCH_SIZE):
+                to_replay = [
+                    dict(
+                        creditor_id=row.creditor_id,
+                        debtor_id=row.debtor_id,
+                        creation_date=row.creation_date,
+                        transfer_number=row.transfer_number,
+                        coordinator_type=row.coordinator_type,
+                        committed_at=row.committed_at,
+                        acquired_amount=row.acquired_amount,
+                        transfer_note_format=row.transfer_note_format,
+                        transfer_note=row.transfer_note,
+                        principal=row.principal,
+                        previous_transfer_number=row.previous_transfer_number,
+                        sender=row.sender,
+                        recipient=row.recipient,
+                        ts=row.ts,
+                    )
+                    for row in rows
+                    if (
+                            sharding_realm.match(row.creditor_id)
+                            or not (
+                                # Replying the message more than once
+                                # is safe, and therefore we do not shy
+                                # from doing it unless we are certain
+                                # that the other shard is the one
+                                # responsible for this particular
+                                # message.
+                                delete_parent_records
+                                and sharding_realm.match(
+                                    row.creditor_id, match_parent=True
+                                )
+                            )
+                    )
+                ]
+                if to_replay:
+                    db.session.bulk_insert_mappings(
+                        ReplayedAccountTransferSignal, to_replay
+                    )
+                db.session.execute(
+                    delete(DelayedAccountTransfer)
+                    .execution_options(synchronize_session=False)
+                    .where(
+                        DELAYED_ACCOUNT_TRANSFER_PK.in_(
+                            (row.turn_id, row.message_id) for row in rows
+                        )
+                    )
+                )
+                db.session.commit()
+                count += len(rows)
 
     return count
 
@@ -365,69 +416,3 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     )
 
                 db.session.commit()
-
-
-@atomic
-def process_delayed_account_transfers_batch(batch_size: int) -> int:
-    assert batch_size > 0
-
-    ready_delayed_account_transfers = db.session.execute(
-        ready_dalayed_account_transfers_query.limit(batch_size)
-    ).all()
-
-    if ready_delayed_account_transfers:
-        cfg = current_app.config
-        sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
-        delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
-        account_transfers_to_replay = [
-            dict(
-                creditor_id=row.creditor_id,
-                debtor_id=row.debtor_id,
-                creation_date=row.creation_date,
-                transfer_number=row.transfer_number,
-                coordinator_type=row.coordinator_type,
-                committed_at=row.committed_at,
-                acquired_amount=row.acquired_amount,
-                transfer_note_format=row.transfer_note_format,
-                transfer_note=row.transfer_note,
-                principal=row.principal,
-                previous_transfer_number=row.previous_transfer_number,
-                sender=row.sender,
-                recipient=row.recipient,
-                ts=row.ts,
-            )
-            for row in ready_delayed_account_transfers
-            if (
-                    sharding_realm.match(row.creditor_id)
-                    or not (
-                        # Replying the message more than once is safe,
-                        # and therefore we do not shy from doing it
-                        # unless we are certain that the other shard
-                        # is the one responsible for this particular
-                        # message.
-                        delete_parent_records
-                        and sharding_realm.match(
-                            row.creditor_id, match_parent=True
-                        )
-                    )
-            )
-        ]
-        if account_transfers_to_replay:
-            db.session.bulk_insert_mappings(
-                ReplayedAccountTransferSignal, account_transfers_to_replay
-            )
-
-        db.session.execute(
-            delete(DelayedAccountTransfer)
-            .execution_options(synchronize_session=False)
-            .where(
-                DELAYED_ACCOUNT_TRANSFER_PK.in_(
-                    [
-                        (row.turn_id, row.message_id)
-                        for row in ready_delayed_account_transfers
-                    ]
-                )
-            )
-        )
-
-    return len(ready_delayed_account_transfers)
