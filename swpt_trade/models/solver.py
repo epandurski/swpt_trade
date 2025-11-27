@@ -12,30 +12,6 @@ class CollectorAccount(db.Model):
     # edited so as not to create a "normal" index, but create a
     # "covering" index instead.
 
-    # TODO: Consider implementing `CollectorAccount` removal logic.
-    #       The removal logic should work more or less like this:
-    #
-    # 1. Statistics should be collected for the number of trading
-    #    transfers performed in each currency.
-    #
-    # 2. When it is deemed that a given currency has more collector
-    #    accounts than needed, the "status"es of the superfluous
-    #    collector accounts should be set to "3" (disabled).
-    #
-    # 3. After some period of time, the amounts available on the
-    #    superfluous collector accounts should be transferred to other
-    #    accounts.
-    #
-    # 4. After some period of time, `NeededWorkerAccount` and
-    #    `InterestRateChange` records corresponding to the superfluous
-    #    collector accounts should be deleted. (This will result in
-    #    the eventual automatic removal of their related
-    #    `WorkerAccount` records.)
-    #
-    # 5. After some period of time, the `CollectorAccount` records for
-    #    the superfluous collector accounts (they've had their
-    #    "status"es set to "3" already) should be deleted.
-
     __bind_key__ = "solver"
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
