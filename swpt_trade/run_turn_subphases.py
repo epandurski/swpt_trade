@@ -74,6 +74,7 @@ SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
 NUMERIC = Numeric(36, 0)
+TD_DAY = timedelta(days=1)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -1323,11 +1324,39 @@ def _update_needed_worker_account_blocked_amounts() -> None:
 
 
 def _update_worker_account_surplus_amounts() -> None:
-    # TODO: join disabled `NeededWorkerAccount`s with their
-    # corresponding WorkerAccount (account_id != "", and proper
-    # timestamps), and set the surplus amount, also, set the status of
-    # the solver's collector account to 2.
-    pass
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                )
+                .select_from(NeededWorkerAccount)
+                .join(
+                    WorkerAccount,
+                    and_(
+                        WorkerAccount.creditor_id
+                        == NeededWorkerAccount.creditor_id,
+                        WorkerAccount.debtor_id
+                        == NeededWorkerAccount.debtor_id,
+                    ),
+                )
+                .where(
+                    NeededWorkerAccount.blocked_amount_ts
+                    >= NeededWorkerAccount.collection_disabled_since,
+                    WorkerAccount.last_change_ts
+                    > NeededWorkerAccount.blocked_amount_ts + TD_DAY
+                )
+        ) as result:
+            for rows in batched(result, DELETE_BATCH_SIZE):
+                # TODO: Send a signal, which if `surplus_ts <
+                # collection_disabled_since` will overwrite the
+                # surplus amount, and in any case, will schedule the
+                # restoration of the status of the solver's collector
+                # account to 2. (Do not forget to assert/check in the
+                # signal handler that `blocked_amount_ts >=
+                # collection_disabled_since` and `last_change_ts >
+                # blocked_amount_ts + TD_DAY`.)
+                pass
 
 
 def _detect_broken_needed_worker_accounts() -> None:
@@ -1346,6 +1375,7 @@ def _detect_broken_needed_worker_accounts() -> None:
                     NeededWorkerAccount.creditor_id,
                     NeededWorkerAccount.debtor_id,
                 )
+                .select_from(NeededWorkerAccount)
                 .where(
                     NeededWorkerAccount.blocked_amount_ts
                     >= NeededWorkerAccount.collection_disabled_since,

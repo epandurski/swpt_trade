@@ -412,6 +412,15 @@ def _check_config_sanity(c):  # pragma: nocover
         )
 
     if (
+            c["APP_COLLECTOR_ACTIVITY_MIN_DAYS"]
+            < c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+    ):
+        raise RuntimeError(
+            "The configured value for APP_COLLECTOR_ACTIVITY_MIN_DAYS is too"
+            " small. Choose a more appropriate value."
+        )
+
+    if (
         c["APP_LOCATOR_CLAIM_EXPIRY_DAYS"]
         < 5 * c["APP_DEBTOR_INFO_EXPIRY_DAYS"]
     ):
