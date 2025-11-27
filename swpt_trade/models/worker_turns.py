@@ -61,52 +61,6 @@ class WorkerTurn(db.Model):
     )
 
 
-class RecentlyNeededCollector(db.Model):
-    debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
-    needed_at = db.Column(
-        db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
-    )
-    __table_args__ = (
-        db.CheckConstraint(debtor_id != 0),
-        {
-            "comment": (
-                'Indicates that the creation of a collector account for the'
-                ' currency with the given debtor ID has been recently'
-                ' requested. This information is used to prevent "worker"'
-                ' servers from making repetitive queries to the central'
-                " database."
-            ),
-        },
-    )
-
-
-class UsableCollector(db.Model):
-    debtor_id = db.Column(db.BigInteger, primary_key=True)
-    collector_id = db.Column(db.BigInteger, primary_key=True)
-    account_id = db.Column(db.String, nullable=False)
-    disabled_at = db.Column(db.TIMESTAMP(timezone=True))
-    __table_args__ = (
-        db.Index(
-            "idx_usable_collector_collector_id",
-            collector_id,
-            debtor_id,
-            unique=True,
-        ),
-        db.CheckConstraint(account_id != ""),
-        {
-            "comment": (
-                'Represents an existing Swaptacular account which can be'
-                ' used to collect and dispatch transfers. Each "Worker"'
-                ' servers will maintain its own copy of this table (that is:'
-                ' no rows-sharding) by periodically copying the relevant'
-                ' records from the solver\'s "collector_account" table.'
-                ' "Worker" servers will use this local copy so as to avoid'
-                ' querying the central database too often.'
-            ),
-        },
-    )
-
-
 # This sequence is used to generate `coordinator_request_id`s for the
 # issued `PrepareTransfer` SMP messages.
 #
