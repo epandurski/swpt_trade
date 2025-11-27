@@ -5,7 +5,16 @@ from datetime import datetime, timezone, timedelta
 from itertools import groupby
 from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.sql.expression import null, false, case, cast, func, and_
+from sqlalchemy.sql.expression import (
+    null,
+    false,
+    case,
+    cast,
+    func,
+    and_,
+    not_,
+    tuple_,
+)
 from sqlalchemy.sql.functions import coalesce
 from flask import current_app
 from swpt_pythonlib.utils import ShardingRealm
@@ -51,10 +60,16 @@ from swpt_trade.models import (
     CollectorSending,
     CollectorReceiving,
     CollectorDispatching,
+    CollectorStatusChange,
 )
 
+NEEDED_WORKER_ACCOUNT_PK = tuple_(
+    NeededWorkerAccount.creditor_id,
+    NeededWorkerAccount.debtor_id,
+)
 INSERT_BATCH_SIZE = 5000
 UPDATE_BATCH_SIZE = 5000
+DELETE_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
@@ -1312,12 +1327,57 @@ def _update_worker_account_surplus_amounts() -> None:
     # corresponding WorkerAccount (account_id != "", and proper
     # timestamps), and set the surplus amount, also, set the status of
     # the solver's collector account to 2.
+
+    # TODO: From time to time, find `InterestRateChange` records
+    # without a corresponding `NeededWorkerAccount` and delete them.
     pass
 
 
 def _detect_broken_needed_worker_accounts() -> None:
-    # TODO: Find disabled `NeededWorkerAccount`s that do not have a
-    # corresponding WorkerAccount (or its account_id == ""). Delete
-    # those, and their corresponding InterestRateChange records, also,
-    # set the status of the solver's collector account to 1.
-    pass
+    current_ts = datetime.now(tz=timezone.utc)
+    sbd = timedelta(days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
+    worker_account_subquery = (
+        select(1)
+        .select_from(WorkerAccount)
+        .where(
+            WorkerAccount.creditor_id == NeededWorkerAccount.creditor_id,
+            WorkerAccount.debtor_id == NeededWorkerAccount.debtor_id,
+        )
+    ).exists()
+
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                )
+                .where(
+                    NeededWorkerAccount.collection_disabled_since
+                    < current_ts - sbd,
+                    NeededWorkerAccount.collection_disabled_since
+                    <= NeededWorkerAccount.blocked_amount_ts,
+                    not_(worker_account_subquery),
+                )
+        ) as result:
+            for rows in batched(result, DELETE_BATCH_SIZE):
+                db.session.execute(
+                    delete(NeededWorkerAccount)
+                    .execution_options(synchronize_session=False)
+                    .where(NEEDED_WORKER_ACCOUNT_PK.in_(rows))
+                )
+                db.session.execute(
+                    insert(CollectorStatusChange).execution_options(
+                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                        synchronize_session=False,
+                    ),
+                    [
+                        {
+                            "collector_id": row.creditor_id,
+                            "debtor_id": row.debtor_id,
+                            "from_status": 3,
+                            "to_status": 1,
+                            "account_id": None,
+                        }
+                        for row in rows
+                    ],
+                )

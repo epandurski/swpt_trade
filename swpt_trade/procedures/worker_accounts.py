@@ -125,7 +125,6 @@ def process_account_update_signal(
         db.session.query(
             NeededWorkerAccount.query
             .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-            .with_for_update(read=True)
             .exists()
         )
         .scalar()
@@ -267,7 +266,6 @@ def process_account_purge_signal(
         db.session.query(
             NeededWorkerAccount.query
             .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-            .with_for_update(read=True)
             .exists()
         )
         .scalar()
