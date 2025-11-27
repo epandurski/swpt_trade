@@ -1327,9 +1327,6 @@ def _update_worker_account_surplus_amounts() -> None:
     # corresponding WorkerAccount (account_id != "", and proper
     # timestamps), and set the surplus amount, also, set the status of
     # the solver's collector account to 2.
-
-    # TODO: From time to time, find `InterestRateChange` records
-    # without a corresponding `NeededWorkerAccount` and delete them.
     pass
 
 
