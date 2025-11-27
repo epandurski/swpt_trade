@@ -1331,8 +1331,6 @@ def _update_worker_account_surplus_amounts() -> None:
 
 
 def _detect_broken_needed_worker_accounts() -> None:
-    current_ts = datetime.now(tz=timezone.utc)
-    sbd = timedelta(days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
     worker_account_subquery = (
         select(1)
         .select_from(WorkerAccount)
@@ -1349,10 +1347,8 @@ def _detect_broken_needed_worker_accounts() -> None:
                     NeededWorkerAccount.debtor_id,
                 )
                 .where(
-                    NeededWorkerAccount.collection_disabled_since
-                    < current_ts - sbd,
-                    NeededWorkerAccount.collection_disabled_since
-                    <= NeededWorkerAccount.blocked_amount_ts,
+                    NeededWorkerAccount.blocked_amount_ts
+                    >= NeededWorkerAccount.collection_disabled_since,
                     not_(worker_account_subquery),
                 )
         ) as result:
