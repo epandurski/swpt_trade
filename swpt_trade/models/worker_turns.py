@@ -459,8 +459,8 @@ class WorkerCollecting(db.Model):
         db.Index(
             "idx_worker_collecting_not_collected",
             collector_id,
-            turn_id,
             debtor_id,
+            turn_id,
             creditor_id,
             postgresql_where=collected == false(),
         ),
@@ -537,8 +537,8 @@ class WorkerReceiving(db.Model):
         db.Index(
             "idx_worker_receiving_not_received",
             to_collector_id,
-            turn_id,
             debtor_id,
+            turn_id,
             from_collector_id,
             postgresql_where=received_amount == 0,
         ),
