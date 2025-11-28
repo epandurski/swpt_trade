@@ -1373,7 +1373,7 @@ def _update_worker_account_surplus_amounts() -> None:
                         wrong_shard.append(row)
 
                     db.session.flush()
-                    _kill_needed_worker_accounts_and_rate_changes(wrong_shard)
+                    _kill_needed_worker_accounts_and_rate_stats(wrong_shard)
 
 
 def _kill_broken_worker_accounts() -> None:
@@ -1413,7 +1413,7 @@ def _kill_broken_worker_accounts() -> None:
                 )
         ) as result:
             for rows in batched(result, KILL_BROKEN_ACCOUNTS_BATCH_SIZE):
-                _kill_needed_worker_accounts_and_rate_changes(rows)
+                _kill_needed_worker_accounts_and_rate_stats(rows)
                 status_change_dicts = (
                     {
                         "collector_id": row.creditor_id,
@@ -1435,7 +1435,7 @@ def _kill_broken_worker_accounts() -> None:
                     )
 
 
-def _kill_needed_worker_accounts_and_rate_changes(primary_keys) -> None:
+def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     if len(primary_keys) == 0:  # pragma: no cover
         return
 
