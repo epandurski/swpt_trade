@@ -271,9 +271,8 @@ def process_account_purge_signal(
         .scalar()
     )
     worker_account = (
-        WorkerAccount.query.filter_by(
-            creditor_id=creditor_id, debtor_id=debtor_id
-        )
+        WorkerAccount.query
+        .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
         .filter(WorkerAccount.creation_date <= creation_date)
         .with_for_update()
         .options(load_only(WorkerAccount.creation_date))

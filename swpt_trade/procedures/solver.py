@@ -92,7 +92,11 @@ def try_to_advance_turn_to_phase2(
         active_debtor = (
             # These are debtors that are confirmed, for which there
             # are at least one active (status == 2) collector account.
-            select(ConfirmedDebtor)
+            select(
+                ConfirmedDebtor.turn_id,
+                ConfirmedDebtor.debtor_id,
+                ConfirmedDebtor.debtor_info_locator,
+            )
             .distinct()
             .join(
                 CollectorAccount,
@@ -231,10 +235,8 @@ def get_pristine_collectors(
         max_count: int = None,
 ) -> Sequence[Tuple[int, int]]:
     query = (
-        db.session.query(
-            CollectorAccount.debtor_id, CollectorAccount.collector_id
-        )
-        .filter(
+        select(CollectorAccount.debtor_id, CollectorAccount.collector_id)
+        .where(
             CollectorAccount.status == text("0"),
             CollectorAccount.collector_hash.op("&")(hash_mask) == hash_prefix,
         )
@@ -242,7 +244,7 @@ def get_pristine_collectors(
     if max_count is not None:
         query = query.limit(max_count)
 
-    return query.all()
+    return db.session.execute(query).all()
 
 
 @atomic

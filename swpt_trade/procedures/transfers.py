@@ -525,9 +525,11 @@ def release_seller_account_lock(
             debtor_id=debtor_id,
             turn_id=turn_id,
         )
-        .filter(AccountLock.amount == acquired_amount)
-        .filter(AccountLock.finalized_at != null())
-        .filter(AccountLock.released_at == null())
+        .filter(
+            AccountLock.amount == acquired_amount,
+            AccountLock.finalized_at != null(),
+            AccountLock.released_at == null(),
+        )
         .with_for_update()
         .one_or_none()
     )
@@ -731,10 +733,12 @@ def release_buyer_account_lock(
             debtor_id=debtor_id,
             turn_id=turn_id,
         )
-        .filter(AccountLock.amount > 0)
-        .filter(AccountLock.transfer_id != null())
-        .filter(AccountLock.finalized_at == null())
-        .filter(AccountLock.released_at == null())
+        .filter(
+            AccountLock.amount > 0,
+            AccountLock.transfer_id != null(),
+            AccountLock.finalized_at == null(),
+            AccountLock.released_at == null(),
+        )
         .with_for_update()
         .one_or_none()
     )
@@ -1266,8 +1270,10 @@ def put_finalized_transfer_through_transfer_attempts(
             transfer_id=transfer_id,
             failure_code=null(),
         )
-        .filter(TransferAttempt.finalized_at != null())
-        .filter(TransferAttempt.coordinator_request_id != null())
+        .filter(
+            TransferAttempt.finalized_at != null(),
+            TransferAttempt.coordinator_request_id != null(),
+        )
         .with_for_update()
         .one_or_none()
     )
@@ -1339,9 +1345,11 @@ def process_rescheduled_transfers_batch(batch_size: int) -> int:
     current_ts = datetime.now(tz=timezone.utc)
 
     transfer_attempts = (
-        db.session.query(TransferAttempt)
-        .filter(TransferAttempt.rescheduled_for != null())
-        .filter(TransferAttempt.rescheduled_for <= current_ts)
+        TransferAttempt.query
+        .filter(
+            TransferAttempt.rescheduled_for != null(),
+            TransferAttempt.rescheduled_for <= current_ts,
+        )
         .options(load_only(TransferAttempt.rescheduled_for))
         .with_for_update(skip_locked=True)
         .limit(batch_size)
