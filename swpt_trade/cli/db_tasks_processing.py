@@ -21,13 +21,6 @@ from swpt_trade import sync_collectors
 from swpt_trade.run_transfers import process_rescheduled_transfers
 from .common import swpt_trade
 
-# TODO: Consider implementing a CLI command which finds
-# `InterestRateChange` records without a corresponding
-# `NeededWorkerAccount` record, and deletes them. This CLI command is
-# intended to be run very rarely, so as to garbage collect interest
-# rate change records for currencies managed by accounting authority
-# nodes which we are no longer connected to.
-
 
 @swpt_trade.command("handle_pristine_collectors")
 @with_appcontext

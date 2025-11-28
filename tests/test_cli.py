@@ -2982,6 +2982,33 @@ def test_run_phase3_subphase5(
             blocked_amount_ts=current_ts - timedelta(days=999),
         )
     )
+    db.session.add(
+        # Will be removed.
+        m.InterestRateChange(
+            creditor_id=0x0000010000000004,
+            debtor_id=5555,
+            change_ts=current_ts - timedelta(days=1),
+            interest_rate=1.5,
+        )
+    )
+    db.session.add(
+        # Will be removed.
+        m.InterestRateChange(
+            creditor_id=0x0000010000000004,
+            debtor_id=5555,
+            change_ts=current_ts,
+            interest_rate=2.5,
+        )
+    )
+    db.session.add(
+        # Will not be removed.
+        m.InterestRateChange(
+            creditor_id=0x0000010000000004,
+            debtor_id=5556,
+            change_ts=current_ts,
+            interest_rate=2.5,
+        )
+    )
 
     db.session.add(
         m.AccountLock(
@@ -3238,6 +3265,11 @@ def test_run_phase3_subphase5(
     assert cscs[0].debtor_id == 5555
     assert cscs[0].from_status == 3
     assert cscs[0].to_status == 1
+
+    mrcs = m.InterestRateChange.query.all()
+    assert len(mrcs) == 1
+    mrcs[0].creditor_id == 0x0000010000000004
+    mrcs[0].debtor_id == 5556
 
 
 @pytest.mark.parametrize("realm", ["0.#", "1.#"])

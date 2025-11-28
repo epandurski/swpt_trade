@@ -61,12 +61,14 @@ from swpt_trade.models import (
     CollectorReceiving,
     CollectorDispatching,
     CollectorStatusChange,
+    InterestRateChange,
 )
 
 NEEDED_WORKER_ACCOUNT_PK = tuple_(
     NeededWorkerAccount.creditor_id,
     NeededWorkerAccount.debtor_id,
 )
+DELETE_BROKEN_ACCOUNTS_BATCH_SIZE = 1000
 INSERT_BATCH_SIZE = 5000
 UPDATE_BATCH_SIZE = 5000
 DELETE_BATCH_SIZE = 5000
@@ -1190,7 +1192,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
         _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
         _update_worker_account_surplus_amounts()
-        _detect_broken_needed_worker_accounts()
+        _delete_broken_needed_worker_accounts()
 
         worker_turn.worker_turn_subphase = 10
 
@@ -1359,7 +1361,19 @@ def _update_worker_account_surplus_amounts() -> None:
                 pass
 
 
-def _detect_broken_needed_worker_accounts() -> None:
+def _delete_broken_needed_worker_accounts() -> None:
+    """Delete broken needed worker accounts.
+
+    Accounting authority nodes to which this node were connected, but
+    is no longer connected to, will not send heartbeat `AccountUpdate`
+    SMP messages. Therefore, all `WorkerAccount` records related to
+    such accounting authority nodes will be deleted some time after
+    the disconnection. Their corresponding `NeededWorkerAccount` (and
+    `InterestRateChange`) records however, will still remain in the
+    database. This function detects and removes (garbage collects)
+    such dysfunctional records from the database.
+    """
+
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
     worker_account_subquery = (
         select(1)
@@ -1383,12 +1397,47 @@ def _detect_broken_needed_worker_accounts() -> None:
                     not_(worker_account_subquery),
                 )
         ) as result:
-            for rows in batched(result, DELETE_BATCH_SIZE):
+            for rows in batched(result, DELETE_BROKEN_ACCOUNTS_BATCH_SIZE):
                 db.session.execute(
                     delete(NeededWorkerAccount)
                     .execution_options(synchronize_session=False)
                     .where(NEEDED_WORKER_ACCOUNT_PK.in_(rows))
                 )
+
+                # NOTE: Here instead of directly executing an
+                # "InterestRateChange" bulk delete statement, we first
+                # *try* to obtain locks on the rows, and only then,
+                # delete the locked rows. The reason for this is that
+                # we can not be 100% certain that the bulk delete
+                # statement would be able to obtain the needed locks
+                # on all rows, and if it fails -- the whole work done
+                # so far (the whole "phase 3, subphase 5" thing) could
+                # be rolled back. The result of this choice is that,
+                # theoretically, some "InterestRateChange" rows that
+                # should be deleted, may remain in the database
+                # forever. However, this can only happen for a worker
+                # account that has not received a heartbeat for a huge
+                # period of time (say a year), and exactly when the
+                # account get removed, it receives a heartbeat, which
+                # changes the interest rate. The probability for this
+                # is practically zero, and the potential harm (an
+                # "InterestRateChange" row which will have to be
+                # removed manually at some point in the very distant
+                # future) is minimal.
+                interest_rate_changes_to_delete = (
+                    InterestRateChange.query
+                    .filter(
+                        tuple_(
+                            InterestRateChange.creditor_id,
+                            InterestRateChange.debtor_id,
+                        ).in_(rows)
+                    )
+                    .with_for_update(skip_locked=True)
+                    .all()
+                )
+                for x in interest_rate_changes_to_delete:
+                    db.session.delete(x)
+
                 status_change_dicts = (
                     {
                         "collector_id": row.creditor_id,
