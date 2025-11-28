@@ -4,6 +4,7 @@ from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from itertools import groupby
 from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
+from sqlalchemy.orm import load_only
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import (
     null,
@@ -1432,6 +1433,7 @@ def _delete_broken_needed_worker_accounts() -> None:
                             InterestRateChange.debtor_id,
                         ).in_(rows)
                     )
+                    .options(load_only(InterestRateChange.change_ts))
                     .with_for_update(skip_locked=True)
                     .all()
                 )
