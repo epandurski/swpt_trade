@@ -119,58 +119,6 @@ def scan_worker_accounts(days, quit_early):
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def scan_needed_worker_accounts(days, quit_early):
-    """Start a process that garbage collects needed worker accounts.
-
-    The specified number of days determines the intended duration of a
-    single pass through the needed worker accounts table. If the
-    number of days is not specified, the value of the environment
-    variable APP_NEEDED_WORKER_ACCOUNTS_SCAN_DAYS is taken. If it is
-    not set, the default number of days is 7.
-    """
-    from swpt_trade.table_scanners import NeededWorkerAccountsScanner
-
-    logger = logging.getLogger(__name__)
-    logger.info("Started needed worker accounts scanner.")
-    days = days or current_app.config["APP_NEEDED_WORKER_ACCOUNTS_SCAN_DAYS"]
-    assert days > 0.0
-    scanner = NeededWorkerAccountsScanner()
-    scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
-
-
-@click.option("-d", "--days", type=float, help="The number of days.")
-@click.option(
-    "--quit-early",
-    is_flag=True,
-    default=False,
-    help="Exit after some time (mainly useful during testing).",
-)
-def scan_interest_rate_changes(days, quit_early):
-    """Start a process that garbage collects stale interest rate changes.
-
-    The specified number of days determines the intended duration of a
-    single pass through the debtor info documents table. If the number
-    of days is not specified, the value of the environment variable
-    APP_INTEREST_RATE_CHANGES_SCAN_DAYS is taken. If it is not set,
-    the default number of days is 7.
-    """
-    from swpt_trade.table_scanners import InterestRateChangesScanner
-
-    logger = logging.getLogger(__name__)
-    logger.info("Started interest rate changes scanner.")
-    days = days or current_app.config["APP_INTEREST_RATE_CHANGES_SCAN_DAYS"]
-    assert days > 0.0
-    scanner = InterestRateChangesScanner()
-    scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
-
-
-@click.option("-d", "--days", type=float, help="The number of days.")
-@click.option(
-    "--quit-early",
-    is_flag=True,
-    default=False,
-    help="Exit after some time (mainly useful during testing).",
-)
 def scan_recently_needed_collectors(days, quit_early):
     """Start a process that garbage collects recently needed collector
     records.
@@ -407,8 +355,6 @@ _all_scans = [
     scan_debtor_locator_claims,
     scan_trading_policies,
     scan_worker_accounts,
-    scan_interest_rate_changes,
-    scan_needed_worker_accounts,
     scan_recently_needed_collectors,
     scan_account_locks,
     scan_creditor_participations,

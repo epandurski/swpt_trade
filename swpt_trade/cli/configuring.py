@@ -297,8 +297,6 @@ def verify_shard_content():
         try:
             verify_table(conn, models.AccountLock.creditor_id)
             verify_table(conn, models.CreditorParticipation.creditor_id)
-            verify_table(conn, models.InterestRateChange.creditor_id)
-            verify_table(conn, models.NeededWorkerAccount.creditor_id)
             verify_table(conn, models.TradingPolicy.creditor_id)
             verify_table(conn, models.DebtorLocatorClaim.debtor_id)
             verify_table(conn, models.RecentlyNeededCollector.debtor_id)
@@ -309,8 +307,6 @@ def verify_shard_content():
             verify_table(conn, models.WorkerDispatching.collector_id)
             verify_table(conn, models.WorkerReceiving.to_collector_id)
             verify_table(conn, models.WorkerSending.from_collector_id)
-            verify_table(conn, models.CollectorStatusChange.collector_id)
-            verify_table(conn, models.NeededCollectorAccount.debtor_id)
             verify_table(
                 conn,
                 models.DebtorInfoDocument.debtor_info_locator,
