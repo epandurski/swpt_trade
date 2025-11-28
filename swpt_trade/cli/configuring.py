@@ -295,6 +295,9 @@ def verify_shard_content():
     with db.engine.connect() as conn:
         logger = logging.getLogger(__name__)
         try:
+            # NOTE: Basically, every table that relies on a table
+            # scanner to clean up the records from the parent shard
+            # must be listed here.
             verify_table(conn, models.AccountLock.creditor_id)
             verify_table(conn, models.CreditorParticipation.creditor_id)
             verify_table(conn, models.TradingPolicy.creditor_id)
@@ -312,6 +315,8 @@ def verify_shard_content():
                 models.DebtorInfoDocument.debtor_info_locator,
                 match_str=True,
             )
+
+            # These are the SMP signals that this app emits.
             verify_table(conn, models.ConfigureAccountSignal.creditor_id)
             verify_table(conn, models.PrepareTransferSignal.creditor_id)
             verify_table(conn, models.FinalizeTransferSignal.creditor_id)
