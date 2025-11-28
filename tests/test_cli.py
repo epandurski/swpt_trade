@@ -2838,7 +2838,7 @@ def test_run_phase3_subphase5(
         current_ts,
         restore_sharding_realm,
 ):
-    app.config["SHARDING_REALM"] = ShardingRealm("1.#")
+    app.config["SHARDING_REALM"] = sr = ShardingRealm("1.#")
     app.config["DELETE_PARENT_SHARD_RECORDS"] = True
 
     mocker.patch("swpt_trade.run_turn_subphases.INSERT_BATCH_SIZE", new=1)
@@ -2970,10 +2970,12 @@ def test_run_phase3_subphase5(
             blocked_amount_ts=current_ts - timedelta(days=990),
         )
     )
+
+    assert sr.match(0x0000010000000004)
     db.session.add(
         # Will be removed and its status set to 1.
         m.NeededWorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=5555,
             collection_disabled_since=current_ts - timedelta(days=1000),
             blocked_amount=1000,
@@ -3232,7 +3234,7 @@ def test_run_phase3_subphase5(
 
     cscs = m.CollectorStatusChange.query.all()
     assert len(cscs) == 1
-    assert cscs[0].collector_id == 0x0000010000000001
+    assert cscs[0].collector_id == 0x0000010000000004
     assert cscs[0].debtor_id == 5555
     assert cscs[0].from_status == 3
     assert cscs[0].to_status == 1

@@ -1360,6 +1360,7 @@ def _update_worker_account_surplus_amounts() -> None:
 
 
 def _detect_broken_needed_worker_accounts() -> None:
+    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
     worker_account_subquery = (
         select(1)
         .select_from(WorkerAccount)
@@ -1388,19 +1389,22 @@ def _detect_broken_needed_worker_accounts() -> None:
                     .execution_options(synchronize_session=False)
                     .where(NEEDED_WORKER_ACCOUNT_PK.in_(rows))
                 )
-                db.session.execute(
-                    insert(CollectorStatusChange).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                        synchronize_session=False,
-                    ),
-                    [
-                        {
-                            "collector_id": row.creditor_id,
-                            "debtor_id": row.debtor_id,
-                            "from_status": 3,
-                            "to_status": 1,
-                            "account_id": None,
-                        }
-                        for row in rows
-                    ],
+                status_change_dicts = (
+                    {
+                        "collector_id": row.creditor_id,
+                        "debtor_id": row.debtor_id,
+                        "from_status": 3,
+                        "to_status": 1,
+                        "account_id": None,
+                    }
+                    for row in rows
+                    if sharding_realm.match(row.creditor_id)
                 )
+                if status_change_dicts:
+                    db.session.execute(
+                        insert(CollectorStatusChange).execution_options(
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
+                        ),
+                        status_change_dicts,
+                    )
