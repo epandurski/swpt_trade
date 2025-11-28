@@ -28,8 +28,8 @@ EPS = 1e-5
 @atomic
 def configure_worker_account(
         *,
-        debtor_id: int,
         collector_id: int,
+        debtor_id: int,
         max_postponement: timedelta,
 ) -> None:
     def has_worker_account():
