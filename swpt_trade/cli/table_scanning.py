@@ -20,9 +20,7 @@ def scan_debtor_info_documents(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the debtor info documents table. If the number
-    of days is not specified, the value of the environment variable
-    APP_DEBTOR_INFO_DOCUMENTS_SCAN_DAYS is taken. If it is not set,
-    the default number of days is 7.
+    of days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import DebtorInfoDocumentsScanner
 
@@ -46,9 +44,7 @@ def scan_debtor_locator_claims(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the debtor locator claims table. If the number
-    of days is not specified, the value of the environment variable
-    APP_DEBTOR_LOCATOR_CLAIMS_SCAN_DAYS is taken. If it is not set,
-    the default number of days is 1.
+    of days is not specified, the default is 1 day.
     """
     from swpt_trade.table_scanners import DebtorLocatorClaimsScanner
 
@@ -72,9 +68,7 @@ def scan_trading_policies(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the trading policies table. If the number of
-    days is not specified, the value of the environment variable
-    APP_TRADING_POLICIES_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import TradingPoliciesScanner
 
@@ -98,9 +92,7 @@ def scan_worker_accounts(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker accounts table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_ACCOUNTS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import WorkerAccountsScanner
 
@@ -125,9 +117,7 @@ def scan_recently_needed_collectors(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the debtor locator claims table. If the number
-    of days is not specified, the value of the environment variable
-    APP_RECENTLY_NEEDED_COLLECTORS_SCAN_DAYS is taken. If it is not
-    set, the default number of days is 7.
+    of days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import RecentlyNeededCollectorsScanner
 
@@ -153,9 +143,7 @@ def scan_account_locks(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the account locks table. If the number of days
-    is not specified, the value of the environment variable
-    APP_ACCOUNT_LOCKS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import AccountLocksScanner
 
@@ -180,9 +168,7 @@ def scan_creditor_participations(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the creditor participations table. If the
-    number of days is not specified, the value of the environment
-    variable APP_CREDITOR_PARTICIPATIONS_SCAN_DAYS is taken. If it is
-    not set, the default number of days is 7.
+    number of days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import CreditorParticipationsScanner
 
@@ -206,9 +192,7 @@ def scan_dispatching_statuses(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the dispatching status table. If the number of
-    days is not specified, the value of the environment variable
-    APP_DISPATCHING_STATUSES_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import DispatchingStatusesScanner
 
@@ -232,9 +216,7 @@ def scan_worker_collectings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker collecting table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_COLLECTINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 3.
+    days is not specified, the default is 3 days.
     """
     from swpt_trade.table_scanners import WorkerCollectingsScanner
 
@@ -258,9 +240,7 @@ def scan_worker_sendings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker sending table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_SENDINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 1.
+    days is not specified, the value default is 1 day.
     """
     from swpt_trade.table_scanners import WorkerSendingsScanner
 
@@ -284,9 +264,7 @@ def scan_worker_receivings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker receiving table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_RECEIVINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 1.
+    days is not specified, the value default is 1 day.
     """
     from swpt_trade.table_scanners import WorkerReceivingsScanner
 
@@ -310,9 +288,7 @@ def scan_worker_dispatchings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker dispatching table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_DISPATCHINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import WorkerDispatchingsScanner
 
@@ -336,9 +312,7 @@ def scan_transfer_attempts(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the transfer attempt table. If the number of
-    days is not specified, the value of the environment variable
-    APP_TRANSFER_ATTEMPTS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import TransferAttemptsScanner
 
