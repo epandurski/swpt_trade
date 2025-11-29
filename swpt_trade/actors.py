@@ -6,6 +6,7 @@ from marshmallow import ValidationError
 from flask import current_app
 import swpt_pythonlib.protocol_schemas as ps
 from swpt_pythonlib import rabbitmq
+from swpt_trade.extensions import db
 from swpt_trade import procedures, schemas, utils
 from swpt_trade.models import (
     AGENT_TRANSFER_NOTE_FORMAT,
@@ -852,4 +853,5 @@ class SmpConsumer(rabbitmq.Consumer):
             raise RuntimeError("The server is not responsible for this shard.")
 
         actor(**message_content)
+        db.session.close()
         return True

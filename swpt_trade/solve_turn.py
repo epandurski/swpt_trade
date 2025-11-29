@@ -588,3 +588,5 @@ def _delete_stuck_collector_accounts() -> None:
                         .where(COLLECTOR_ACCOUNT_PK.in_(to_delete))
                     )
                 db.session.commit()
+
+    db.session.close()

@@ -152,6 +152,7 @@ def process_delayed_account_transfers() -> int:
                 db.session.commit()
                 count += len(rows)
 
+    db.session.close()
     return count
 
 
@@ -229,6 +230,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
 
                 db.session.commit()
 
+    db.session.close()
+
 
 def update_dispatching_statuses_with_everything_sent() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
@@ -285,6 +288,8 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                     )
 
                 db.session.commit()
+
+    db.session.close()
 
 
 def signal_dispatching_statuses_ready_to_dispatch() -> None:
@@ -363,6 +368,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
 
                 db.session.commit()
 
+    db.session.close()
+
 
 def delete_dispatching_statuses_with_everything_dispatched() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
@@ -416,3 +423,5 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     )
 
                 db.session.commit()
+
+    db.session.close()

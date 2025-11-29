@@ -15,6 +15,7 @@ from swpt_pythonlib.multiproc_utils import (
     spawn_worker_processes,
     try_unblock_signals,
 )
+from swpt_trade.extensions import db
 from swpt_trade.utils import u16_to_i16
 from swpt_trade import procedures
 from swpt_trade import sync_collectors
@@ -78,12 +79,15 @@ def handle_pristine_collectors(threads, wait, quit_early):
         )
 
     def handle_pristine_collector(debtor_id, collector_id):
-        assert sharding_realm.match(collector_id)
-        procedures.configure_worker_account(
-            debtor_id=debtor_id,
-            collector_id=collector_id,
-            max_postponement=max_postponement,
-        )
+        try:
+            assert sharding_realm.match(collector_id)
+            procedures.configure_worker_account(
+                debtor_id=debtor_id,
+                collector_id=collector_id,
+                max_postponement=max_postponement,
+            )
+        finally:
+            db.session.close()
 
     logger = logging.getLogger(__name__)
     logger.info("Started pristine collector accounts processor.")

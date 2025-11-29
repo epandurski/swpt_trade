@@ -84,6 +84,8 @@ def process_collector_status_changes():
                 )
                 db.session.commit()
 
+    db.session.close()
+
 
 def create_needed_collector_accounts():
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
@@ -108,3 +110,5 @@ def create_needed_collector_accounts():
                     .where(NEEDED_COLLECTOR_ACCOUNT_PK.in_(rows))
                 )
                 db.session.commit()
+
+    db.session.close()

@@ -1354,6 +1354,7 @@ def _update_worker_account_surplus_amounts() -> None:
         ) as result:
             for rows in batched(result, DELETE_BATCH_SIZE):
                 for row in rows:
+                    signals = []
                     wrong_shard = []
                     if sharding_realm.match(row.creditor_id):
                         # TODO: Send a signal, which if `surplus_ts <
@@ -1367,12 +1368,16 @@ def _update_worker_account_surplus_amounts() -> None:
                         # `last_change_ts > blocked_amount_ts +
                         # TD_DAY`.)
                         #
-                        # Like this: db.session.add(a_signal)
+                        # Like this: signals.append(a_signal)
                         pass
                     else:
                         wrong_shard.append(row)
 
+                    db.session.add_all(signals)
                     db.session.flush()
+                    for x in signals:
+                        db.session.expunge(x)
+
                     _kill_needed_worker_accounts_and_rate_stats(wrong_shard)
 
 
@@ -1479,4 +1484,7 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     )
     for x in interest_rate_changes_to_delete:
         db.session.delete(x)
+
     db.session.flush()
+    for x in interest_rate_changes_to_delete:
+        db.session.expunge(x)
