@@ -4,6 +4,7 @@ import time
 import signal
 import sys
 import click
+import random
 from typing import Any
 from flask import current_app
 from flask.cli import with_appcontext
@@ -186,6 +187,8 @@ def flush_messages(
 
         with app.app_context():
             signalbus: SignalBus = current_app.extensions["signalbus"]
+            time.sleep(wait * random.random())
+
             while not stopped:
                 started_at = time.time()
                 try:
