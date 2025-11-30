@@ -569,7 +569,7 @@ def _delete_stuck_collector_accounts() -> None:
                     CollectorAccount.latest_status_change_at < cutoff_ts,
                 )
         ) as result:
-            for rows in batched(result, DELETE_BATCH_SIZE):
+            for rows in result.partitions(DELETE_BATCH_SIZE):
                 to_delete = (
                     db.session.execute(
                         select(

@@ -10,7 +10,6 @@ from swpt_trade.models import (
     NeededCollectorAccount,
 )
 from swpt_trade import procedures
-from swpt_trade.utils import batched
 
 SELECT_BATCH_SIZE = 50000
 UPDATE_BATCH_SIZE = 5000
@@ -57,7 +56,7 @@ def process_collector_status_changes():
                     CollectorStatusChange.account_id,
                 )
         ) as result:
-            for rows in batched(result, UPDATE_BATCH_SIZE):
+            for rows in result.partitions(UPDATE_BATCH_SIZE):
                 dicts_to_update = [
                     {
                         "b_collector_id": row.collector_id,
@@ -97,7 +96,7 @@ def create_needed_collector_accounts():
                     NeededCollectorAccount.collector_id,
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 to_insert = [
                     row for row in rows if sharding_realm.match(row.debtor_id)
                 ]

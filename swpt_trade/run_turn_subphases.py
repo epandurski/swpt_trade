@@ -120,7 +120,7 @@ def _populate_debtor_infos(w_conn, s_conn, turn_id):
                 DebtorInfoDocument.peg_exchange_rate,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -165,7 +165,7 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
             )
             .where(DebtorLocatorClaim.debtor_info_locator != null())
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -219,7 +219,7 @@ def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
                     TradingPolicy.min_principal <= TradingPolicy.max_principal,
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 dicts_to_insert = [
                     {
                         "turn_id": turn_id,
@@ -544,7 +544,7 @@ def _copy_usable_collectors(bp: BidProcessor) -> None:
                     CollectorAccount.status
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 dicts_to_insert = [
                     {
                         "debtor_id": row.debtor_id,
@@ -634,7 +634,7 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
                 AccountLock.amount < 0,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -685,7 +685,7 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
                 AccountLock.amount > 0,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -765,7 +765,7 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 CreditorTaking.creditor_hash.op("&")(hash_mask) == hash_prefix,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -809,7 +809,7 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 CreditorGiving.amount > 1,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -860,7 +860,7 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 != CollectorCollecting.collector_id,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "collector_id": row.collector_id,
@@ -919,7 +919,7 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 CollectorSending.amount > 1,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "from_collector_id": row.from_collector_id,
@@ -977,7 +977,7 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 CollectorReceiving.amount > 1,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "to_collector_id": row.to_collector_id,
@@ -1038,7 +1038,7 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 != CollectorDispatching.collector_id,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "collector_id": row.collector_id,
@@ -1094,7 +1094,7 @@ def _insert_revise_account_lock_signals(worker_turn):
                 )
                 .where(AccountLock.turn_id == turn_id)
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 dicts_to_insert = [
                     {
                         "creditor_id": row.creditor_id,
@@ -1312,7 +1312,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                 .select_from(NeededWorkerAccount)
                 .where(nwa_row_filter)
         ) as result:
-            for rows in batched(result, UPDATE_BATCH_SIZE):
+            for rows in result.partitions(UPDATE_BATCH_SIZE):
                 dicts_to_update = [
                     {
                         "b_creditor_id": row.creditor_id,
@@ -1352,7 +1352,7 @@ def _update_worker_account_surplus_amounts() -> None:
                     > NeededWorkerAccount.blocked_amount_ts + TD_DAY
                 )
         ) as result:
-            for rows in batched(result, DELETE_BATCH_SIZE):
+            for rows in result.partitions(DELETE_BATCH_SIZE):
                 for row in rows:
                     signals = []
                     wrong_shard = []
@@ -1417,7 +1417,7 @@ def _kill_broken_worker_accounts() -> None:
                     not_(worker_account_subquery),
                 )
         ) as result:
-            for rows in batched(result, KILL_BROKEN_ACCOUNTS_BATCH_SIZE):
+            for rows in result.partitions(KILL_BROKEN_ACCOUNTS_BATCH_SIZE):
                 _kill_needed_worker_accounts_and_rate_stats(rows)
                 status_change_dicts = (
                     {

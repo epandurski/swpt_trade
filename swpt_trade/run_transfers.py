@@ -26,7 +26,6 @@ from swpt_trade.models import (
     DelayedAccountTransfer,
     WorkerTurn,
 )
-from swpt_trade.utils import batched
 
 DISPATCHING_STATUS_PK = tuple_(
     DispatchingStatus.collector_id,
@@ -101,7 +100,7 @@ def process_delayed_account_transfers() -> int:
                     )
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 to_replay = [
                     dict(
                         creditor_id=row.creditor_id,
@@ -182,7 +181,7 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                     not_(pending_collectings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -258,7 +257,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                     not_(pending_sendings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -319,7 +318,7 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                     not_(pending_receivings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -395,7 +394,7 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     not_(pending_dispatchings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
