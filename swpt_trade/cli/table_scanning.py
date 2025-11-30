@@ -1,4 +1,5 @@
 import logging
+import sys
 import click
 import time
 import threading
@@ -345,21 +346,28 @@ for scan in _all_scans:
 
 @swpt_trade.command("scan_all")
 def scan_all():  # pragma: no cover
+    """Start a process that garbage collects rows in all relevant tables.
+
+    For each one of the relevant tables, the default intended duration
+    of a single pass will be used.
+    """
+
     app = current_app._get_current_object()
+    error_in = None
 
     def wrap(f):
         def wrapper_func(*args, **kwargs):
+            nonlocal error_in
             logger = logging.getLogger(__name__)
             ctx = app.app_context()
             ctx.push()
-            while True:
-                try:
-                    f(*args, **kwargs)
-                except Exception:
-                    logger.exception("Caught error in %s.", f.__name__)
-                else:
-                    logger.error("Unexpected return from %s.", f.__name__)
-                time.sleep(60.0)
+            try:
+                f(*args, **kwargs)
+            except Exception:
+                logger.exception("Caught error in %s.", f.__name__)
+            else:
+                logger.error("Unexpected return from %s.", f.__name__)
+            error_in = f.__name__
         return wrapper_func
 
     for t in [
@@ -372,5 +380,9 @@ def scan_all():  # pragma: no cover
     ]:
         t.start()
 
-    while True:
+    while error_in is None:
         time.sleep(5.0)
+
+    logger = logging.getLogger(__name__)
+    logger.error("Exiting because an error has occurred in %s.", error_in)
+    sys.exit(1)
