@@ -1,4 +1,4 @@
-from typing import TypeVar, Callable, Sequence, List, Iterable, Tuple
+from typing import TypeVar, Callable, Sequence, List, Iterable
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, delete, text
 from sqlalchemy.dialects import postgresql
@@ -225,26 +225,6 @@ def get_turns_by_ids(turn_ids: List[int]) -> Sequence[Turn]:
         .filter(Turn.turn_id.in_(turn_ids))
         .all()
     )
-
-
-@atomic
-def get_pristine_collectors(
-        *,
-        hash_mask: int,
-        hash_prefix: int,
-        max_count: int = None,
-) -> Sequence[Tuple[int, int]]:
-    query = (
-        select(CollectorAccount.debtor_id, CollectorAccount.collector_id)
-        .where(
-            CollectorAccount.status == text("0"),
-            CollectorAccount.collector_hash.op("&")(hash_mask) == hash_prefix,
-        )
-    )
-    if max_count is not None:
-        query = query.limit(max_count)
-
-    return db.session.execute(query).all()
 
 
 @atomic

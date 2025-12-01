@@ -1414,6 +1414,7 @@ def test_handle_pristine_collectors(
         ]
     )
     assert result.exit_code == 0
+    db_session.close()
     cscs = m.CollectorStatusChange.query.all()
     cscs.sort(key=lambda x: (x.debtor_id, x.collector_id))
     assert len(cscs) == 2

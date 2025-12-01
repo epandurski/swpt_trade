@@ -71,11 +71,11 @@ def handle_pristine_collectors(threads, wait, quit_early):
     hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
     hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
 
-    def get_args_collection():
-        return procedures.get_pristine_collectors(
+    def iter_args_collections():
+        return sync_collectors.iter_pristine_collectors(
             hash_mask=hash_mask,
             hash_prefix=hash_prefix,
-            max_count=max_count,
+            yield_per=max_count,
         )
 
     def handle_pristine_collector(debtor_id, collector_id):
@@ -95,10 +95,9 @@ def handle_pristine_collectors(threads, wait, quit_early):
 
     ThreadPoolProcessor(
         threads,
-        get_args_collection=get_args_collection,
+        iter_args_collections=iter_args_collections,
         process_func=handle_pristine_collector,
         wait_seconds=wait,
-        max_count=max_count,
     ).run(quit_early=quit_early)
 
 

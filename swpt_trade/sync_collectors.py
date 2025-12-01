@@ -1,7 +1,8 @@
+from typing import Iterable
 from datetime import datetime, timezone
 from flask import current_app
 from sqlalchemy import select, update, delete, bindparam
-from sqlalchemy.sql.expression import func, tuple_
+from sqlalchemy.sql.expression import func, text, tuple_
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -111,3 +112,25 @@ def create_needed_collector_accounts():
                 db.session.commit()
 
     db.session.close()
+
+
+def iter_pristine_collectors(
+        *,
+        hash_mask: int,
+        hash_prefix: int,
+        yield_per: int,
+) -> Iterable[list[tuple[int, int]]]:
+    with db.engines["solver"].connect() as s_conn:
+        with s_conn.execution_options(yield_per=yield_per).execute(
+                select(
+                    CollectorAccount.debtor_id,
+                    CollectorAccount.collector_id,
+                )
+                .where(
+                    CollectorAccount.status == text("0"),
+                    CollectorAccount.collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
+                )
+        ) as result:
+            for rows in result.partitions():
+                yield rows

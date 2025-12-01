@@ -1354,8 +1354,8 @@ def _update_worker_account_surplus_amounts() -> None:
         ) as result:
             for rows in result.partitions(DELETE_BATCH_SIZE):
                 for row in rows:
-                    signals = []
-                    wrong_shard = []
+                    signal_dicts = []
+                    accounts_not_from_this_shard = []
                     if sharding_realm.match(row.creditor_id):
                         # TODO: Send a signal, which if `surplus_ts <
                         # collection_disabled_since` will overwrite
@@ -1368,17 +1368,23 @@ def _update_worker_account_surplus_amounts() -> None:
                         # `last_change_ts > blocked_amount_ts +
                         # TD_DAY`.)
                         #
-                        # Like this: signals.append(a_signal)
+                        # Like this: signal_dicts.append(a_signal)
                         pass
                     else:
-                        wrong_shard.append(row)
+                        accounts_not_from_this_shard.append(row)
 
-                    db.session.add_all(signals)
-                    db.session.flush()
-                    for x in signals:
-                        db.session.expunge(x)
-
-                    _kill_needed_worker_accounts_and_rate_stats(wrong_shard)
+                    if signal_dicts:
+                        db.session.execute(
+                            insert(CalculateSurplusSignal).execution_options(
+                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                                synchronize_session=False,
+                            ),
+                            signal_dicts,
+                        )
+                    if accounts_not_from_this_shard:
+                        _kill_needed_worker_accounts_and_rate_stats(
+                            accounts_not_from_this_shard
+                        )
 
 
 def _kill_broken_worker_accounts() -> None:
@@ -1441,9 +1447,6 @@ def _kill_broken_worker_accounts() -> None:
 
 
 def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
-    if len(primary_keys) == 0:  # pragma: no cover
-        return
-
     db.session.execute(
         delete(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
