@@ -115,6 +115,11 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     # queue) for the external messages; and another classical queue or
     # a stream for the internal messages, of which we could have a
     # lot, but for which we do not necessarily need high-availability.
+    # *However*, if the two queue are located on different broker
+    # servers, it might become feasible to use quorum queues for both,
+    # because in this case the broker that has too long queries will
+    # apply "back pressure", but this will not impact the other
+    # broker.
     channel.queue_declare(dead_letter_queue_name, durable=True)
     logger.info('Declared "%s" dead-letter queue.', dead_letter_queue_name)
 
