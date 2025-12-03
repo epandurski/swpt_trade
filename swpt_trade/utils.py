@@ -347,3 +347,24 @@ def generate_collector_account_pkeys(
                 break
 
     return new_accounts
+
+
+def calc_balance_at(
+    *,
+    principal: int,
+    interest: float,
+    interest_rate: float,
+    last_change_ts: datetime,
+    at: datetime,
+) -> float:
+    balance = principal + interest
+
+    if balance > 0.0:
+        if interest_rate < -99.9999:
+            return 0.0
+
+        k = calc_k(interest_rate)
+        t = max(0.0, (at - last_change_ts).total_seconds())
+        balance *= math.exp(k * t)
+
+    return balance

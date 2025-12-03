@@ -729,13 +729,10 @@ def _on_calculate_surplus_signal(
     *args,
     **kwargs
 ) -> None:
-    # TODO: If `surplus_ts < collection_disabled_since`, overwrite the
-    # surplus amount, and in any case, schedule the restoration of the
-    # status of the solver's collector account to 2. Do not forget to
-    # assert/check that `blocked_amount_ts >=
-    # collection_disabled_since` and `last_change_ts >
-    # blocked_amount_ts + TD_DAY`.)
-    pass
+    procedures.process_calculate_surplus_signal(
+        collector_id=collector_id,
+        debtor_id=debtor_id,
+    )
 
 
 _MESSAGE_TYPES = {

@@ -18,6 +18,7 @@ from swpt_trade.utils import (
     calc_k,
     calc_demurrage,
     DispatchingData,
+    calc_balance_at,
 )
 
 
@@ -335,3 +336,47 @@ def test_dispatching_data():
     assert ll[1]["amount_to_send"] == 0
     assert ll[1]["number_to_receive"] == 0
     assert ll[1]["amount_to_dispatch"] == 0
+
+
+def test_calc_balance_at():
+    current_ts = datetime.now(tz=timezone.utc)
+
+    assert 1049.9 < calc_balance_at(
+        principal=1000,
+        interest=0.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) < 1050.1
+
+    assert 1049.9 < calc_balance_at(
+        principal=0,
+        interest=1000.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) < 1050.1
+
+    assert calc_balance_at(
+        principal=0,
+        interest=-1000.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) == -1000.0
+
+    assert calc_balance_at(
+        principal=1000,
+        interest=0.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts - timedelta(days=365)
+    ) == 1000.0
+
+    assert calc_balance_at(
+        principal=1000,
+        interest=0.0,
+        interest_rate=-100.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) == 0.0

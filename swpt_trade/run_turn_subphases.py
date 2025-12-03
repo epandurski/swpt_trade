@@ -31,6 +31,8 @@ from swpt_trade.solver import CandidateOfferAuxData, BidProcessor
 from swpt_trade.models import (
     TS0,
     MAX_INT64,
+    KNOWN_SURPLUS_AMOUNT_PREDICATE,
+    WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     DebtorInfoDocument,
     DebtorLocatorClaim,
     DebtorInfo,
@@ -78,7 +80,6 @@ SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
 NUMERIC = Numeric(36, 0)
-TD_DAY = timedelta(days=1)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -410,7 +411,7 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         # for the possible demurrage, the locked amount will be bigger
         # than the bid amount. Therefore, we must factor the possible
         # demurrage again, and also add some safety cushion.
-        lock_correction_factor = 0.9999 * calc_demurrage(
+        lock_correction_factor = 0.998 * calc_demurrage(
             row.demurrage_rate, collection_deadline - current_ts
         )
         # Return a negative number (sell the available surplus).
@@ -1337,21 +1338,8 @@ def _update_worker_account_surplus_amounts() -> None:
                     NeededWorkerAccount.debtor_id,
                 )
                 .select_from(NeededWorkerAccount)
-                .join(
-                    WorkerAccount,
-                    and_(
-                        WorkerAccount.creditor_id
-                        == NeededWorkerAccount.creditor_id,
-                        WorkerAccount.debtor_id
-                        == NeededWorkerAccount.debtor_id,
-                    ),
-                )
-                .where(
-                    NeededWorkerAccount.blocked_amount_ts
-                    >= NeededWorkerAccount.collection_disabled_since,
-                    WorkerAccount.last_change_ts
-                    > NeededWorkerAccount.blocked_amount_ts + TD_DAY
-                )
+                .join(WorkerAccount, WORKER_ACCOUNT_TABLES_JOIN_PREDICATE)
+                .where(KNOWN_SURPLUS_AMOUNT_PREDICATE)
         ) as result:
             for rows in result.partitions(2 * KILL_ACCOUNTS_BATCH_SIZE):
                 for row in rows:

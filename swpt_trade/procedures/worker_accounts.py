@@ -3,11 +3,13 @@ from typing import TypeVar, Callable, Optional
 from datetime import date, datetime, timezone, timedelta
 from swpt_pythonlib.utils import Seqnum
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import exc, load_only, Load
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     HUGE_NEGLIGIBLE_AMOUNT,
     DEFAULT_CONFIG_FLAGS,
+    KNOWN_SURPLUS_AMOUNT_PREDICATE,
+    WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     NeededWorkerAccount,
     WorkerAccount,
     InterestRateChange,
@@ -17,12 +19,27 @@ from swpt_trade.models import (
     CollectorStatusChange,
     NeededCollectorAccount,
 )
-from swpt_trade.utils import generate_collector_account_pkeys
+from swpt_trade.utils import (
+    generate_collector_account_pkeys,
+    contain_principal_overflow,
+    calc_balance_at,
+)
+
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
 EPS = 1e-5
+WORKER_ACCOUNT_LOAD_OPTIONS = Load(WorkerAccount).load_only(
+    WorkerAccount.principal,
+    WorkerAccount.interest,
+    WorkerAccount.interest_rate,
+    WorkerAccount.last_change_ts,
+    WorkerAccount.surplus_amount,
+    WorkerAccount.surplus_ts,
+    WorkerAccount.surplus_spent_amount,
+    WorkerAccount.surplus_last_transfer_number,
+)
 
 
 @atomic
@@ -282,6 +299,62 @@ def process_account_purge_signal(
         db.session.delete(worker_account)
 
     return is_needed_account
+
+
+@atomic
+def process_calculate_surplus_signal(
+        *,
+        collector_id: int,
+        debtor_id: int,
+) -> None:
+    query = (
+        db.session.query(WorkerAccount, NeededWorkerAccount)
+        .join(NeededWorkerAccount, WORKER_ACCOUNT_TABLES_JOIN_PREDICATE)
+        .filter(
+            WorkerAccount.creditor_id == collector_id,
+            WorkerAccount.debtor_id == debtor_id,
+            KNOWN_SURPLUS_AMOUNT_PREDICATE,
+        )
+        .options(WORKER_ACCOUNT_LOAD_OPTIONS)
+        .with_for_update(of=WorkerAccount)
+    )
+    try:
+        worker_account, needed_worker_account = query.one()
+    except exc.NoResultFound:
+        return
+
+    if (
+            worker_account.surplus_ts
+            < needed_worker_account.collection_disabled_since
+    ):
+        worker_account.surplus_amount = max(
+            0,
+            contain_principal_overflow(
+                math.floor(
+                    calc_balance_at(
+                        principal=worker_account.principal,
+                        interest=worker_account.interest,
+                        interest_rate=worker_account.interest_rate,
+                        last_change_ts=worker_account.last_change_ts,
+                        at=worker_account.last_heartbeat_ts,
+                    ) * 0.998  # some safety cushion
+                )
+                - 1
+                - needed_worker_account.blocked_amount
+            ),
+        )
+        worker_account.surplus_ts = worker_account.last_heartbeat_ts
+        worker_account.surplus_spent_amount = 0
+        worker_account.surplus_last_transfer_number += 1
+
+    db.session.add(
+        CollectorStatusChange(
+            collector_id=collector_id,
+            debtor_id=debtor_id,
+            from_status=3,
+            to_status=2,
+        )
+    )
 
 
 @atomic

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import timedelta
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
 from .common import get_now_utc
@@ -109,6 +110,18 @@ class WorkerAccount(db.Model):
             ),
         },
     )
+
+
+KNOWN_SURPLUS_AMOUNT_PREDICATE = and_(
+    NeededWorkerAccount.blocked_amount_ts
+    >= NeededWorkerAccount.collection_disabled_since,
+    WorkerAccount.last_heartbeat_ts
+    > NeededWorkerAccount.blocked_amount_ts + timedelta(days=1),
+)
+WORKER_ACCOUNT_TABLES_JOIN_PREDICATE = and_(
+    NeededWorkerAccount.creditor_id == WorkerAccount.creditor_id,
+    NeededWorkerAccount.debtor_id == WorkerAccount.debtor_id,
+)
 
 
 class InterestRateChange(db.Model):
