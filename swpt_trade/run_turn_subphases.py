@@ -1281,7 +1281,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
         # decide if the calculated blocked amount is up-to-date, we
         # consult the `blocked_amount_ts` field.
         NeededWorkerAccount.collection_disabled_since
-        > coalesce(NeededWorkerAccount.blocked_amount_ts, TS0) - sbd,
+        > coalesce(NeededWorkerAccount.blocked_amount_ts, TS0),
     )
 
     # NOTE: Setting `blocked_amount_ts` to `current_ts` guarantees
@@ -1295,7 +1295,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
             nwa.c.debtor_id == bindparam("b_debtor_id"),
             nwa.c.collection_disabled_since < current_ts - sbd,
             nwa.c.collection_disabled_since
-            > coalesce(nwa.c.blocked_amount_ts, TS0) - sbd,
+            > coalesce(nwa.c.blocked_amount_ts, TS0),
         )
         .values(
             blocked_amount=bindparam("b_blocked_amount"),
