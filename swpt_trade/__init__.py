@@ -440,6 +440,15 @@ def _check_config_sanity(c):  # pragma: nocover
             " configuration values."
         )
 
+    if (
+            c["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
+            > parse_timedelta(c["TURN_PERIOD"]).seconds
+    ):
+        raise RuntimeError(
+            "The configured value for HANDLE_PRISTINE_COLLECTORS_PERIOD is"
+            " to big. Choose a more appropriate value."
+        )
+
 
 def create_app(config_dict={}):
     from werkzeug.middleware.proxy_fix import ProxyFix
