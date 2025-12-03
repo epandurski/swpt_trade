@@ -43,6 +43,7 @@ from swpt_trade.models import (
     CandidateOfferSignal,
     NeededCollectorSignal,
     ReviseAccountLockSignal,
+    CalculateSurplusSignal,
     CollectorAccount,
     HoardedCurrency,
     UsableCollector,
@@ -1357,19 +1358,12 @@ def _update_worker_account_surplus_amounts() -> None:
                     signal_dicts = []
                     accounts_not_from_this_shard = []
                     if sharding_realm.match(row.creditor_id):
-                        # TODO: Send a signal, which if `surplus_ts <
-                        # collection_disabled_since` will overwrite
-                        # the surplus amount, and in any case, will
-                        # schedule the restoration of the status of
-                        # the solver's collector account to 2. (Do not
-                        # forget to assert/check in the signal handler
-                        # that `blocked_amount_ts >=
-                        # collection_disabled_since` and
-                        # `last_change_ts > blocked_amount_ts +
-                        # TD_DAY`.)
-                        #
-                        # Like this: signal_dicts.append(a_signal)
-                        pass
+                        signal_dicts.append(
+                            {
+                                "collector_id": row.creditor_id,
+                                "debtor_id": row.debtor_id,
+                            }
+                        )
                     else:
                         accounts_not_from_this_shard.append(row)
 

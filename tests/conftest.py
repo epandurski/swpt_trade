@@ -19,6 +19,7 @@ config_dict = {
     "APP_ACCOUNT_LOCK_MAX_DAYS": 365,
     "APP_RELEASED_ACCOUNT_LOCK_MAX_DAYS": 30,
     "APP_VERIFY_SHARD_YIELD_PER": 1,
+    "APP_SURPLUS_BLOCKING_DELAY_DAYS": 14.0,
     "SOLVER_CLIENT_POOL_SIZE": 0,
 }
 
@@ -57,6 +58,7 @@ def db_session(app):
         "TRUNCATE TABLE account_id_response_signal",
         "TRUNCATE TABLE start_sending_signal",
         "TRUNCATE TABLE start_dispatching_signal",
+        "TRUNCATE TABLE calculate_surplus_signal",
         "TRUNCATE TABLE replayed_account_transfer_signal",
         "TRUNCATE TABLE delayed_account_transfer",
         "TRUNCATE TABLE debtor_info_document",

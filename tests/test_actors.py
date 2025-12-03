@@ -408,6 +408,14 @@ def test_on_start_dispatching_signal(db_session, actors):
     )
 
 
+def test_on_calculate_surplus_signal(db_session, actors):
+    actors._on_calculate_surplus_signal(
+        collector_id=999,
+        debtor_id=D_ID,
+        ts=datetime.now(tz=timezone.utc),
+    )
+
+
 def test_consumer(db_session, app, actors, restore_sharding_realm):
     consumer = actors.SmpConsumer()
 

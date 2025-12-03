@@ -57,6 +57,7 @@ COLLECTOR_ID_SHARDED_MESSAGE_TYPES = set([
     "AccountIdResponse",
     "StartSending",
     "StartDispatching",
+    "CalculateSurplus",
 ])
 IRI_SHARDED_MESSAGE_TYPES = set([
     "FetchDebtorInfo",

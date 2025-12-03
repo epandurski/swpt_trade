@@ -2793,9 +2793,11 @@ def test_run_phase3_subphase5(
         collection_deadline=current_ts + timedelta(days=200),
         worker_turn_subphase=5,
     )
+
+    assert sr.match(0x0000010000000004)
     db.session.add(
         m.UsableCollector(
-            collector_id=0x0000010000000001,
+            collector_id=0x0000010000000004,
             debtor_id=666,
             account_id='666',
             disabled_at=current_ts - timedelta(days=2),
@@ -2803,7 +2805,7 @@ def test_run_phase3_subphase5(
     )
     db.session.add(
         m.UsableCollector(
-            collector_id=0x0000010000000001,
+            collector_id=0x0000010000000004,
             debtor_id=777,
             account_id='777',
             disabled_at=None,
@@ -2811,7 +2813,7 @@ def test_run_phase3_subphase5(
     )
     db.session.add(
         m.UsableCollector(
-            collector_id=0x0000010000000001,
+            collector_id=0x0000010000000004,
             debtor_id=888,
             account_id='888',
             disabled_at=None,
@@ -2819,7 +2821,7 @@ def test_run_phase3_subphase5(
     )
     params = {
         "creation_date": m.DATE0,
-        "last_change_ts": m.TS0,
+        "last_change_ts": current_ts - timedelta(seconds=1000),
         "last_change_seqnum": 1,
         "principal": 100,
         "interest": 31.4,
@@ -2835,14 +2837,14 @@ def test_run_phase3_subphase5(
     }
     db.session.add(
         m.NeededWorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=666,
             collection_disabled_since=None,
         )
     )
     db.session.add(
         m.WorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=666,
             account_id="666",
             **params,
@@ -2851,14 +2853,14 @@ def test_run_phase3_subphase5(
 
     db.session.add(
         m.NeededWorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=777,
             collection_disabled_since=current_ts,
         )
     )
     db.session.add(
         m.WorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=777,
             account_id="777",
             **params,
@@ -2867,16 +2869,16 @@ def test_run_phase3_subphase5(
 
     db.session.add(
         m.NeededWorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=999,
             collection_disabled_since=current_ts - timedelta(days=1000),
             blocked_amount=1000,
-            blocked_amount_ts=current_ts - timedelta(days=990),
+            blocked_amount_ts=current_ts - timedelta(days=1001),
         )
     )
     db.session.add(
         m.WorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=999,
             account_id="999",
             **params,
@@ -2885,7 +2887,7 @@ def test_run_phase3_subphase5(
 
     db.session.add(
         m.NeededWorkerAccount(
-            creditor_id=0x0000010000000001,
+            creditor_id=0x0000010000000004,
             debtor_id=4444,
             collection_disabled_since=None,
             blocked_amount=1000,
@@ -2893,11 +2895,11 @@ def test_run_phase3_subphase5(
         )
     )
 
-    assert sr.match(0x0000010000000004)
+    assert sr.match(0x0000010000000005)
     db.session.add(
         # Will be removed and its status set to 1.
         m.NeededWorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=0x0000010000000005,
             debtor_id=5555,
             collection_disabled_since=current_ts - timedelta(days=1000),
             blocked_amount=1000,
@@ -2907,7 +2909,7 @@ def test_run_phase3_subphase5(
     db.session.add(
         # Will be removed.
         m.InterestRateChange(
-            creditor_id=0x0000010000000004,
+            creditor_id=0x0000010000000005,
             debtor_id=5555,
             change_ts=current_ts - timedelta(days=1),
             interest_rate=1.5,
@@ -2916,7 +2918,7 @@ def test_run_phase3_subphase5(
     db.session.add(
         # Will be removed.
         m.InterestRateChange(
-            creditor_id=0x0000010000000004,
+            creditor_id=0x0000010000000005,
             debtor_id=5555,
             change_ts=current_ts,
             interest_rate=2.5,
@@ -2925,7 +2927,7 @@ def test_run_phase3_subphase5(
     db.session.add(
         # Will not be removed.
         m.InterestRateChange(
-            creditor_id=0x0000010000000004,
+            creditor_id=0x0000010000000005,
             debtor_id=5556,
             change_ts=current_ts,
             interest_rate=2.5,
@@ -2933,8 +2935,46 @@ def test_run_phase3_subphase5(
     )
 
     db.session.add(
-        m.AccountLock(
+        m.NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=5557,
+            collection_disabled_since=current_ts - timedelta(hours=40),
+            blocked_amount=2000,
+            blocked_amount_ts=current_ts - timedelta(hours=39),
+        )
+    )
+    db.session.add(
+        m.WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=5557,
+            account_id="5557",
+            **params,
+        )
+    )
+
+    assert not sr.match(0x0000010000000001)
+    db.session.add(
+        # Will be removed.
+        m.NeededWorkerAccount(
             creditor_id=0x0000010000000001,
+            debtor_id=5557,
+            collection_disabled_since=current_ts - timedelta(hours=40),
+            blocked_amount=2000,
+            blocked_amount_ts=current_ts - timedelta(hours=39),
+        )
+    )
+    db.session.add(
+        m.WorkerAccount(
+            creditor_id=0x0000010000000001,
+            debtor_id=5557,
+            account_id="5557",
+            **params,
+        )
+    )
+
+    db.session.add(
+        m.AccountLock(
+            creditor_id=0x0000010000000004,
             debtor_id=999,
             turn_id=1,
             collector_id=789,
@@ -2944,7 +2984,7 @@ def test_run_phase3_subphase5(
     )
     db.session.add(
         m.DispatchingStatus(
-            collector_id=0x0000010000000001,
+            collector_id=0x0000010000000004,
             turn_id=1,
             debtor_id=999,
             amount_to_collect=1000,
@@ -2963,7 +3003,7 @@ def test_run_phase3_subphase5(
     )
     db.session.add(
         m.DispatchingStatus(
-            collector_id=0x0000010000000001,
+            collector_id=0x0000010000000004,
             turn_id=2,
             debtor_id=999,
             amount_to_collect=1000,
@@ -2982,7 +3022,7 @@ def test_run_phase3_subphase5(
     )
     db.session.add(
         m.DispatchingStatus(
-            collector_id=0x0000010000000001,
+            collector_id=0x0000010000000004,
             turn_id=3,
             debtor_id=995,
             amount_to_collect=1000,
@@ -3160,38 +3200,43 @@ def test_run_phase3_subphase5(
 
     ncas = m.NeededWorkerAccount.query.all()
     ncas.sort(key=lambda x: x.debtor_id)
-    assert len(ncas) == 4
-    assert ncas[0].creditor_id == 0x0000010000000001
+    assert len(ncas) == 5
+    assert ncas[0].creditor_id == 0x0000010000000004
     assert ncas[0].debtor_id == 666
     assert ncas[0].collection_disabled_since == current_ts - timedelta(days=2)
     assert ncas[0].blocked_amount is None
-    assert ncas[1].creditor_id == 0x0000010000000001
+    assert ncas[1].creditor_id == 0x0000010000000004
     assert ncas[1].debtor_id == 777
     assert ncas[1].collection_disabled_since is None
     assert ncas[1].blocked_amount is None
-    assert ncas[2].creditor_id == 0x0000010000000001
+    assert ncas[2].creditor_id == 0x0000010000000004
     assert ncas[2].debtor_id == 999
     assert (
         ncas[2].collection_disabled_since == current_ts - timedelta(days=1000)
     )
     assert ncas[2].blocked_amount == 1522
     assert ncas[2].blocked_amount_ts >= current_ts
-    assert ncas[3].creditor_id == 0x0000010000000001
+    assert ncas[3].creditor_id == 0x0000010000000004
     assert ncas[3].debtor_id == 4444
     assert ncas[3].collection_disabled_since is None
     assert ncas[3].blocked_amount == 1000
 
     cscs = m.CollectorStatusChange.query.all()
     assert len(cscs) == 1
-    assert cscs[0].collector_id == 0x0000010000000004
+    assert cscs[0].collector_id == 0x0000010000000005
     assert cscs[0].debtor_id == 5555
     assert cscs[0].from_status == 3
     assert cscs[0].to_status == 1
 
     mrcs = m.InterestRateChange.query.all()
     assert len(mrcs) == 1
-    mrcs[0].creditor_id == 0x0000010000000004
+    mrcs[0].creditor_id == 0x0000010000000005
     mrcs[0].debtor_id == 5556
+
+    csss = m.CalculateSurplusSignal.query.all()
+    assert len(csss) == 1
+    assert csss[0].collector_id == 0x0000010000000004
+    assert csss[0].debtor_id == 5557
 
 
 @pytest.mark.parametrize("realm", ["0.#", "1.#"])

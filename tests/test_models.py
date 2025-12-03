@@ -27,6 +27,7 @@ def test_sibnalbus_burst_count(app):
     assert isinstance(m.AccountIdResponseSignal.signalbus_burst_count, int)
     assert isinstance(m.StartSendingSignal.signalbus_burst_count, int)
     assert isinstance(m.StartDispatchingSignal.signalbus_burst_count, int)
+    assert isinstance(m.CalculateSurplusSignal.signalbus_burst_count, int)
     assert isinstance(m.ReplayedAccountTransferSignal.signalbus_burst_count, int)
 
 

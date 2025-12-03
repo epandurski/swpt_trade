@@ -124,7 +124,8 @@ case $1 in
     flush_configure_accounts | flush_prepare_transfers | flush_finalize_transfers \
         | flush_fetch_debtor_infos | flush_store_documents | flush_discover_debtors \
         | flush_confirm_debtors | flush_candidate_offers \
-        | flush_needed_collectors | flush_revise_account_locks | flush_trigger_transfers \
+        | flush_needed_collectors | flush_revise_account_locks \
+        | flush_trigger_transfers | flush_calculate_surpluses \
         | flush_account_id_requests | flush_account_id_responses | flush_start_sendings \
         | flush_start_dispatchings | flush_replayed_account_transfers | flush_all)
 
@@ -143,6 +144,7 @@ case $1 in
         flush_account_id_responses=AccountIdResponseSignal
         flush_start_sendings=StartSendingSignal
         flush_start_dispatchings=StartDispatchingSignal
+        flush_calculate_surpluses=CalculateSurplusSignal
         flush_replayed_account_transfers=ReplayedAccountTransferSignal
         flush_all=
 

@@ -722,6 +722,22 @@ def _on_start_dispatching_signal(
     )
 
 
+def _on_calculate_surplus_signal(
+    collector_id: int,
+    debtor_id: int,
+    ts: datetime,
+    *args,
+    **kwargs
+) -> None:
+    # TODO: If `surplus_ts < collection_disabled_since`, overwrite the
+    # surplus amount, and in any case, schedule the restoration of the
+    # status of the solver's collector account to 2. Do not forget to
+    # assert/check that `blocked_amount_ts >=
+    # collection_disabled_since` and `last_change_ts >
+    # blocked_amount_ts + TD_DAY`.)
+    pass
+
+
 _MESSAGE_TYPES = {
     "RejectedConfig": (
         ps.RejectedConfigMessageSchema(),
@@ -798,6 +814,10 @@ _MESSAGE_TYPES = {
     "StartDispatching": (
         schemas.StartDispatchingMessageSchema(),
         _on_start_dispatching_signal,
+    ),
+    "CalculateSurplus": (
+        schemas.CalculateSurplusMessageSchema(),
+        _on_calculate_surplus_signal,
     ),
     "UpdatedLedger": (
         schemas.UpdatedLedgerMessageSchema(),
