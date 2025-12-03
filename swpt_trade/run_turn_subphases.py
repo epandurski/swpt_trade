@@ -1353,7 +1353,7 @@ def _update_worker_account_surplus_amounts() -> None:
                     > NeededWorkerAccount.blocked_amount_ts + TD_DAY
                 )
         ) as result:
-            for rows in result.partitions(DELETE_BATCH_SIZE):
+            for rows in result.partitions(2 * KILL_BROKEN_ACCOUNTS_BATCH_SIZE):
                 for row in rows:
                     signal_dicts = []
                     accounts_not_from_this_shard = []
