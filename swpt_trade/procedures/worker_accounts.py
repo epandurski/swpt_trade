@@ -337,7 +337,7 @@ def process_calculate_surplus_signal(
                         interest_rate=worker_account.interest_rate,
                         last_change_ts=worker_account.last_change_ts,
                         at=worker_account.last_heartbeat_ts,
-                    ) * 0.998  # some safety cushion
+                    ) * 0.997  # some safety cushion
                 )
                 - 1
                 - needed_worker_account.blocked_amount

@@ -411,7 +411,7 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         # for the possible demurrage, the locked amount will be bigger
         # than the bid amount. Therefore, we must factor the possible
         # demurrage again, and also add some safety cushion.
-        lock_correction_factor = 0.998 * calc_demurrage(
+        lock_correction_factor = 0.9999 * calc_demurrage(
             row.demurrage_rate, collection_deadline - current_ts
         )
         # Return a negative number (sell the available surplus).
