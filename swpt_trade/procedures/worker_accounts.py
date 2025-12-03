@@ -347,6 +347,10 @@ def process_calculate_surplus_signal(
         worker_account.surplus_spent_amount = 0
         worker_account.surplus_last_transfer_number += 1
 
+    assert (
+        worker_account.surplus_ts
+        >= needed_worker_account.collection_disabled_since
+    )
     db.session.add(
         CollectorStatusChange(
             collector_id=collector_id,
