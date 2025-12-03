@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import timedelta
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
-from .common import get_now_utc
+from .common import get_now_utc, TS0
 
 
 class NeededWorkerAccount(db.Model):
@@ -70,7 +70,7 @@ class WorkerAccount(db.Model):
     surplus_ts = db.Column(
         db.TIMESTAMP(timezone=True),
         nullable=False,
-        default=get_now_utc,
+        default=TS0,
         comment="The moment when the surplus was observed. This is needed"
                 " so that, for the current moment, we can calculate the"
                 " maximum possible demurrage that surplus may have suffered.",
