@@ -70,7 +70,7 @@ NEEDED_WORKER_ACCOUNT_PK = tuple_(
     NeededWorkerAccount.creditor_id,
     NeededWorkerAccount.debtor_id,
 )
-KILL_BROKEN_ACCOUNTS_BATCH_SIZE = 1000
+KILL_ACCOUNTS_BATCH_SIZE = 1000
 INSERT_BATCH_SIZE = 5000
 UPDATE_BATCH_SIZE = 5000
 DELETE_BATCH_SIZE = 5000
@@ -1353,7 +1353,7 @@ def _update_worker_account_surplus_amounts() -> None:
                     > NeededWorkerAccount.blocked_amount_ts + TD_DAY
                 )
         ) as result:
-            for rows in result.partitions(2 * KILL_BROKEN_ACCOUNTS_BATCH_SIZE):
+            for rows in result.partitions(2 * KILL_ACCOUNTS_BATCH_SIZE):
                 for row in rows:
                     signal_dicts = []
                     accounts_not_from_this_shard = []
@@ -1417,7 +1417,7 @@ def _kill_broken_worker_accounts() -> None:
                     not_(worker_account_subquery),
                 )
         ) as result:
-            for rows in result.partitions(KILL_BROKEN_ACCOUNTS_BATCH_SIZE):
+            for rows in result.partitions(KILL_ACCOUNTS_BATCH_SIZE):
                 _kill_needed_worker_accounts_and_rate_stats(rows)
                 status_change_dicts = (
                     {
