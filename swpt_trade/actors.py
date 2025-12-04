@@ -6,6 +6,7 @@ from marshmallow import ValidationError
 from flask import current_app
 import swpt_pythonlib.protocol_schemas as ps
 from swpt_pythonlib import rabbitmq
+from swpt_trade.extensions import db
 from swpt_trade import procedures, schemas, utils
 from swpt_trade.models import (
     AGENT_TRANSFER_NOTE_FORMAT,
@@ -567,21 +568,6 @@ def _on_confirm_debtor_signal(
     )
 
 
-def _on_activate_collector_signal(
-    debtor_id: int,
-    creditor_id: int,
-    account_id: str,
-    ts: datetime,
-    *args,
-    **kwargs
-) -> None:
-    procedures.activate_collector(
-        debtor_id=debtor_id,
-        collector_id=creditor_id,
-        account_id=account_id,
-    )
-
-
 def _on_candidate_offer_signal(
     turn_id: int,
     debtor_id: int,
@@ -611,20 +597,13 @@ def _on_needed_collector_signal(
     **kwargs
 ) -> None:
     cfg = current_app.config
-
-    # NOTE: When there are more than one "worker" servers, it is quite
-    # likely that more than one signal will be received for a given
-    # debtor ID because every "worker" server may send such a signal.
-    # Here we try to detect such duplicated signals, and avoid making
-    # repetitive queries to the central database.
-    if not procedures.is_recently_needed_collector(debtor_id):
-        procedures.ensure_collector_accounts(
-            debtor_id=debtor_id,
-            min_collector_id=cfg["MIN_COLLECTOR_ID"],
-            max_collector_id=cfg["MAX_COLLECTOR_ID"],
-            number_of_accounts=cfg["DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
-        )
-        procedures.mark_as_recently_needed_collector(debtor_id, ts)
+    procedures.register_needed_colector(
+        debtor_id=debtor_id,
+        needed_at=ts,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+        number_of_accounts=cfg["DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
+    )
 
 
 def _on_revise_account_lock_signal(
@@ -743,6 +722,19 @@ def _on_start_dispatching_signal(
     )
 
 
+def _on_calculate_surplus_signal(
+    collector_id: int,
+    debtor_id: int,
+    ts: datetime,
+    *args,
+    **kwargs
+) -> None:
+    procedures.process_calculate_surplus_signal(
+        collector_id=collector_id,
+        debtor_id=debtor_id,
+    )
+
+
 _MESSAGE_TYPES = {
     "RejectedConfig": (
         ps.RejectedConfigMessageSchema(),
@@ -788,10 +780,6 @@ _MESSAGE_TYPES = {
         schemas.ConfirmDebtorMessageSchema(),
         _on_confirm_debtor_signal,
     ),
-    "ActivateCollector": (
-        schemas.ActivateCollectorMessageSchema(),
-        _on_activate_collector_signal,
-    ),
     "CandidateOffer": (
         schemas.CandidateOfferMessageSchema(),
         _on_candidate_offer_signal,
@@ -823,6 +811,10 @@ _MESSAGE_TYPES = {
     "StartDispatching": (
         schemas.StartDispatchingMessageSchema(),
         _on_start_dispatching_signal,
+    ),
+    "CalculateSurplus": (
+        schemas.CalculateSurplusMessageSchema(),
+        _on_calculate_surplus_signal,
     ),
     "UpdatedLedger": (
         schemas.UpdatedLedgerMessageSchema(),
@@ -878,4 +870,5 @@ class SmpConsumer(rabbitmq.Consumer):
             raise RuntimeError("The server is not responsible for this shard.")
 
         actor(**message_content)
+        db.session.close()
         return True

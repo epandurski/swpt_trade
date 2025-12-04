@@ -418,53 +418,6 @@ def test_confirm_debtor_message():
                    for m in e.messages.values())
 
 
-def test_activate_collector_message():
-    s = schemas.ActivateCollectorMessageSchema()
-
-    data = s.loads("""{
-    "type": "ActivateCollector",
-    "debtor_id": 666,
-    "creditor_id": 123,
-    "account_id": "test_account",
-    "ts": "2022-01-01T00:00:00Z",
-    "unknown": "ignored"
-    }""")
-
-    assert data['type'] == 'ActivateCollector'
-    assert type(data['debtor_id']) is int
-    assert data['debtor_id'] == 666
-    assert type(data['creditor_id']) is int
-    assert data['creditor_id'] == 123
-    assert data['account_id'] == 'test_account'
-    assert data['ts'] == datetime.fromisoformat('2022-01-01T00:00:00+00:00')
-    assert "unknown" not in data
-
-    with pytest.raises(ValidationError, match='Invalid type.'):
-        data = s.loads("""{
-        "type": "WrongType",
-        "debtor_id": 666,
-        "creditor_id": 123,
-        "account_id": "test_account",
-        "ts": "2022-01-01T00:00:00Z"
-        }""")
-
-    with pytest.raises(ValidationError, match='Length must be between 1 and'):
-        data = s.loads("""{
-        "type": "ActivateCollector",
-        "debtor_id": 666,
-        "creditor_id": 123,
-        "account_id": "",
-        "ts": "2022-01-01T00:00:00Z"
-        }""")
-
-    try:
-        s.loads('{}')
-    except ValidationError as e:
-        assert len(e.messages) == len(data)
-        assert all(m == ['Missing data for required field.']
-                   for m in e.messages.values())
-
-
 def test_candidate_offer_message():
     s = schemas.CandidateOfferMessageSchema()
 
@@ -888,6 +841,49 @@ def test_start_dispatching_message():
         "collector_id": 999,
         "debtor_id": 0,
         "turn_id": 1,
+        "ts": "2022-01-01T00:00:00Z"
+        }""")
+
+    try:
+        s.loads('{}')
+    except ValidationError as e:
+        assert len(e.messages) == len(data)
+        assert all(m == ['Missing data for required field.']
+                   for m in e.messages.values())
+
+
+def test_calculate_surplus_message():
+    s = schemas.CalculateSurplusMessageSchema()
+
+    data = s.loads("""{
+    "type": "CalculateSurplus",
+    "collector_id": 999,
+    "debtor_id": 666,
+    "ts": "2022-01-01T00:00:00Z",
+    "unknown": "ignored"
+    }""")
+
+    assert data['type'] == 'CalculateSurplus'
+    assert type(data['collector_id']) is int
+    assert data['collector_id'] == 999
+    assert type(data['debtor_id']) is int
+    assert data['debtor_id'] == 666
+    assert data['ts'] == datetime.fromisoformat('2022-01-01T00:00:00+00:00')
+    assert "unknown" not in data
+
+    with pytest.raises(ValidationError, match='Invalid type.'):
+        data = s.loads("""{
+        "type": "WrongType",
+        "collector_id": 999,
+        "debtor_id": 666,
+        "ts": "2022-01-01T00:00:00Z"
+        }""")
+
+    with pytest.raises(ValidationError, match='Invalid debtor ID'):
+        data = s.loads("""{
+        "type": "CalculateSurplus",
+        "collector_id": 999,
+        "debtor_id": 0,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 

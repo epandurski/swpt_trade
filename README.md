@@ -155,15 +155,28 @@ MAX_DISTANCE_TO_BASE=10
 # default is 1000).
 MIN_TRADE_AMOUNT=10000
 
+# The maximum number of transfers which should be initiated per
+# turn, from/to a single collector account. When for any of the
+# collector accounts, the number of initiated trnasfers per
+# trading turn have exceeded this number, more collector accounts
+# will be created with the given currency, to share the burden.
+# The default is 100000.
+TRANSFERS_COLLECTOR_LIMIT=100000
+
+# All collector accounts will have their creditor IDs between
+# "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can be passed as a
+# decimal number (like "4294967296"), or a hexadecimal number (like
+# "0x100000000"). Numbers between 0x8000000000000000 and
+# 0xffffffffffffffff will be automatically converted to their
+# corresponding two's complement negative numbers. Normally, you would
+# not need this interval to contain more than a few thousand IDs. Note
+# that once this interval has been set, it must not be changed! The
+# defaults are: from "0x0000010000000000" to "0x00000100000003ff".
+MIN_COLLECTOR_ID=0x0000010000000000
+MAX_COLLECTOR_ID=0x00000100000003ff
+
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
-
-# The solver server maintains a pool of database connections
-# to the solver's PostgreSQL database server. This variable
-# determines the maximum number of connections in this pool. If
-# zero is specified (the default) there is no limit to the
-# connection pool's size.
-SOLVER_CLIENT_POOL_SIZE=0
 
 # Set the minimum level of severity for log messages ("info",
 # "warning", or "error"). The default is "warning".
@@ -186,22 +199,34 @@ variables. Here are the most important settings with some random
 example values:
 
 ```shell
-# All collector accounts will have their creditor IDs
-# between "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can
-# be passed as a decimal number (like "4294967296"), or a
-# hexadecimal number (like "0x100000000"). Numbers between
-# 0x8000000000000000 and 0xffffffffffffffff will be automatically
-# converted to their corresponding two's complement negative
-# numbers. Normally, you would not need this interval to contain
-# more than a few thousand IDs. The defaults are: from
-# "0x0000010000000000" to "0x00000100000007ff".
+# All collector accounts will have their creditor IDs between
+# "$MIN_COLLECTOR_ID" and "$MAX_COLLECTOR_ID". This can be passed as a
+# decimal number (like "4294967296"), or a hexadecimal number (like
+# "0x100000000"). Numbers between 0x8000000000000000 and
+# 0xffffffffffffffff will be automatically converted to their
+# corresponding two's complement negative numbers. Normally, you would
+# not need this interval to contain more than a few thousand IDs. Note
+# that once this interval has been set, it must not be changed! The
+# defaults are: from "0x0000010000000000" to "0x00000100000003ff".
 MIN_COLLECTOR_ID=0x0000010000000000
-MAX_COLLECTOR_ID=0x00000100000007ff
+MAX_COLLECTOR_ID=0x00000100000003ff
+
+# The creditor ID of the user account of the owner of the creditors
+# agent node. The system will use the acumullated surpluses to buy the
+# same currencies that the user with this creditor ID buys.
+# Eventually, all bought amounts will be automatically transfered to
+# this user account. The creditor ID can be passed as a decimal number
+# (like "4294967296"), or a hexadecimal number (like "0x100000000").
+# Numbers between 0x8000000000000000 and 0xffffffffffffffff will be
+# automatically converted to their corresponding two's complement
+# negative numbers. The default is "0x00000100ffffffff".
+OWNER_CREDITOR_ID=1234567890
 
 # When a currency is about to be traded for the first time, at least
 # one collector account must be created. This setting determines how
 # many collector accounts will be created for newly encountered
-# currencies (default 1).
+# currencies. The default is 2, and it is not recommended to change it
+# without a good reason.
 DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS=2
 
 # When the outgouing transfers are committed, a deadline for each
@@ -227,13 +252,6 @@ WORKER_POSTGRES_URL=postgresql+psycopg://swpt_worker:swpt_worker@localhost:5435/
 
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
-
-# Each worker server maintains a pool of database connections to
-# the solver's PostgreSQL database server. This variable
-# determines the maximum number of connections in this pool. If
-# zero is specified (the default) there is no limit to the
-# connection pool's size.
-SOLVER_CLIENT_POOL_SIZE=0
 
 # Parameters for the communication with the RabbitMQ server which is
 # responsible for brokering SMP messages. The container will connect
@@ -347,9 +365,9 @@ example values:
 # converted to their corresponding two's complement negative
 # numbers. Normally, you would not need this interval to contain
 # more than a few thousand IDs. The defaults are: from
-# "0x0000010000000000" to "0x00000100000007ff".
+# "0x0000010000000000" to "0x00000100000003ff".
 MIN_COLLECTOR_ID=0x0000010000000000
-MAX_COLLECTOR_ID=0x00000100000007ff
+MAX_COLLECTOR_ID=0x00000100000003ff
 
 # Requests to the "admin API" are protected by an OAuth
 # 2.0 authorization server. With every request, the client (a Web
@@ -378,13 +396,6 @@ OAUTH2_SUPERVISOR_USERNAME=creditors-supervisor
 
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
-
-# The admin API server maintains a pool of database connections
-# to the solver's PostgreSQL database server. This variable
-# determines the maximum number of connections in this pool. If
-# zero is specified (the default) there is no limit to the
-# connection pool's size.
-SOLVER_CLIENT_POOL_SIZE=0
 
 # The specified number of processes ("$WEBSERVER_PROCESSES") will
 # be spawned to handle "admin API" requests (default 1), each
@@ -467,12 +478,12 @@ container allows you to execute the following *documented commands*:
 * `flush_configure_accounts`, `flush_prepare_transfers`,
   `flush_finalize_transfers`, `flush_fetch_debtor_infos`,
   `flush_store_documents`, `flush_discover_debtors`,
-  `flush_confirm_debtors`, `flush_activate_collectors`,
+  `flush_confirm_debtors`,` flush_replayed_account_transfers`,
   `flush_candidate_offers`, `flush_needed_collectors`,
   `flush_revise_account_locks`, `flush_trigger_transfers`,
   `flush_account_id_requests`, `flush_account_id_responses`,
   `flush_start_sendings`, `flush_start_dispatchings`,
-  `flush_replayed_account_transfers`
+  `flush_calculate_surpluses`
 
   Starts additional worker processes that send particular type of outgoing
   messages to the RabbitMQ broker, and remove the messages from the

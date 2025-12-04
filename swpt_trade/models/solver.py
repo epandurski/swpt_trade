@@ -12,48 +12,6 @@ class CollectorAccount(db.Model):
     # edited so as not to create a "normal" index, but create a
     # "covering" index instead.
 
-    # TODO: Consider implementing `CollectorAccount` removal logic.
-    #       The removal logic should work more or less like this:
-    #
-    # 1. Statistics should be collected for the number of trading
-    #    transfers performed in each currency.
-    #
-    # 2. When it is deemed that a given currency has more collector
-    #    accounts than needed, the "status"es of the superfluous
-    #    collector accounts should be set to "3" (disabled).
-    #
-    # 3. After some period of time, the amounts available on the
-    #    superfluous collector accounts should be transferred to other
-    #    accounts.
-    #
-    # 4. After some period of time, `NeededWorkerAccount` and
-    #    `InterestRateChange` records corresponding to the superfluous
-    #    collector accounts should be deleted. (This will result in
-    #    the eventual automatic removal of their related
-    #    `WorkerAccount` records.)
-    #
-    # 5. After some period of time, the `CollectorAccount` records for
-    #    the superfluous collector accounts (they've had their
-    #    "status"es set to "3" already) should be deleted.
-
-    # TODO: Consider implementing `CollectorAccount` addition logic.
-    #       The addition logic should work more or less like this:
-    #
-    # 1. Statistics should be collected for the number of trading
-    #    transfers performed in each currency.
-    #
-    # 2. When it is deemed that a given currency has less collector
-    #    accounts than needed, the `ensure_collector_accounts`
-    #    function should be called with the number of needed collector
-    #    accounts. (Note that for each traded currency at least one
-    #    collector account will be created automatically when needed.)
-
-    # TODO: Consider implementing some logic that detects and
-    #       eventually deletes `CollectorAccount` rows which are stuck
-    #       at `status==1` for quite a long time. This could happen if
-    #       the issued `ConfigureAccount` SMP message has been lost.
-    #       (Which must never happen under normal circumstances.)
-
     __bind_key__ = "solver"
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
@@ -395,6 +353,53 @@ class CreditorGiving(db.Model):
                 ' During the phase 3 of each turn, "Worker" servers should'
                 ' make their own copy of the records in this table, and then'
                 ' delete the original records.'
+            ),
+        },
+    )
+
+
+class OverloadedCurrency(db.Model):
+    __bind_key__ = "solver"
+    turn_id = db.Column(db.Integer, primary_key=True)
+    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    collectors_count = db.Column(db.Integer, nullable=False)
+    __table_args__ = (
+        db.CheckConstraint(collectors_count > 0),
+        {
+            "comment": (
+                'Represents the fact that during the given trading turn, the'
+                ' number of active collector accounts with the given currency'
+                ' have been too small to handle all the transfers.'
+            ),
+        },
+    )
+
+
+class HoardedCurrency(db.Model):
+    __bind_key__ = "solver"
+    turn_id = db.Column(db.Integer, primary_key=True)
+    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    peg_debtor_id = db.Column(db.BigInteger)
+    peg_exchange_rate = db.Column(db.FLOAT)
+    __table_args__ = (
+        db.CheckConstraint(peg_exchange_rate >= 0.0),
+        db.CheckConstraint(
+            or_(
+                and_(
+                    peg_debtor_id == null(),
+                    peg_exchange_rate == null(),
+                ),
+                and_(
+                    peg_debtor_id != null(),
+                    peg_exchange_rate != null(),
+                ),
+            )
+        ),
+        {
+            "comment": (
+                'Represents the fact that during the given trading turn, the'
+                ' owner of the creditors agent node wants to buy (hoard)'
+                ' the given currency.'
             ),
         },
     )

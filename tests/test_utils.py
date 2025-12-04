@@ -18,6 +18,7 @@ from swpt_trade.utils import (
     calc_k,
     calc_demurrage,
     DispatchingData,
+    calc_balance_at,
 )
 
 
@@ -98,12 +99,22 @@ def test_can_start_new_turn():
 
 def test_batched():
     assert list(batched('', 3)) == []
+    assert list(batched('A', 3)) == [
+        tuple("A"),
+    ]
+    assert list(batched('ABCDE', 3)) == [
+        tuple("ABC"),
+        tuple("DE"),
+    ]
+    assert list(batched('ABCDEF', 3)) == [
+        tuple("ABC"),
+        tuple("DEF"),
+    ]
     assert list(batched('ABCDEFG', 3)) == [
         tuple("ABC"),
         tuple("DEF"),
         tuple("G"),
     ]
-    assert list(batched('', 3)) == []
 
     with pytest.raises(ValueError):
         list(batched('ABCDEFG', 0))
@@ -300,12 +311,12 @@ def test_parse_transfer_note():
 
 def test_dispatching_data():
     dd = DispatchingData(2)
-    dd.register_collecting(1, 2, 3, 100)
-    dd.register_collecting(1, 2, 3, 150)
-    dd.register_collecting(1, 2, 4, 300)
-    dd.register_sending(1, 2, 3, 500)
-    dd.register_receiving(1, 2, 3, 1000)
-    dd.register_dispatching(1, 2, 3, 2000)
+    dd.register_collecting(1, 3, 2, 100)
+    dd.register_collecting(1, 3, 2, 150)
+    dd.register_collecting(1, 4, 2, 300)
+    dd.register_sending(1, 3, 2, 500)
+    dd.register_receiving(1, 3, 2, 1000)
+    dd.register_dispatching(1, 3, 2, 2000)
 
     ll = list(dd.statuses_iter())
     ll.sort(key=lambda x: (x["collector_id"], x["turn_id"], x["debtor_id"]))
@@ -325,3 +336,47 @@ def test_dispatching_data():
     assert ll[1]["amount_to_send"] == 0
     assert ll[1]["number_to_receive"] == 0
     assert ll[1]["amount_to_dispatch"] == 0
+
+
+def test_calc_balance_at():
+    current_ts = datetime.now(tz=timezone.utc)
+
+    assert 1049.9 < calc_balance_at(
+        principal=1000,
+        interest=0.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) < 1050.1
+
+    assert 1049.9 < calc_balance_at(
+        principal=0,
+        interest=1000.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) < 1050.1
+
+    assert calc_balance_at(
+        principal=0,
+        interest=-1000.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) == -1000.0
+
+    assert calc_balance_at(
+        principal=1000,
+        interest=0.0,
+        interest_rate=5.0,
+        last_change_ts=current_ts,
+        at=current_ts - timedelta(days=365)
+    ) == 1000.0
+
+    assert calc_balance_at(
+        principal=1000,
+        interest=0.0,
+        interest_rate=-100.0,
+        last_change_ts=current_ts,
+        at=current_ts + timedelta(days=365)
+    ) == 0.0

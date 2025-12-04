@@ -8,16 +8,19 @@ from swpt_trade.extensions import db
 config_dict = {
     "TESTING": True,
     "MIN_COLLECTOR_ID": 4294967296,
-    "MAX_COLLECTOR_ID": 8589934591,
+    "MAX_COLLECTOR_ID": 4294968296,
+    "OWNER_CREDITOR_ID": 12345,
     "TURN_PHASE1_DURATION": "0",
     "TURN_PHASE2_DURATION": "0",
+    "TRANSFERS_COLLECTOR_LIMIT": 1,
     "APP_ENABLE_CORS": True,
     "APP_DEBTOR_INFO_FETCH_BURST_COUNT": 1,
     "APP_RESCHEDULED_TRANSFERS_BURST_COUNT": 1,
-    "APP_DELAYED_ACCOUNT_TRANSFERS_BURST_COUNT": 1,
     "APP_ACCOUNT_LOCK_MAX_DAYS": 365,
     "APP_RELEASED_ACCOUNT_LOCK_MAX_DAYS": 30,
     "APP_VERIFY_SHARD_YIELD_PER": 1,
+    "APP_SURPLUS_BLOCKING_DELAY_DAYS": 14.0,
+    "SOLVER_CLIENT_POOL_SIZE": 0,
 }
 
 
@@ -47,7 +50,6 @@ def db_session(app):
         "TRUNCATE TABLE store_document_signal",
         "TRUNCATE TABLE discover_debtor_signal",
         "TRUNCATE TABLE confirm_debtor_signal",
-        "TRUNCATE TABLE activate_collector_signal",
         "TRUNCATE TABLE candidate_offer_signal",
         "TRUNCATE TABLE needed_collector_signal",
         "TRUNCATE TABLE revise_account_lock_signal",
@@ -56,6 +58,7 @@ def db_session(app):
         "TRUNCATE TABLE account_id_response_signal",
         "TRUNCATE TABLE start_sending_signal",
         "TRUNCATE TABLE start_dispatching_signal",
+        "TRUNCATE TABLE calculate_surplus_signal",
         "TRUNCATE TABLE replayed_account_transfer_signal",
         "TRUNCATE TABLE delayed_account_transfer",
         "TRUNCATE TABLE debtor_info_document",
@@ -66,8 +69,10 @@ def db_session(app):
         "TRUNCATE TABLE needed_worker_account",
         "TRUNCATE TABLE account_lock",
         "TRUNCATE TABLE recently_needed_collector",
-        "TRUNCATE TABLE active_collector",
+        "TRUNCATE TABLE usable_collector",
         "TRUNCATE TABLE interest_rate_change",
+        "TRUNCATE TABLE collector_status_change",
+        "TRUNCATE TABLE needed_collector_account",
         "DELETE FROM worker_turn",
         "TRUNCATE TABLE creditor_participation",
         "TRUNCATE TABLE dispatching_status",
@@ -93,6 +98,8 @@ def db_session(app):
         "TRUNCATE TABLE collector_receiving",
         "TRUNCATE TABLE collector_dispatching",
         "TRUNCATE TABLE creditor_giving",
+        "TRUNCATE TABLE overloaded_currency",
+        "TRUNCATE TABLE hoarded_currency",
     ]:
         db.session.execute(
             sqlalchemy.text(cmd),

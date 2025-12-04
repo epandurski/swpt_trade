@@ -327,15 +327,6 @@ def test_on_confirm_debtor_signal(db_session, actors):
     )
 
 
-def test_on_activate_collector_signal(db_session, actors):
-    actors._on_activate_collector_signal(
-        debtor_id=D_ID,
-        creditor_id=m.ROOT_CREDITOR_ID,
-        account_id='test_account',
-        ts=datetime.now(tz=timezone.utc),
-    )
-
-
 def test_on_candidate_offer_signal(db_session, actors):
     actors._on_candidate_offer_signal(
         turn_id=5,
@@ -412,6 +403,14 @@ def test_on_start_dispatching_signal(db_session, actors):
     actors._on_start_dispatching_signal(
         collector_id=999,
         turn_id=1,
+        debtor_id=D_ID,
+        ts=datetime.now(tz=timezone.utc),
+    )
+
+
+def test_on_calculate_surplus_signal(db_session, actors):
+    actors._on_calculate_surplus_signal(
+        collector_id=999,
         debtor_id=D_ID,
         ts=datetime.now(tz=timezone.utc),
     )

@@ -1,10 +1,12 @@
-from typing import TypeVar, Callable, Sequence, List, Iterable, Tuple
-from random import Random
+from typing import TypeVar, Callable, Sequence, List, Iterable
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, delete, text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
-from sqlalchemy.orm import load_only
-from swpt_trade.utils import can_start_new_turn
+from swpt_trade.utils import (
+    can_start_new_turn,
+    generate_collector_account_pkeys,
+)
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TS0,
@@ -19,6 +21,7 @@ from swpt_trade.models import (
     CollectorCollecting,
     CreditorGiving,
     CreditorTaking,
+    OverloadedCurrency,
 )
 
 
@@ -89,7 +92,11 @@ def try_to_advance_turn_to_phase2(
         active_debtor = (
             # These are debtors that are confirmed, for which there
             # are at least one active (status == 2) collector account.
-            select(ConfirmedDebtor)
+            select(
+                ConfirmedDebtor.turn_id,
+                ConfirmedDebtor.debtor_id,
+                ConfirmedDebtor.debtor_info_locator,
+            )
             .distinct()
             .join(
                 CollectorAccount,
@@ -102,7 +109,9 @@ def try_to_advance_turn_to_phase2(
             .subquery(name="ad")
         )
         db.session.execute(
-            insert(CurrencyInfo).from_select(
+            insert(CurrencyInfo)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "turn_id",
                     "debtor_info_locator",
@@ -152,20 +161,18 @@ def try_to_advance_turn_to_phase2(
         # reached.
         db.session.execute(
             delete(DebtorInfo)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == DebtorInfo.turn_id,
-                    Turn.phase >= 2,
-                )
+                Turn.turn_id == DebtorInfo.turn_id,
+                Turn.phase >= 2,
             )
         )
         db.session.execute(
             delete(ConfirmedDebtor)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == ConfirmedDebtor.turn_id,
-                    Turn.phase >= 2,
-                )
+                Turn.turn_id == ConfirmedDebtor.turn_id,
+                Turn.phase >= 2,
             )
         )
 
@@ -221,77 +228,21 @@ def get_turns_by_ids(turn_ids: List[int]) -> Sequence[Turn]:
 
 
 @atomic
-def get_pristine_collectors(
-        *,
-        hash_mask: int,
-        hash_prefix: int,
-        max_count: int = None,
-) -> Sequence[Tuple[int, int]]:
-    query = (
-        db.session.query(
-            CollectorAccount.debtor_id, CollectorAccount.collector_id
-        )
-        .filter(
-            and_(
-                CollectorAccount.status == text("0"),
-                CollectorAccount.collector_hash.op("&")(hash_mask)
-                == hash_prefix,
-            )
-        )
+def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
+    db.session.execute(
+        postgresql.insert(CollectorAccount)
+        .execution_options(synchronize_session=False)
+        .on_conflict_do_nothing(
+            index_elements=[
+                CollectorAccount.debtor_id,
+                CollectorAccount.collector_id,
+            ]
+        ),
+        [
+            {"debtor_id": debtor_id, "collector_id": collector_id}
+            for debtor_id, collector_id in pks
+        ]
     )
-    if max_count is not None:
-        query = query.limit(max_count)
-
-    return query.all()
-
-
-@atomic
-def mark_requested_collector(
-        *,
-        debtor_id: int,
-        collector_id: int,
-) -> bool:
-    current_ts = datetime.now(tz=timezone.utc)
-    updated_rows = (
-        CollectorAccount.query
-        .filter_by(debtor_id=debtor_id, collector_id=collector_id, status=0)
-        .update(
-            {
-                CollectorAccount.status: 1,  # requested account creation
-                CollectorAccount.latest_status_change_at: current_ts,
-            },
-            synchronize_session=False,
-        )
-    )
-    assert updated_rows <= 1
-    return updated_rows > 0
-
-
-@atomic
-def activate_collector(
-        *,
-        debtor_id: int,
-        collector_id: int,
-        account_id: str,
-) -> bool:
-    assert account_id
-
-    current_ts = datetime.now(tz=timezone.utc)
-    updated_rows = (
-        CollectorAccount.query
-        .filter_by(debtor_id=debtor_id, collector_id=collector_id)
-        .filter(CollectorAccount.status <= 1)
-        .update(
-            {
-                CollectorAccount.account_id: account_id,
-                CollectorAccount.status: 2,  # assigned account ID
-                CollectorAccount.latest_status_change_at: current_ts,
-            },
-            synchronize_session=False,
-        )
-    )
-    assert updated_rows <= 1
-    return updated_rows > 0
 
 
 @atomic
@@ -316,47 +267,34 @@ def ensure_collector_accounts(
     collector IDs, avoiding the creation of unneeded collector
     accounts.
     """
-    accounts = (
-        CollectorAccount.query
-        .filter_by(debtor_id=debtor_id)
-        .options(load_only(CollectorAccount.status))
-        .all()
-    )
-    number_of_alive_accounts = sum(
-        1 for account in accounts if account.status != 3
-    )
+    accounts = db.session.execute(
+        select(CollectorAccount.collector_id, CollectorAccount.status)
+        .where(CollectorAccount.debtor_id == debtor_id)
+    ).all()
 
-    def collector_ids_iter() -> Iterable[int]:
-        number_of_dead_accounts = len(accounts) - number_of_alive_accounts
-        final_number_of_accounts = number_of_dead_accounts + number_of_accounts
-        ids_total_count = 1 + max_collector_id - min_collector_id
+    number_of_dead_accounts = sum(1 for x in accounts if x.status == 3)
+    number_of_alive_accounts = len(accounts) - number_of_dead_accounts
+    number_of_missing_accounts = number_of_accounts - number_of_alive_accounts
 
-        # NOTE: Because we rely on being able to efficiently pick
-        # random IDs between `min_collector_id` and
-        # `max_collector_id`, we can not utilize the range of
-        # available IDs at 100%. Here we ensure a 1/4 safety margin.
-        if final_number_of_accounts > ids_total_count * 3 // 4:
-            raise RuntimeError(
-                "The number of available collector IDs is not big enough."
+    if number_of_missing_accounts > 0:
+        insert_collector_accounts(
+            generate_collector_account_pkeys(
+                number_of_collector_account_pkeys=number_of_missing_accounts,
+                debtor_id=debtor_id,
+                min_collector_id=min_collector_id,
+                max_collector_id=max_collector_id,
+                existing_collector_ids=set(x.collector_id for x in accounts),
             )
+        )
 
-        rgen = Random()
-        rgen.seed(debtor_id, version=2)
-        while True:
-            yield rgen.randint(min_collector_id, max_collector_id)
 
-    if number_of_alive_accounts < number_of_accounts:
-        with db.retry_on_integrity_error():
-            existing_ids = set(x.collector_id for x in accounts)
-
-            for collector_id in collector_ids_iter():
-                if collector_id not in existing_ids:
-                    db.session.add(
-                        CollectorAccount(
-                            debtor_id=debtor_id, collector_id=collector_id
-                        )
-                    )
-                    existing_ids.add(collector_id)
-                    number_of_alive_accounts += 1
-                    if number_of_alive_accounts == number_of_accounts:
-                        break
+@atomic
+def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
+    db.session.execute(
+        delete(OverloadedCurrency)
+        .execution_options(synchronize_session=False)
+        .where(
+            OverloadedCurrency.turn_id == turn_id,
+            OverloadedCurrency.debtor_id == debtor_id,
+        )
+    )

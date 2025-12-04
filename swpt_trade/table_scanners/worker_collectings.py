@@ -14,14 +14,14 @@ class WorkerCollectingsScanner(TableScanner):
     table = WorkerCollecting.__table__
     pk = tuple_(
         table.c.collector_id,
-        table.c.turn_id,
         table.c.debtor_id,
+        table.c.turn_id,
         table.c.creditor_id,
     )
     columns = [
         WorkerCollecting.collector_id,
-        WorkerCollecting.turn_id,
         WorkerCollecting.debtor_id,
+        WorkerCollecting.turn_id,
         WorkerCollecting.creditor_id,
         WorkerCollecting.collected,
         WorkerCollecting.purge_after,
@@ -55,8 +55,8 @@ class WorkerCollectingsScanner(TableScanner):
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
         c_collector_id = c.collector_id
-        c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
+        c_turn_id = c.turn_id
         c_creditor_id = c.creditor_id
 
         def belongs_to_parent_shard(row) -> bool:
@@ -69,8 +69,8 @@ class WorkerCollectingsScanner(TableScanner):
         pks_to_delete = [
             (
                 row[c_collector_id],
-                row[c_turn_id],
                 row[c_debtor_id],
+                row[c_turn_id],
                 row[c_creditor_id]
             )
             for row in rows
@@ -91,8 +91,8 @@ class WorkerCollectingsScanner(TableScanner):
     def _delete_stale_records(self, rows, current_ts):
         c = self.table.c
         c_collector_id = c.collector_id
-        c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
+        c_turn_id = c.turn_id
         c_creditor_id = c.creditor_id
         c_collected = c.collected
         c_purge_after = c.purge_after
@@ -106,8 +106,8 @@ class WorkerCollectingsScanner(TableScanner):
         pks_to_delete = [
             (
                 row[c_collector_id],
-                row[c_turn_id],
                 row[c_debtor_id],
+                row[c_turn_id],
                 row[c_creditor_id]
             )
             for row in rows

@@ -320,6 +320,13 @@ def test_bp_candidate_offers():
     assert math.isnan(bp.get_currency_price(109))
     assert math.isnan(bp.get_currency_price(105))
     assert bp.get_currency_price(106) == 30.0
+    assert bp.get_tradable_currency_peg(106) == (105, 6.0)
+    no_peg = bp.get_tradable_currency_peg(101)
+    assert no_peg[0] == 0
+    assert math.isnan(no_peg[1])
+    no_peg = bp.get_tradable_currency_peg(107)
+    assert no_peg[0] == 0
+    assert math.isnan(no_peg[1])
 
     aux_data = CandidateOfferAuxData(
         creation_date=date(2023, 1, 4),

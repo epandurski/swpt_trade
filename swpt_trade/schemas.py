@@ -110,27 +110,6 @@ class ConfirmDebtorMessageSchema(ValidateTypeMixin, Schema):
     ts = fields.DateTime(required=True)
 
 
-class ActivateCollectorMessageSchema(ValidateTypeMixin, Schema):
-    """``ActivateCollector`` message schema."""
-
-    class Meta:
-        unknown = EXCLUDE
-
-    type = fields.String(required=True)
-    debtor_id = fields.Integer(
-        required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
-    )
-    creditor_id = fields.Integer(
-        required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
-    )
-    account_id = fields.String(
-        required=True, validate=validate.Length(
-            min=1, max=ACCOUNT_ID_MAX_BYTES
-        )
-    )
-    ts = fields.DateTime(required=True)
-
-
 class CandidateOfferMessageSchema(ValidateTypeMixin, Schema):
     """``CandidateOffer`` message schema."""
 
@@ -319,7 +298,7 @@ class StartSendingMessageSchema(ValidateTypeMixin, Schema):
 
 
 class StartDispatchingMessageSchema(ValidateTypeMixin, Schema):
-    """``Dispatching`` message schema."""
+    """``StartDispatching`` message schema."""
 
     class Meta:
         unknown = EXCLUDE
@@ -330,6 +309,27 @@ class StartDispatchingMessageSchema(ValidateTypeMixin, Schema):
     )
     turn_id = fields.Integer(
         required=True, validate=validate.Range(min=MIN_INT32, max=MAX_INT32)
+    )
+    debtor_id = fields.Integer(
+        required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
+    )
+    ts = fields.DateTime(required=True)
+
+    @validates("debtor_id")
+    def validate_debtor_id(self, value):
+        if value == 0:
+            raise ValidationError("Invalid debtor ID.")
+
+
+class CalculateSurplusMessageSchema(ValidateTypeMixin, Schema):
+    """``CalculateSurplus`` message schema."""
+
+    class Meta:
+        unknown = EXCLUDE
+
+    type = fields.String(required=True)
+    collector_id = fields.Integer(
+        required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
     )
     debtor_id = fields.Integer(
         required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)

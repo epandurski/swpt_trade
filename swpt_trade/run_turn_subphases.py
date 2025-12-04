@@ -3,20 +3,36 @@ import math
 from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from itertools import groupby
-from sqlalchemy import select, insert, delete, text
+from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
+from sqlalchemy.orm import load_only
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.sql.expression import null, false, and_
+from sqlalchemy.sql.expression import (
+    null,
+    false,
+    case,
+    cast,
+    func,
+    and_,
+    not_,
+    tuple_,
+)
+from sqlalchemy.sql.functions import coalesce
 from flask import current_app
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.utils import (
     batched,
     u16_to_i16,
+    calc_demurrage,
     contain_principal_overflow,
     DispatchingData,
 )
 from swpt_trade.extensions import db
 from swpt_trade.solver import CandidateOfferAuxData, BidProcessor
 from swpt_trade.models import (
+    TS0,
+    MAX_INT64,
+    KNOWN_SURPLUS_AMOUNT_PREDICATE,
+    WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     DebtorInfoDocument,
     DebtorLocatorClaim,
     DebtorInfo,
@@ -25,11 +41,14 @@ from swpt_trade.models import (
     CurrencyInfo,
     TradingPolicy,
     WorkerAccount,
+    NeededWorkerAccount,
     CandidateOfferSignal,
     NeededCollectorSignal,
     ReviseAccountLockSignal,
+    CalculateSurplusSignal,
     CollectorAccount,
-    ActiveCollector,
+    HoardedCurrency,
+    UsableCollector,
     AccountLock,
     SellOffer,
     BuyOffer,
@@ -45,13 +64,22 @@ from swpt_trade.models import (
     CollectorSending,
     CollectorReceiving,
     CollectorDispatching,
+    CollectorStatusChange,
+    InterestRateChange,
 )
 
-INSERT_BATCH_SIZE = 50000
+NEEDED_WORKER_ACCOUNT_PK = tuple_(
+    NeededWorkerAccount.creditor_id,
+    NeededWorkerAccount.debtor_id,
+)
+KILL_ACCOUNTS_BATCH_SIZE = 1000
+INSERT_BATCH_SIZE = 5000
+UPDATE_BATCH_SIZE = 5000
+DELETE_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
-
+NUMERIC = Numeric(36, 0)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -77,6 +105,7 @@ def run_phase1_subphase0(turn_id: int) -> None:
             ):
                 _populate_debtor_infos(w_conn, s_conn, turn_id)
                 _populate_confirmed_debtors(w_conn, s_conn, turn_id)
+                _populate_hoarded_currencies(w_conn, s_conn, turn_id)
 
         worker_turn.worker_turn_subphase = 10
 
@@ -93,7 +122,7 @@ def _populate_debtor_infos(w_conn, s_conn, turn_id):
                 DebtorInfoDocument.peg_exchange_rate,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -110,7 +139,8 @@ def _populate_debtor_infos(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(DebtorInfo).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -137,7 +167,7 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
             )
             .where(DebtorLocatorClaim.debtor_info_locator != null())
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -151,7 +181,8 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(ConfirmedDebtor).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -166,6 +197,59 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
                     break
         else:
             s_conn.commit()
+
+
+def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    owner_creditor_id = cfg["OWNER_CREDITOR_ID"]
+
+    if sharding_realm.match(owner_creditor_id):
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    TradingPolicy.debtor_id,
+                    TradingPolicy.peg_debtor_id,
+                    TradingPolicy.peg_exchange_rate,
+                )
+                .where(
+                    TradingPolicy.creditor_id == owner_creditor_id,
+                    TradingPolicy.account_id != "",
+                    TradingPolicy.account_id_is_obsolete == false(),
+                    TradingPolicy.config_flags.op("&")(DELETION_FLAG) == 0,
+                    TradingPolicy.policy_name != null(),
+                    TradingPolicy.principal < TradingPolicy.min_principal,
+                    TradingPolicy.min_principal <= TradingPolicy.max_principal,
+                )
+        ) as result:
+            for rows in result.partitions(INSERT_BATCH_SIZE):
+                dicts_to_insert = [
+                    {
+                        "turn_id": turn_id,
+                        "debtor_id": row.debtor_id,
+                        "peg_debtor_id": row.peg_debtor_id,
+                        "peg_exchange_rate": row.peg_exchange_rate,
+                    }
+                    for row in rows
+                ]
+                try:
+                    s_conn.execute(
+                        insert(HoardedCurrency).execution_options(
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
+                        ),
+                        dicts_to_insert,
+                    )
+                except IntegrityError:
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        "An attempt has been made to insert an already"
+                        " existing hoarded currency row for turn %d.",
+                        turn_id,
+                    )
+                    s_conn.rollback()
+                    break
+            else:
+                s_conn.commit()
 
 
 @atomic
@@ -189,8 +273,13 @@ def run_phase2_subphase0(turn_id: int) -> None:
                 worker_turn.min_trade_amount,
             )
             _load_currencies(bp, turn_id)
-            _generate_candidate_offers(bp, turn_id)
-            _copy_active_collectors(bp)
+            _generate_user_candidate_offers(bp, turn_id)
+            _generate_owner_candidate_offers(
+                bp,
+                turn_id,
+                worker_turn.collection_deadline,
+            )
+            _copy_usable_collectors(bp)
             _insert_needed_collector_signals(bp)
 
         worker_turn.worker_turn_subphase = 5
@@ -216,10 +305,32 @@ def _load_currencies(bp: BidProcessor, turn_id: int) -> None:
                     bp.register_currency(*row)
 
 
-def _generate_candidate_offers(bp, turn_id):
+def _generate_user_candidate_offers(bp, turn_id):
     current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
     bid_counter = 0
+
+    def calc_user_bid_amount(row) -> int:
+        if (
+                row.is_scheduled_for_deletion
+                or not row.has_account_id
+                or not row.wants_to_trade
+                or row.max_principal < row.min_principal
+                or row.min_principal <= row.principal <= row.max_principal
+        ):
+            return 0
+
+        if row.principal < row.min_principal:
+            # Return a positive number (buy).
+            return contain_principal_overflow(
+                row.min_principal - row.principal
+            )
+
+        # Return a negative number (sell).
+        assert row.principal > row.max_principal
+        return contain_principal_overflow(
+            row.max_principal - row.principal
+        )
 
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
@@ -250,14 +361,14 @@ def _generate_candidate_offers(bp, turn_id):
                 if sharding_realm.match(creditor_id):
                     for row in rows:
                         assert row.creditor_id == creditor_id
-                        rate = row.peg_exchange_rate
+                        peg_rate = row.peg_exchange_rate
 
                         bp.register_bid(
                             creditor_id,
                             row.debtor_id,
-                            _calc_bid_amount(row),
+                            calc_user_bid_amount(row),
                             row.peg_debtor_id or 0,
-                            math.nan if rate is None else rate,
+                            math.nan if peg_rate is None else peg_rate,
                             CandidateOfferAuxData(
                                 creation_date=row.creation_date,
                                 last_transfer_number=row.last_transfer_number,
@@ -275,30 +386,138 @@ def _generate_candidate_offers(bp, turn_id):
             _process_bids(bp, turn_id, current_ts)
 
 
-def _calc_bid_amount(row) -> int:
-    if (
-            row.is_scheduled_for_deletion
-            or not row.has_account_id
-            or not row.wants_to_trade
-            or row.max_principal < row.min_principal
-            or row.min_principal <= row.principal <= row.max_principal
-    ):
-        return 0
+def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
+    current_ts = datetime.now(tz=timezone.utc)
+    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+    bid_counter = 0
 
-    if row.principal < row.min_principal:
-        # Return a positive number (buy).
-        return contain_principal_overflow(row.min_principal - row.principal)
+    def calc_owner_bid_amount(row, hoarded) -> int:
+        if row.is_scheduled_for_deletion or not row.has_account_id:
+            return 0  # Do not trade.
+        if hoarded:
+            # Return a huge positive number (buy without limit).
+            return MAX_INT64
+        worst_surplus_demurrage = calc_demurrage(
+            row.demurrage_rate,
+            collection_deadline - row.surplus_ts,
+        )
+        available_surplus_amount = max(
+            0,
+            + math.floor(row.surplus_amount * worst_surplus_demurrage)
+            - row.surplus_spent_amount
+        )
+        # We must make sure that the amount locked during the trading
+        # turn will never exceed the available surplus. To compensate
+        # for the possible demurrage, the locked amount will be bigger
+        # than the bid amount. Therefore, we must factor the possible
+        # demurrage again, and also add some safety cushion.
+        lock_correction_factor = 0.9999 * calc_demurrage(
+            row.demurrage_rate, collection_deadline - current_ts
+        )
+        # Return a negative number (sell the available surplus).
+        return contain_principal_overflow(
+            - max(
+                0,
+                + math.floor(available_surplus_amount * lock_correction_factor)
+                - 1
+            )
+        )
 
-    # Return a negative number (sell).
-    assert row.principal > row.max_principal
-    return contain_principal_overflow(row.max_principal - row.principal)
+    with db.engines["solver"].connect() as s_conn:
+        hoarded_currency_pegs = {
+            row.debtor_id: (row.peg_debtor_id, row.peg_exchange_rate)
+            for row in s_conn.execute(
+                select(
+                    HoardedCurrency.debtor_id,
+                    HoardedCurrency.peg_debtor_id,
+                    HoardedCurrency.peg_exchange_rate,
+                )
+                .where(HoardedCurrency.turn_id == turn_id)
+            ).all()
+        }
+
+    with db.engine.connect() as w_conn:
+        # NOTE: Disabled collector accounts (status == 3) must not try
+        # to sell their surplus amounts, because this may interfere
+        # with correctly determining the new surplus amounts.
+        surplus_amount_expression = case(
+            (NeededWorkerAccount.collection_disabled_since != null(), 0),
+            else_=WorkerAccount.surplus_amount
+        )
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    WorkerAccount.creditor_id,
+                    WorkerAccount.debtor_id,
+                    WorkerAccount.creation_date,
+                    WorkerAccount.demurrage_rate,
+                    surplus_amount_expression.label("surplus_amount"),
+                    WorkerAccount.surplus_ts,
+                    WorkerAccount.surplus_spent_amount,
+                    (
+                        WorkerAccount.surplus_last_transfer_number
+                    ).label("last_transfer_number"),
+                    (
+                        WorkerAccount.account_id != ""
+                    ).label("has_account_id"),
+                    (
+                        WorkerAccount.config_flags.op("&")(DELETION_FLAG) != 0
+                    ).label("is_scheduled_for_deletion"),
+                )
+                .select_from(WorkerAccount)
+                .join(
+                    NeededWorkerAccount,
+                    and_(
+                        NeededWorkerAccount.creditor_id
+                        == WorkerAccount.creditor_id,
+                        NeededWorkerAccount.debtor_id
+                        == WorkerAccount.debtor_id,
+                    ),
+                )
+                .order_by(WorkerAccount.creditor_id)
+        ) as result:
+            for creditor_id, rows in groupby(result, lambda r: r.creditor_id):
+                if sharding_realm.match(creditor_id):
+                    for row in rows:
+                        assert row.creditor_id == creditor_id
+                        debtor_id = row.debtor_id
+                        hoarded = hoarded_currency_pegs.get(debtor_id)
+                        peg_debtor_id, peg_rate = (
+                            # For hoarded currencies -- insist on
+                            # using the peg provided by the owner of
+                            # the creditors agent node. For other
+                            # currencies -- accept the peg provided by
+                            # the issuer of the currency.
+                            hoarded or bp.get_tradable_currency_peg(debtor_id)
+                        )
+                        bp.register_bid(
+                            creditor_id,
+                            debtor_id,
+                            calc_owner_bid_amount(row, hoarded),
+                            peg_debtor_id or 0,
+                            math.nan if peg_rate is None else peg_rate,
+                            CandidateOfferAuxData(
+                                creation_date=row.creation_date,
+                                last_transfer_number=row.last_transfer_number,
+                            ),
+                        )
+                        bid_counter += 1
+
+                    # Process the registered bids when they become too
+                    # many, so that they can not use up the available
+                    # memory.
+                    if bid_counter >= BID_COUNTER_THRESHOLD:
+                        _process_bids(bp, turn_id, current_ts)
+                        bid_counter = 0
+
+            _process_bids(bp, turn_id, current_ts)
 
 
 def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
     for candidate_offers in batched(bp.analyze_bids(), INSERT_BATCH_SIZE):
         db.session.execute(
             insert(CandidateOfferSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -315,12 +534,9 @@ def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
         )
 
 
-def _copy_active_collectors(bp: BidProcessor) -> None:
+def _copy_usable_collectors(bp: BidProcessor) -> None:
     with db.engines["solver"].connect() as s_conn:
-        db.session.execute(
-            text("LOCK TABLE active_collector IN SHARE ROW EXCLUSIVE MODE")
-        )
-        ActiveCollector.query.delete(synchronize_session=False)
+        UsableCollector.query.delete(synchronize_session=False)
 
         with s_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -329,21 +545,26 @@ def _copy_active_collectors(bp: BidProcessor) -> None:
                     CollectorAccount.account_id,
                     CollectorAccount.status
                 )
-                .where(CollectorAccount.status < 3)
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 dicts_to_insert = [
                     {
                         "debtor_id": row.debtor_id,
                         "collector_id": row.collector_id,
                         "account_id": row.account_id,
+                        "disabled_at": (
+                            None
+                            if row.status == 2
+                            else row.latest_status_change_at
+                        ),
                     }
-                    for row in rows if row.status == 2
+                    for row in rows if row.status >= 2
                 ]
                 if dicts_to_insert:
                     db.session.execute(
-                        insert(ActiveCollector).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                        insert(UsableCollector).execution_options(
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -360,7 +581,8 @@ def _insert_needed_collector_signals(bp: BidProcessor) -> None:
     ):
         db.session.execute(
             insert(NeededCollectorSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -407,16 +629,14 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
                 AccountLock.collector_id,
             )
             .where(
-                and_(
-                    AccountLock.turn_id == turn_id,
-                    AccountLock.released_at == null(),
-                    AccountLock.transfer_id != null(),
-                    AccountLock.finalized_at == null(),
-                    AccountLock.amount < 0,
-                )
+                AccountLock.turn_id == turn_id,
+                AccountLock.released_at == null(),
+                AccountLock.transfer_id != null(),
+                AccountLock.finalized_at == null(),
+                AccountLock.amount < 0,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -432,7 +652,8 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(SellOffer).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -459,16 +680,14 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
                 AccountLock.amount,
             )
             .where(
-                and_(
-                    AccountLock.turn_id == turn_id,
-                    AccountLock.released_at == null(),
-                    AccountLock.transfer_id != null(),
-                    AccountLock.finalized_at == null(),
-                    AccountLock.amount > 0,
-                )
+                AccountLock.turn_id == turn_id,
+                AccountLock.released_at == null(),
+                AccountLock.transfer_id != null(),
+                AccountLock.finalized_at == null(),
+                AccountLock.amount > 0,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -483,7 +702,8 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
                 try:
                     s_conn.execute(
                         insert(BuyOffer).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -543,14 +763,11 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 CreditorTaking.collector_id,
             )
             .where(
-                and_(
-                    CreditorTaking.turn_id == turn_id,
-                    CreditorTaking.creditor_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                )
+                CreditorTaking.turn_id == turn_id,
+                CreditorTaking.creditor_hash.op("&")(hash_mask) == hash_prefix,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -565,13 +782,13 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 sharding_realm.match(r["creditor_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(CreditorParticipation).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                    ),
-                    dicts_to_insert,
-                )
+            db.session.execute(
+                insert(CreditorParticipation).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
 
 
 def _copy_creditor_givings(s_conn, worker_turn):
@@ -589,15 +806,12 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 CreditorGiving.collector_id,
             )
             .where(
-                and_(
-                    CreditorGiving.turn_id == turn_id,
-                    CreditorGiving.creditor_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CreditorGiving.amount > 1,
-                )
+                CreditorGiving.turn_id == turn_id,
+                CreditorGiving.creditor_hash.op("&")(hash_mask) == hash_prefix,
+                CreditorGiving.amount > 1,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "turn_id": turn_id,
@@ -612,13 +826,13 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 sharding_realm.match(r["creditor_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(CreditorParticipation).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                    ),
-                    dicts_to_insert,
-                )
+            db.session.execute(
+                insert(CreditorParticipation).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
 
 
 def _copy_collector_collectings(s_conn, worker_turn, statuses):
@@ -641,21 +855,19 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 CollectorCollecting.collector_id,
             )
             .where(
-                and_(
-                    CollectorCollecting.turn_id == turn_id,
-                    CollectorCollecting.collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorCollecting.creditor_id
-                    != CollectorCollecting.collector_id,
-                )
+                CollectorCollecting.turn_id == turn_id,
+                CollectorCollecting.collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorCollecting.creditor_id
+                != CollectorCollecting.collector_id,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "collector_id": row.collector_id,
-                    "turn_id": turn_id,
                     "debtor_id": row.debtor_id,
+                    "turn_id": turn_id,
                     "creditor_id": row.creditor_id,
                     "amount": row.amount,
                     "collected": False,
@@ -667,20 +879,20 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerCollecting).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerCollecting).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_collecting(
+                    d["collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_collecting(
-                        d["collector_id"],
-                        d["turn_id"],
-                        d["debtor_id"],
-                        d["amount"],
-                    )
 
 
 def _copy_collector_sendings(s_conn, worker_turn, statuses):
@@ -703,15 +915,13 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 CollectorSending.amount,
             )
             .where(
-                and_(
-                    CollectorSending.turn_id == turn_id,
-                    CollectorSending.from_collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorSending.amount > 1,
-                )
+                CollectorSending.turn_id == turn_id,
+                CollectorSending.from_collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorSending.amount > 1,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "from_collector_id": row.from_collector_id,
@@ -727,20 +937,20 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["from_collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerSending).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerSending).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_sending(
+                    d["from_collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_sending(
-                        d["from_collector_id"],
-                        d["turn_id"],
-                        d["debtor_id"],
-                        d["amount"],
-                    )
 
 
 def _copy_collector_receivings(s_conn, worker_turn, statuses):
@@ -763,15 +973,13 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 CollectorReceiving.amount,
             )
             .where(
-                and_(
-                    CollectorReceiving.turn_id == turn_id,
-                    CollectorReceiving.to_collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorReceiving.amount > 1,
-                )
+                CollectorReceiving.turn_id == turn_id,
+                CollectorReceiving.to_collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorReceiving.amount > 1,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "to_collector_id": row.to_collector_id,
@@ -788,20 +996,20 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["to_collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerReceiving).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerReceiving).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_receiving(
+                    d["to_collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["expected_amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_receiving(
-                        d["to_collector_id"],
-                        d["turn_id"],
-                        d["debtor_id"],
-                        d["expected_amount"],
-                    )
 
 
 def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
@@ -824,22 +1032,20 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 CollectorDispatching.collector_id,
             )
             .where(
-                and_(
-                    CollectorDispatching.turn_id == turn_id,
-                    CollectorDispatching.collector_hash.op("&")(hash_mask)
-                    == hash_prefix,
-                    CollectorDispatching.amount > 1,
-                    CollectorDispatching.creditor_id
-                    != CollectorDispatching.collector_id,
-                )
+                CollectorDispatching.turn_id == turn_id,
+                CollectorDispatching.collector_hash.op("&")(hash_mask)
+                == hash_prefix,
+                CollectorDispatching.amount > 1,
+                CollectorDispatching.creditor_id
+                != CollectorDispatching.collector_id,
             )
     ) as result:
-        for rows in batched(result, INSERT_BATCH_SIZE):
+        for rows in result.partitions(INSERT_BATCH_SIZE):
             dicts_to_insert = [
                 {
                     "collector_id": row.collector_id,
-                    "turn_id": turn_id,
                     "debtor_id": row.debtor_id,
+                    "turn_id": turn_id,
                     "creditor_id": row.creditor_id,
                     "amount": row.amount,
                     "purge_after": purge_after,
@@ -850,33 +1056,31 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 sharding_realm.match(r["collector_id"])
                 for r in dicts_to_insert
             )
-            if dicts_to_insert:
-                db.session.execute(
-                    insert(WorkerDispatching).execution_options(
-                        insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                    ),
-                    dicts_to_insert,
+            db.session.execute(
+                insert(WorkerDispatching).execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                ),
+                dicts_to_insert,
+            )
+            for d in dicts_to_insert:
+                statuses.register_dispatching(
+                    d["collector_id"],
+                    d["debtor_id"],
+                    d["turn_id"],
+                    d["amount"],
                 )
-                for d in dicts_to_insert:
-                    statuses.register_dispatching(
-                        d["collector_id"],
-                        d["turn_id"],
-                        d["debtor_id"],
-                        d["amount"],
-                    )
 
 
 def _create_dispatching_statuses(worker_turn, statuses):
     for status_dicts in batched(statuses.statuses_iter(), INSERT_BATCH_SIZE):
-        dicts_to_insert = list(status_dicts)
-
-        if dicts_to_insert:
-            db.session.execute(
-                insert(DispatchingStatus).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE
-                ),
-                dicts_to_insert,
-            )
+        db.session.execute(
+            insert(DispatchingStatus).execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            status_dicts,
+        )
 
 
 def _insert_revise_account_lock_signals(worker_turn):
@@ -892,7 +1096,7 @@ def _insert_revise_account_lock_signals(worker_turn):
                 )
                 .where(AccountLock.turn_id == turn_id)
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 dicts_to_insert = [
                     {
                         "creditor_id": row.creditor_id,
@@ -906,7 +1110,8 @@ def _insert_revise_account_lock_signals(worker_turn):
                 if dicts_to_insert:
                     db.session.execute(
                         insert(ReviseAccountLockSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         dicts_to_insert,
                     )
@@ -933,64 +1138,337 @@ def run_phase3_subphase5(turn_id: int) -> None:
         with db.engines["solver"].connect() as s_conn:
             s_conn.execute(
                 delete(CreditorTaking)
+                .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CreditorTaking.turn_id == turn_id,
-                        CreditorTaking.creditor_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CreditorTaking.turn_id == turn_id,
+                    CreditorTaking.creditor_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CreditorGiving)
+                .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CreditorGiving.turn_id == turn_id,
-                        CreditorGiving.creditor_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CreditorGiving.turn_id == turn_id,
+                    CreditorGiving.creditor_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorCollecting)
+                .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorCollecting.turn_id == turn_id,
-                        CollectorCollecting.collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorCollecting.turn_id == turn_id,
+                    CollectorCollecting.collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorSending)
+                .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorSending.turn_id == turn_id,
-                        CollectorSending.from_collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorSending.turn_id == turn_id,
+                    CollectorSending.from_collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorReceiving)
+                .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorReceiving.turn_id == turn_id,
-                        CollectorReceiving.to_collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorReceiving.turn_id == turn_id,
+                    CollectorReceiving.to_collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.execute(
                 delete(CollectorDispatching)
+                .execution_options(synchronize_session=False)
                 .where(
-                    and_(
-                        CollectorDispatching.turn_id == turn_id,
-                        CollectorDispatching.collector_hash.op("&")(hash_mask)
-                        == hash_prefix,
-                    )
+                    CollectorDispatching.turn_id == turn_id,
+                    CollectorDispatching.collector_hash.op("&")(hash_mask)
+                    == hash_prefix,
                 )
             )
             s_conn.commit()
 
+        _update_needed_worker_account_disabled_since()
+        _update_needed_worker_account_blocked_amounts()
+        _update_worker_account_surplus_amounts()
+        _kill_broken_worker_accounts()
+
         worker_turn.worker_turn_subphase = 10
+
+
+def _update_needed_worker_account_disabled_since() -> None:
+    """Update the `collection_disabled_since` column of all worker
+    accounts.
+
+    When a collector account gets disabled on the solver server, this
+    fact must become known on the worker server which is responsible
+    for that collector (worker) account.
+    """
+
+    db.session.execute(
+        update(NeededWorkerAccount)
+        .execution_options(synchronize_session=False)
+        .where(
+            NeededWorkerAccount.creditor_id == UsableCollector.collector_id,
+            NeededWorkerAccount.debtor_id == UsableCollector.debtor_id,
+            NeededWorkerAccount.collection_disabled_since.is_distinct_from(
+                UsableCollector.disabled_at
+            ),
+        )
+        .values(collection_disabled_since=UsableCollector.disabled_at)
+    )
+
+
+def _update_needed_worker_account_blocked_amounts() -> None:
+    """Calculate `blocked_amount` and `blocked_amount_ts` columns of
+    all worker accounts.
+
+    For some of the disabled collector accounts, there might be
+    pending transfers whose status we do not know yet. For the purpose
+    of determining the surplus amounts, we must always assume the
+    worst possible case. This worst possible case is represented by
+    the `NeededWorkerAccount.blocked_amount` column. It represents the
+    sum of all theoretically possible future withdrawals from the
+    worker account.
+    """
+
+    current_ts = datetime.now(tz=timezone.utc)
+    sbd = timedelta(days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
+
+    # Unreleased locks for surplus amounts which the collector wanted
+    # to sell.
+    locked_subq = (
+        select(AccountLock.max_locked_amount)
+        .where(
+            AccountLock.creditor_id == NeededWorkerAccount.creditor_id,
+            AccountLock.debtor_id == NeededWorkerAccount.debtor_id,
+            AccountLock.released_at == null(),
+        )
+        .scalar_subquery()
+        .correlate(NeededWorkerAccount)
+    )
+
+    # Pending sending to other collector accounts, and dispatching
+    # to buyers.
+    to_relay_subq = (
+        select(
+            func.sum(
+                cast(DispatchingStatus.amount_to_send, NUMERIC)
+                + cast(DispatchingStatus.amount_to_dispatch, NUMERIC)
+            )
+        )
+        .where(
+            DispatchingStatus.collector_id == NeededWorkerAccount.creditor_id,
+            DispatchingStatus.debtor_id == NeededWorkerAccount.debtor_id,
+        )
+        .scalar_subquery()
+        .correlate(NeededWorkerAccount)
+    )
+
+    nwa_row_filter = and_(
+        # We must calculate the blocked amount only after the
+        # collection has been disabled for a week or two. This gives
+        # enough time for most pending transfers to be finalized, and
+        # ensures that we are aware of all trading turns in which the
+        # given worker account had participated.
+        NeededWorkerAccount.collection_disabled_since < current_ts - sbd,
+
+        # We should not try to calculate the blocked amount twice. To
+        # decide if the calculated blocked amount is up-to-date, we
+        # consult the `blocked_amount_ts` field.
+        NeededWorkerAccount.collection_disabled_since
+        > NeededWorkerAccount.blocked_amount_ts,
+    )
+
+    # NOTE: Setting `blocked_amount_ts` to `current_ts` guarantees
+    # that if the `nwa_row_filter` predicate is True now, it will be
+    # False after the update.
+    nwa = NeededWorkerAccount.__table__
+    nwa_update_statement = (
+        update(nwa)
+        .where(
+            nwa.c.creditor_id == bindparam("b_creditor_id"),
+            nwa.c.debtor_id == bindparam("b_debtor_id"),
+            nwa.c.collection_disabled_since < current_ts - sbd,
+            nwa.c.collection_disabled_since > nwa.c.blocked_amount_ts,
+        )
+        .values(
+            blocked_amount=bindparam("b_blocked_amount"),
+            blocked_amount_ts=current_ts,
+        )
+    )
+
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                    coalesce(locked_subq, text("0")).label("locked"),
+                    coalesce(to_relay_subq, text("0")).label("to_relay"),
+                )
+                .select_from(NeededWorkerAccount)
+                .where(nwa_row_filter)
+        ) as result:
+            for rows in result.partitions(UPDATE_BATCH_SIZE):
+                dicts_to_update = [
+                    {
+                        "b_creditor_id": row.creditor_id,
+                        "b_debtor_id": row.debtor_id,
+                        "b_blocked_amount": contain_principal_overflow(
+                            int(row.locked + row.to_relay)
+                        ),
+                    }
+                    for row in rows
+                ]
+                db.session.execute(nwa_update_statement, dicts_to_update)
+
+
+def _update_worker_account_surplus_amounts() -> None:
+    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                )
+                .select_from(NeededWorkerAccount)
+                .join(WorkerAccount, WORKER_ACCOUNT_TABLES_JOIN_PREDICATE)
+                .where(KNOWN_SURPLUS_AMOUNT_PREDICATE)
+        ) as result:
+            for rows in result.partitions(2 * KILL_ACCOUNTS_BATCH_SIZE):
+                for row in rows:
+                    signal_dicts = []
+                    accounts_not_from_this_shard = []
+                    if sharding_realm.match(row.creditor_id):
+                        signal_dicts.append(
+                            {
+                                "collector_id": row.creditor_id,
+                                "debtor_id": row.debtor_id,
+                            }
+                        )
+                    else:
+                        accounts_not_from_this_shard.append(row)
+
+                    if signal_dicts:
+                        db.session.execute(
+                            insert(CalculateSurplusSignal).execution_options(
+                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                                synchronize_session=False,
+                            ),
+                            signal_dicts,
+                        )
+                    if accounts_not_from_this_shard:
+                        _kill_needed_worker_accounts_and_rate_stats(
+                            accounts_not_from_this_shard
+                        )
+
+
+def _kill_broken_worker_accounts() -> None:
+    """Garbage collects broken worker accounts.
+
+    Accounting authority nodes to which this node were connected, but
+    is no longer connected to, will not send heartbeat `AccountUpdate`
+    SMP messages. Therefore, all `WorkerAccount` records related to
+    such accounting authority nodes will be deleted some time after
+    the disconnection. Their corresponding `NeededWorkerAccount` (and
+    `InterestRateChange`) records however, will still remain in the
+    database. This function detects and removes (garbage collects)
+    such dysfunctional records from the database.
+    """
+
+    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+    worker_account_subquery = (
+        select(1)
+        .select_from(WorkerAccount)
+        .where(
+            WorkerAccount.creditor_id == NeededWorkerAccount.creditor_id,
+            WorkerAccount.debtor_id == NeededWorkerAccount.debtor_id,
+        )
+    ).exists()
+
+    with db.engine.connect() as w_conn:
+        with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                )
+                .select_from(NeededWorkerAccount)
+                .where(
+                    NeededWorkerAccount.blocked_amount_ts
+                    >= NeededWorkerAccount.collection_disabled_since,
+                    not_(worker_account_subquery),
+                )
+        ) as result:
+            for rows in result.partitions(KILL_ACCOUNTS_BATCH_SIZE):
+                _kill_needed_worker_accounts_and_rate_stats(rows)
+                status_change_dicts = (
+                    {
+                        "collector_id": row.creditor_id,
+                        "debtor_id": row.debtor_id,
+                        "from_status": 3,
+                        "to_status": 1,
+                        "account_id": None,
+                    }
+                    for row in rows
+                    if sharding_realm.match(row.creditor_id)
+                )
+                if status_change_dicts:
+                    db.session.execute(
+                        insert(CollectorStatusChange).execution_options(
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
+                        ),
+                        status_change_dicts,
+                    )
+
+
+def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
+    db.session.execute(
+        delete(NeededWorkerAccount)
+        .execution_options(synchronize_session=False)
+        .where(NEEDED_WORKER_ACCOUNT_PK.in_(primary_keys))
+    )
+
+    # NOTE: Here instead of directly executing an
+    # "InterestRateChange" bulk delete statement, we first
+    # *try* to obtain locks on the rows, and only then,
+    # delete the locked rows. The reason for this is that
+    # we can not be 100% certain that the bulk delete
+    # statement would be able to obtain the needed locks
+    # on all rows, and if it fails -- the whole work done
+    # so far (the whole "phase 3, subphase 5" thing) could
+    # be rolled back. The result of this choice is that,
+    # theoretically, some "InterestRateChange" rows that
+    # should be deleted, may remain in the database
+    # forever. However, this can only happen for a worker
+    # account that has not received a heartbeat for a huge
+    # period of time (say a year), and exactly when the
+    # account get removed, it receives a heartbeat, which
+    # changes the interest rate. The probability for this
+    # is practically zero, and the potential harm (an
+    # "InterestRateChange" row which will have to be
+    # removed manually at some point in the very distant
+    # future) is minimal.
+    interest_rate_changes_to_delete = (
+        InterestRateChange.query
+        .filter(
+            tuple_(
+                InterestRateChange.creditor_id,
+                InterestRateChange.debtor_id,
+            ).in_(primary_keys)
+        )
+        .options(load_only(InterestRateChange.change_ts))
+        .with_for_update(skip_locked=True)
+        .all()
+    )
+    for x in interest_rate_changes_to_delete:
+        db.session.delete(x)
+
+    db.session.flush()
+    for x in interest_rate_changes_to_delete:
+        db.session.expunge(x)

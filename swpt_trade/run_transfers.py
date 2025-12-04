@@ -26,18 +26,17 @@ from swpt_trade.models import (
     DelayedAccountTransfer,
     WorkerTurn,
 )
-from swpt_trade.utils import batched
 
 DISPATCHING_STATUS_PK = tuple_(
     DispatchingStatus.collector_id,
-    DispatchingStatus.turn_id,
     DispatchingStatus.debtor_id,
+    DispatchingStatus.turn_id,
 )
 DELAYED_ACCOUNT_TRANSFER_PK = tuple_(
     DelayedAccountTransfer.turn_id,
     DelayedAccountTransfer.message_id,
 )
-INSERT_BATCH_SIZE = 6000
+INSERT_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 
 T = TypeVar("T")
@@ -58,17 +57,101 @@ def process_rescheduled_transfers() -> int:
 
 
 def process_delayed_account_transfers() -> int:
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
     count = 0
-    batch_size = current_app.config[
-        "APP_DELAYED_ACCOUNT_TRANSFERS_BURST_COUNT"
-    ]
 
-    while True:
-        n = process_delayed_account_transfers_batch(batch_size)
-        count += n
-        if n < batch_size:
-            break
+    with db.engine.connect() as w_conn:
+        # NOTE: Each row in this cursor contains a lot of data.
+        # Therefore, we use `INSERT_BATCH_SIZE` here, because using
+        # the bigger `SELECT_BATCH_SIZE` may consume too much memory.
+        with w_conn.execution_options(yield_per=INSERT_BATCH_SIZE).execute(
+                select(
+                    DelayedAccountTransfer.turn_id,
+                    DelayedAccountTransfer.message_id,
+                    DelayedAccountTransfer.creditor_id,
+                    DelayedAccountTransfer.debtor_id,
+                    DelayedAccountTransfer.creation_date,
+                    DelayedAccountTransfer.transfer_number,
+                    DelayedAccountTransfer.coordinator_type,
+                    DelayedAccountTransfer.committed_at,
+                    DelayedAccountTransfer.acquired_amount,
+                    DelayedAccountTransfer.transfer_note_format,
+                    DelayedAccountTransfer.transfer_note,
+                    DelayedAccountTransfer.principal,
+                    DelayedAccountTransfer.previous_transfer_number,
+                    DelayedAccountTransfer.sender,
+                    DelayedAccountTransfer.recipient,
+                    DelayedAccountTransfer.ts,
+                )
+                .select_from(DelayedAccountTransfer)
+                .join(
+                    WorkerTurn,
+                    WorkerTurn.turn_id == DelayedAccountTransfer.turn_id,
+                )
+                .where(
+                    or_(
+                        WorkerTurn.phase > 3,
+                        and_(
+                            WorkerTurn.phase == 3,
+                            WorkerTurn.worker_turn_subphase >= 5,
+                        )
+                    )
+                )
+        ) as result:
+            for rows in result.partitions(INSERT_BATCH_SIZE):
+                to_replay = [
+                    dict(
+                        creditor_id=row.creditor_id,
+                        debtor_id=row.debtor_id,
+                        creation_date=row.creation_date,
+                        transfer_number=row.transfer_number,
+                        coordinator_type=row.coordinator_type,
+                        committed_at=row.committed_at,
+                        acquired_amount=row.acquired_amount,
+                        transfer_note_format=row.transfer_note_format,
+                        transfer_note=row.transfer_note,
+                        principal=row.principal,
+                        previous_transfer_number=row.previous_transfer_number,
+                        sender=row.sender,
+                        recipient=row.recipient,
+                        ts=row.ts,
+                    )
+                    for row in rows
+                    if (
+                            sharding_realm.match(row.creditor_id)
+                            or not (
+                                # Replying the message more than once
+                                # is safe, and therefore we do not shy
+                                # from doing it unless we are certain
+                                # that the other shard is the one
+                                # responsible for this particular
+                                # message.
+                                delete_parent_records
+                                and sharding_realm.match(
+                                    row.creditor_id, match_parent=True
+                                )
+                            )
+                    )
+                ]
+                if to_replay:
+                    db.session.bulk_insert_mappings(
+                        ReplayedAccountTransferSignal, to_replay
+                    )
+                db.session.execute(
+                    delete(DelayedAccountTransfer)
+                    .execution_options(synchronize_session=False)
+                    .where(
+                        DELAYED_ACCOUNT_TRANSFER_PK.in_(
+                            (row.turn_id, row.message_id) for row in rows
+                        )
+                    )
+                )
+                db.session.commit()
+                count += len(rows)
 
+    db.session.close()
     return count
 
 
@@ -79,8 +162,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
         .select_from(WorkerCollecting)
         .where(
             WorkerCollecting.collector_id == DispatchingStatus.collector_id,
-            WorkerCollecting.turn_id == DispatchingStatus.turn_id,
             WorkerCollecting.debtor_id == DispatchingStatus.debtor_id,
+            WorkerCollecting.turn_id == DispatchingStatus.turn_id,
             WorkerCollecting.collected == false(),
         )
     ).exists()
@@ -89,18 +172,16 @@ def signal_dispatching_statuses_ready_to_send() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
-                    and_(
-                        DispatchingStatus.started_sending == false(),
-                        DispatchingStatus.awaiting_signal_flag == false(),
-                        not_(pending_collectings_subquery),
-                    )
+                    DispatchingStatus.started_sending == false(),
+                    DispatchingStatus.awaiting_signal_flag == false(),
+                    not_(pending_collectings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -109,17 +190,13 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.started_sending
-                                == false(),
-                                DispatchingStatus.awaiting_signal_flag
-                                == false(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.started_sending == false(),
+                            DispatchingStatus.awaiting_signal_flag == false(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -130,18 +207,20 @@ def signal_dispatching_statuses_ready_to_send() -> None:
 
                     db.session.execute(
                         update(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
                         insert(StartSendingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         [
                             {
                                 "collector_id": row.collector_id,
-                                "turn_id": row.turn_id,
                                 "debtor_id": row.debtor_id,
+                                "turn_id": row.turn_id,
                                 "inserted_at": current_ts,
                             }
                             for row in locked_rows
@@ -149,6 +228,8 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                     )
 
                 db.session.commit()
+
+    db.session.close()
 
 
 def update_dispatching_statuses_with_everything_sent() -> None:
@@ -158,8 +239,8 @@ def update_dispatching_statuses_with_everything_sent() -> None:
         .select_from(WorkerSending)
         .where(
             WorkerSending.from_collector_id == DispatchingStatus.collector_id,
-            WorkerSending.turn_id == DispatchingStatus.turn_id,
             WorkerSending.debtor_id == DispatchingStatus.debtor_id,
+            WorkerSending.turn_id == DispatchingStatus.turn_id,
         )
     ).exists()
 
@@ -167,8 +248,8 @@ def update_dispatching_statuses_with_everything_sent() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
                     DispatchingStatus.started_sending == true(),
@@ -176,7 +257,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                     not_(pending_sendings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -185,15 +266,13 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.started_sending == true(),
-                                DispatchingStatus.all_sent == false(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.started_sending == true(),
+                            DispatchingStatus.all_sent == false(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -202,11 +281,14 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                 if locked_rows:
                     db.session.execute(
                         update(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                         .values(all_sent=True)
                     )
 
                 db.session.commit()
+
+    db.session.close()
 
 
 def signal_dispatching_statuses_ready_to_dispatch() -> None:
@@ -216,8 +298,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
         .select_from(WorkerReceiving)
         .where(
             WorkerReceiving.to_collector_id == DispatchingStatus.collector_id,
-            WorkerReceiving.turn_id == DispatchingStatus.turn_id,
             WorkerReceiving.debtor_id == DispatchingStatus.debtor_id,
+            WorkerReceiving.turn_id == DispatchingStatus.turn_id,
             WorkerReceiving.received_amount == text("0"),
         )
     ).exists()
@@ -226,19 +308,17 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
-                    and_(
-                        DispatchingStatus.all_sent == true(),
-                        DispatchingStatus.started_dispatching == false(),
-                        DispatchingStatus.awaiting_signal_flag == false(),
-                        not_(pending_receivings_subquery),
-                    )
+                    DispatchingStatus.all_sent == true(),
+                    DispatchingStatus.started_dispatching == false(),
+                    DispatchingStatus.awaiting_signal_flag == false(),
+                    not_(pending_receivings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -247,18 +327,14 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.all_sent == true(),
-                                DispatchingStatus.started_dispatching
-                                == false(),
-                                DispatchingStatus.awaiting_signal_flag
-                                == false(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.all_sent == true(),
+                            DispatchingStatus.started_dispatching == false(),
+                            DispatchingStatus.awaiting_signal_flag == false(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -269,18 +345,20 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
 
                     db.session.execute(
                         update(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
                         insert(StartDispatchingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                            synchronize_session=False,
                         ),
                         [
                             {
                                 "collector_id": row.collector_id,
-                                "turn_id": row.turn_id,
                                 "debtor_id": row.debtor_id,
+                                "turn_id": row.turn_id,
                                 "inserted_at": current_ts,
                             }
                             for row in locked_rows
@@ -288,6 +366,8 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                     )
 
                 db.session.commit()
+
+    db.session.close()
 
 
 def delete_dispatching_statuses_with_everything_dispatched() -> None:
@@ -297,8 +377,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
         .select_from(WorkerDispatching)
         .where(
             WorkerDispatching.collector_id == DispatchingStatus.collector_id,
-            WorkerDispatching.turn_id == DispatchingStatus.turn_id,
             WorkerDispatching.debtor_id == DispatchingStatus.debtor_id,
+            WorkerDispatching.turn_id == DispatchingStatus.turn_id,
         )
     ).exists()
 
@@ -306,17 +386,15 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
-                    DispatchingStatus.turn_id,
                     DispatchingStatus.debtor_id,
+                    DispatchingStatus.turn_id,
                 )
                 .where(
-                    and_(
-                        DispatchingStatus.started_dispatching == true(),
-                        not_(pending_dispatchings_subquery),
-                    )
+                    DispatchingStatus.started_dispatching == true(),
+                    not_(pending_dispatchings_subquery),
                 )
         ) as result:
-            for rows in batched(result, INSERT_BATCH_SIZE):
+            for rows in result.partitions(INSERT_BATCH_SIZE):
                 this_shard_rows = [
                     row for row in rows if
                     sharding_realm.match(row.collector_id)
@@ -325,15 +403,12 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                     db.session.execute(
                         select(
                             DispatchingStatus.collector_id,
-                            DispatchingStatus.turn_id,
                             DispatchingStatus.debtor_id,
+                            DispatchingStatus.turn_id,
                         )
                         .where(
-                            and_(
-                                DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                                DispatchingStatus.started_dispatching
-                                == true(),
-                            )
+                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
+                            DispatchingStatus.started_dispatching == true(),
                         )
                         .with_for_update(skip_locked=True)
                     )
@@ -342,102 +417,10 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                 if locked_rows:
                     db.session.execute(
                         delete(DispatchingStatus)
+                        .execution_options(synchronize_session=False)
                         .where(DISPATCHING_STATUS_PK.in_(locked_rows))
                     )
 
                 db.session.commit()
 
-
-@atomic
-def process_delayed_account_transfers_batch(batch_size: int) -> int:
-    assert batch_size > 0
-
-    ready_delayed_account_transfers = db.session.execute(
-        select(
-            DelayedAccountTransfer.turn_id,
-            DelayedAccountTransfer.message_id,
-            DelayedAccountTransfer.creditor_id,
-            DelayedAccountTransfer.debtor_id,
-            DelayedAccountTransfer.creation_date,
-            DelayedAccountTransfer.transfer_number,
-            DelayedAccountTransfer.coordinator_type,
-            DelayedAccountTransfer.committed_at,
-            DelayedAccountTransfer.acquired_amount,
-            DelayedAccountTransfer.transfer_note_format,
-            DelayedAccountTransfer.transfer_note,
-            DelayedAccountTransfer.principal,
-            DelayedAccountTransfer.previous_transfer_number,
-            DelayedAccountTransfer.sender,
-            DelayedAccountTransfer.recipient,
-            DelayedAccountTransfer.ts,
-        )
-        .select_from(DelayedAccountTransfer)
-        .join(WorkerTurn, WorkerTurn.turn_id == DelayedAccountTransfer.turn_id)
-        .where(
-            or_(
-                WorkerTurn.phase > 3,
-                and_(
-                    WorkerTurn.phase == 3,
-                    WorkerTurn.worker_turn_subphase >= 5,
-                )
-            )
-        )
-        .with_for_update(of=DelayedAccountTransfer, skip_locked=True)
-        .limit(batch_size)
-    ).all()
-
-    if ready_delayed_account_transfers:
-        cfg = current_app.config
-        sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
-        delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
-        account_transfers_to_replay = [
-            dict(
-                creditor_id=row.creditor_id,
-                debtor_id=row.debtor_id,
-                creation_date=row.creation_date,
-                transfer_number=row.transfer_number,
-                coordinator_type=row.coordinator_type,
-                committed_at=row.committed_at,
-                acquired_amount=row.acquired_amount,
-                transfer_note_format=row.transfer_note_format,
-                transfer_note=row.transfer_note,
-                principal=row.principal,
-                previous_transfer_number=row.previous_transfer_number,
-                sender=row.sender,
-                recipient=row.recipient,
-                ts=row.ts,
-            )
-            for row in ready_delayed_account_transfers
-            if (
-                    sharding_realm.match(row.creditor_id)
-                    or not (
-                        # Replying the message more than once is safe,
-                        # and therefore we do not shy from doing it
-                        # unless we are certain that the other shard
-                        # is the one responsible for this particular
-                        # message.
-                        delete_parent_records
-                        and sharding_realm.match(
-                            row.creditor_id, match_parent=True
-                        )
-                    )
-            )
-        ]
-        if account_transfers_to_replay:
-            db.session.bulk_insert_mappings(
-                ReplayedAccountTransferSignal, account_transfers_to_replay
-            )
-
-        db.session.execute(
-            delete(DelayedAccountTransfer)
-            .where(
-                DELAYED_ACCOUNT_TRANSFER_PK.in_(
-                    [
-                        (row.turn_id, row.message_id)
-                        for row in ready_delayed_account_transfers
-                    ]
-                )
-            )
-        )
-
-    return len(ready_delayed_account_transfers)
+    db.session.close()

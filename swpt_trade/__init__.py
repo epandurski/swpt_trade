@@ -192,9 +192,12 @@ class Configuration(metaclass=MetaEnvReader):
         _parse_creditor_id("0x0000010000000000")
     )
     MAX_COLLECTOR_ID: _parse_creditor_id = (
-        _parse_creditor_id("0x00000100000007ff")
+        _parse_creditor_id("0x00000100000003ff")
     )
-    DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 1
+    OWNER_CREDITOR_ID: _parse_creditor_id = (
+        _parse_creditor_id("0x00000100ffffffff")
+    )
+    DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 2
     OAUTH2_SUPERUSER_USERNAME = "creditors-superuser"
     OAUTH2_SUPERVISOR_USERNAME = "creditors-supervisor"
 
@@ -225,6 +228,7 @@ class Configuration(metaclass=MetaEnvReader):
 
     TRANSFERS_HEALTHY_MAX_COMMIT_DELAY: parse_timedelta = parse_timedelta("2h")
     TRANSFERS_AMOUNT_CUT = 1e-5
+    TRANSFERS_COLLECTOR_LIMIT = 100000
 
     PROTOCOL_BROKER_URL = "amqp://guest:guest@localhost:5672"
     PROTOCOL_BROKER_QUEUE = "swpt_trade"
@@ -270,10 +274,12 @@ class Configuration(metaclass=MetaEnvReader):
     APP_INTEREST_RATE_HISTORY_PERIOD: parse_timedelta = parse_timedelta("180d")
     APP_MIN_DEMURRAGE_RATE = -50.0
     APP_MIN_TRANSFER_NOTE_MAX_BYTES = 80
+    APP_SURPLUS_BLOCKING_DELAY_DAYS = 14.0
     APP_ACCOUNT_LOCK_MAX_DAYS = 365.0
     APP_RELEASED_ACCOUNT_LOCK_MAX_DAYS = 30.0
+    APP_COLLECTOR_ACTIVITY_MIN_DAYS = 28.0
     APP_ROLL_WORKER_TURNS_WAIT = 60.0
-    APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 100000
+    APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 50000
     APP_LOCATOR_CLAIM_EXPIRY_DAYS = 45.0
     APP_DEBTOR_INFO_EXPIRY_DAYS = 7.0
     APP_EXTREME_MESSAGE_DELAY_DAYS = 7.0
@@ -326,7 +332,7 @@ class Configuration(metaclass=MetaEnvReader):
     APP_TRANSFER_ATTEMPTS_SCAN_DAYS = 7.0
     APP_TRANSFER_ATTEMPTS_SCAN_BLOCKS_PER_QUERY = 40
     APP_TRANSFER_ATTEMPTS_SCAN_BEAT_MILLISECS = 100
-    APP_FLUSH_CONFIGURE_ACCOUNTS_BURST_COUNT = 10000
+    APP_FLUSH_CONFIGURE_ACCOUNTS_BURST_COUNT = 7000
     APP_FLUSH_PREPARE_TRANSFERS_BURST_COUNT = 10000
     APP_FLUSH_FINALIZE_TRANSFERS_BURST_COUNT = 10000
     APP_FLUSH_FETCH_DEBTOR_INFO_BURST_COUNT = 10000
@@ -342,12 +348,12 @@ class Configuration(metaclass=MetaEnvReader):
     APP_FLUSH_ACCOUNT_ID_RESPONSE_BURST_COUNT = 10000
     APP_FLUSH_START_SENDING_BURST_COUNT = 10000
     APP_FLUSH_START_DISPATCHING_BURST_COUNT = 10000
+    APP_FLUSH_CALCULATE_SURPLUS_BURST_COUNT = 10000
     APP_FLUSH_REPLAYED_ACCOUNT_TRANSFERS_BURST_COUNT = 10000
     APP_VERIFY_SHARD_YIELD_PER = 10000
     APP_VERIFY_SHARD_SLEEP_SECONDS = 0.005
     APP_DEBTOR_INFO_FETCH_BURST_COUNT = 2000
     APP_RESCHEDULED_TRANSFERS_BURST_COUNT = 5000
-    APP_DELAYED_ACCOUNT_TRANSFERS_BURST_COUNT = 5000
     APP_SUPERUSER_SUBJECT_REGEX = ""
     APP_SUPERVISOR_SUBJECT_REGEX = ""
     APP_CREDITOR_SUBJECT_REGEX = "^creditors:([0-9]+)$"
@@ -359,6 +365,7 @@ def _check_config_sanity(c):  # pragma: nocover
             or c["MAX_COLLECTOR_ID"] is None
             or c["MIN_COLLECTOR_ID"] * c["MAX_COLLECTOR_ID"] <= 0
             or c["MIN_COLLECTOR_ID"] > c["MAX_COLLECTOR_ID"]
+            or c["MAX_COLLECTOR_ID"] - c["MIN_COLLECTOR_ID"] > 16384
     ):
         raise RuntimeError(
             "Invalid values for MIN_COLLECTOR_ID and MAX_COLLECTOR_ID."
@@ -395,6 +402,26 @@ def _check_config_sanity(c):  # pragma: nocover
         )
 
     if (
+            c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+            < c["APP_EXTREME_MESSAGE_DELAY_DAYS"]
+            or c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+            < (3 * parse_timedelta(c["TURN_PERIOD"])).days
+    ):
+        raise RuntimeError(
+            "The configured value for APP_SURPLUS_BLOCKING_DELAY_DAYS is too"
+            " small. Choose a more appropriate value."
+        )
+
+    if (
+            c["APP_COLLECTOR_ACTIVITY_MIN_DAYS"]
+            < c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+    ):
+        raise RuntimeError(
+            "The configured value for APP_COLLECTOR_ACTIVITY_MIN_DAYS is too"
+            " small. Choose a more appropriate value."
+        )
+
+    if (
         c["APP_LOCATOR_CLAIM_EXPIRY_DAYS"]
         < 5 * c["APP_DEBTOR_INFO_EXPIRY_DAYS"]
     ):
@@ -411,6 +438,15 @@ def _check_config_sanity(c):  # pragma: nocover
             " smaller than the configured value for"
             " APP_TURN_MAX_COMMIT_PERIOD. Choose more appropriate"
             " configuration values."
+        )
+
+    if (
+            2 * c["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
+            > parse_timedelta(c["TURN_PERIOD"]).total_seconds()
+    ):
+        raise RuntimeError(
+            "The configured value for HANDLE_PRISTINE_COLLECTORS_PERIOD is"
+            " to big. Choose a more appropriate value."
         )
 
 

@@ -16,9 +16,7 @@ from .common import swpt_trade
     type=float,
     help=(
         "Poll the solver's database for new or progressed turns every"
-        " FLOAT seconds. If not specified, the value of the"
-        " APP_ROLL_WORKER_TURNS_WAIT environment variable will be used,"
-        " defaulting to 60 seconds if empty."
+        " FLOAT seconds. If not specified, defaults to 60 seconds."
     ),
 )
 @click.option(

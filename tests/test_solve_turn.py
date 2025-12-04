@@ -1,5 +1,5 @@
 from swpt_trade.solve_turn import try_to_advance_turn_to_phase3
-from swpt_trade.utils import calc_hash
+from swpt_trade.utils import calc_hash, get_primary_collector_id
 from swpt_trade.models import (
     CollectorAccount,
     Turn,
@@ -12,11 +12,14 @@ from swpt_trade.models import (
     CollectorCollecting,
     CreditorGiving,
     CreditorTaking,
+    OverloadedCurrency,
+    HoardedCurrency,
     TS0,
 )
 
 
 def test_try_to_advance_turn_to_phase3(db_session):
+    from flask import current_app
     turn = Turn(
         phase=2,
         phase_deadline=TS0,
@@ -32,6 +35,12 @@ def test_try_to_advance_turn_to_phase3(db_session):
     db_session.commit()
     turn_id = turn.turn_id
 
+    db_session.add(
+        HoardedCurrency(
+            turn_id=turn.turn_id,
+            debtor_id=103,
+        )
+    )
     db_session.add(
         CurrencyInfo(
             turn_id=turn_id,
@@ -56,17 +65,32 @@ def test_try_to_advance_turn_to_phase3(db_session):
     )
     db_session.add(
         CollectorAccount(
-            debtor_id=101, collector_id=997, account_id="997", status=2
+            debtor_id=101, collector_id=997, account_id="997", status=2,
+            latest_status_change_at=TS0,
         )
     )
     db_session.add(
         CollectorAccount(
-            debtor_id=101, collector_id=998, account_id="998", status=2
+            debtor_id=101, collector_id=998, account_id="998", status=2,
+            latest_status_change_at=TS0,
         )
     )
     db_session.add(
         CollectorAccount(
-            debtor_id=102, collector_id=999, account_id="999", status=2
+            debtor_id=102, collector_id=999, account_id="999", status=2,
+            latest_status_change_at=TS0,
+        )
+    )
+    db_session.add(
+        CollectorAccount(
+            debtor_id=109, collector_id=1001, account_id="991", status=1,
+            latest_status_change_at=TS0,
+        )
+    )
+    db_session.add(
+        CollectorAccount(
+            debtor_id=109, collector_id=1002, account_id="991", status=1,
+            latest_status_change_at=TS0,
         )
     )
     db_session.add(
@@ -124,13 +148,22 @@ def test_try_to_advance_turn_to_phase3(db_session):
 
     ca = CollectorAccount.query.all()
     ca.sort(key=lambda row: row.collector_id)
-    assert len(ca) == 3
+    assert len(ca) == 5
     assert ca[0].collector_id == 997
     assert ca[0].collector_hash == calc_hash(ca[0].collector_id)
+    assert ca[0].status == 2
     assert ca[1].collector_id == 998
     assert ca[1].collector_hash == calc_hash(ca[1].collector_id)
+    assert ca[1].status == 2
     assert ca[2].collector_id == 999
     assert ca[2].collector_hash == calc_hash(ca[2].collector_id)
+    assert ca[2].status == 2
+    assert ca[3].collector_id == 1001
+    assert ca[3].collector_hash == calc_hash(ca[3].collector_id)
+    assert ca[3].status == 1
+    assert ca[4].collector_id == 1002
+    assert ca[4].collector_hash == calc_hash(ca[4].collector_id)
+    assert ca[4].status == 1
 
     try_to_advance_turn_to_phase3(turn)
 
@@ -244,3 +277,31 @@ def test_try_to_advance_turn_to_phase3(db_session):
     assert cg[2].amount == 3000
     assert cg[2].collector_id == 999
     assert cg[2].creditor_hash == calc_hash(2)
+
+    cfg = current_app.config
+    max_collectors = 1 + cfg["MAX_COLLECTOR_ID"] - cfg["MIN_COLLECTOR_ID"]
+    cas = CollectorAccount.query.all()
+    cas.sort(key=lambda row: (row.debtor_id, row.collector_id))
+    assert len(cas) == 3 + 2 + max_collectors
+    assert cas[0].debtor_id == cas[1].debtor_id == cas[2].debtor_id == 101
+    assert cas[0].status == 3
+    assert cas[1].status == 2
+    assert cas[2].status == 0
+    assert cas[2].collector_id == get_primary_collector_id(
+        debtor_id=101,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+    )
+    assert cas[3].debtor_id == cas[4].debtor_id == 102
+    assert cas[3].status == 3
+    assert cas[4].status == 0
+    assert cas[4].collector_id == get_primary_collector_id(
+        debtor_id=102,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+    )
+    assert cas[5].debtor_id == cas[-1].debtor_id == 103
+    assert cas[5].status == 0
+
+    ocs = OverloadedCurrency.query.all()
+    assert len(ocs) == 0

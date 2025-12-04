@@ -43,7 +43,6 @@ CREDITOR_ID_SHARDED_MESSAGE_TYPES = SMP_MESSAGE_TYPES | set([
     "UpdatedLedger",
     "UpdatedPolicy",
     "UpdatedFlags",
-    "ActivateCollector",
     "CandidateOffer",
     "ReviseAccountLock",
     "AccountIdRequest",
@@ -58,6 +57,7 @@ COLLECTOR_ID_SHARDED_MESSAGE_TYPES = set([
     "AccountIdResponse",
     "StartSending",
     "StartDispatching",
+    "CalculateSurplus",
 ])
 IRI_SHARDED_MESSAGE_TYPES = set([
     "FetchDebtorInfo",

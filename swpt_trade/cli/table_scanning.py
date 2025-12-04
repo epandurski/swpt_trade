@@ -1,4 +1,5 @@
 import logging
+import sys
 import click
 import time
 import threading
@@ -20,9 +21,7 @@ def scan_debtor_info_documents(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the debtor info documents table. If the number
-    of days is not specified, the value of the environment variable
-    APP_DEBTOR_INFO_DOCUMENTS_SCAN_DAYS is taken. If it is not set,
-    the default number of days is 7.
+    of days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import DebtorInfoDocumentsScanner
 
@@ -46,9 +45,7 @@ def scan_debtor_locator_claims(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the debtor locator claims table. If the number
-    of days is not specified, the value of the environment variable
-    APP_DEBTOR_LOCATOR_CLAIMS_SCAN_DAYS is taken. If it is not set,
-    the default number of days is 1.
+    of days is not specified, the default is 1 day.
     """
     from swpt_trade.table_scanners import DebtorLocatorClaimsScanner
 
@@ -72,9 +69,7 @@ def scan_trading_policies(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the trading policies table. If the number of
-    days is not specified, the value of the environment variable
-    APP_TRADING_POLICIES_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import TradingPoliciesScanner
 
@@ -98,9 +93,7 @@ def scan_worker_accounts(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker accounts table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_ACCOUNTS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import WorkerAccountsScanner
 
@@ -119,67 +112,13 @@ def scan_worker_accounts(days, quit_early):
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def scan_needed_worker_accounts(days, quit_early):
-    """Start a process that garbage collects needed worker accounts.
-
-    The specified number of days determines the intended duration of a
-    single pass through the needed worker accounts table. If the
-    number of days is not specified, the value of the environment
-    variable APP_NEEDED_WORKER_ACCOUNTS_SCAN_DAYS is taken. If it is
-    not set, the default number of days is 7.
-    """
-    from swpt_trade.table_scanners import NeededWorkerAccountsScanner
-
-    logger = logging.getLogger(__name__)
-    logger.info("Started needed worker accounts scanner.")
-    days = days or current_app.config["APP_NEEDED_WORKER_ACCOUNTS_SCAN_DAYS"]
-    assert days > 0.0
-    scanner = NeededWorkerAccountsScanner()
-    scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
-
-
-@click.option("-d", "--days", type=float, help="The number of days.")
-@click.option(
-    "--quit-early",
-    is_flag=True,
-    default=False,
-    help="Exit after some time (mainly useful during testing).",
-)
-def scan_interest_rate_changes(days, quit_early):
-    """Start a process that garbage collects stale interest rate changes.
-
-    The specified number of days determines the intended duration of a
-    single pass through the debtor info documents table. If the number
-    of days is not specified, the value of the environment variable
-    APP_INTEREST_RATE_CHANGES_SCAN_DAYS is taken. If it is not set,
-    the default number of days is 7.
-    """
-    from swpt_trade.table_scanners import InterestRateChangesScanner
-
-    logger = logging.getLogger(__name__)
-    logger.info("Started interest rate changes scanner.")
-    days = days or current_app.config["APP_INTEREST_RATE_CHANGES_SCAN_DAYS"]
-    assert days > 0.0
-    scanner = InterestRateChangesScanner()
-    scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
-
-
-@click.option("-d", "--days", type=float, help="The number of days.")
-@click.option(
-    "--quit-early",
-    is_flag=True,
-    default=False,
-    help="Exit after some time (mainly useful during testing).",
-)
 def scan_recently_needed_collectors(days, quit_early):
     """Start a process that garbage collects recently needed collector
     records.
 
     The specified number of days determines the intended duration of a
     single pass through the debtor locator claims table. If the number
-    of days is not specified, the value of the environment variable
-    APP_RECENTLY_NEEDED_COLLECTORS_SCAN_DAYS is taken. If it is not
-    set, the default number of days is 7.
+    of days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import RecentlyNeededCollectorsScanner
 
@@ -205,9 +144,7 @@ def scan_account_locks(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the account locks table. If the number of days
-    is not specified, the value of the environment variable
-    APP_ACCOUNT_LOCKS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import AccountLocksScanner
 
@@ -232,9 +169,7 @@ def scan_creditor_participations(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the creditor participations table. If the
-    number of days is not specified, the value of the environment
-    variable APP_CREDITOR_PARTICIPATIONS_SCAN_DAYS is taken. If it is
-    not set, the default number of days is 7.
+    number of days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import CreditorParticipationsScanner
 
@@ -258,9 +193,7 @@ def scan_dispatching_statuses(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the dispatching status table. If the number of
-    days is not specified, the value of the environment variable
-    APP_DISPATCHING_STATUSES_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import DispatchingStatusesScanner
 
@@ -284,9 +217,7 @@ def scan_worker_collectings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker collecting table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_COLLECTINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 3.
+    days is not specified, the default is 3 days.
     """
     from swpt_trade.table_scanners import WorkerCollectingsScanner
 
@@ -310,9 +241,7 @@ def scan_worker_sendings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker sending table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_SENDINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 1.
+    days is not specified, the value default is 1 day.
     """
     from swpt_trade.table_scanners import WorkerSendingsScanner
 
@@ -336,9 +265,7 @@ def scan_worker_receivings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker receiving table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_RECEIVINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 1.
+    days is not specified, the value default is 1 day.
     """
     from swpt_trade.table_scanners import WorkerReceivingsScanner
 
@@ -362,9 +289,7 @@ def scan_worker_dispatchings(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the worker dispatching table. If the number of
-    days is not specified, the value of the environment variable
-    APP_WORKER_DISPATCHINGS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import WorkerDispatchingsScanner
 
@@ -388,9 +313,7 @@ def scan_transfer_attempts(days, quit_early):
 
     The specified number of days determines the intended duration of a
     single pass through the transfer attempt table. If the number of
-    days is not specified, the value of the environment variable
-    APP_TRANSFER_ATTEMPTS_SCAN_DAYS is taken. If it is not set, the
-    default number of days is 7.
+    days is not specified, the default is 7 days.
     """
     from swpt_trade.table_scanners import TransferAttemptsScanner
 
@@ -407,8 +330,6 @@ _all_scans = [
     scan_debtor_locator_claims,
     scan_trading_policies,
     scan_worker_accounts,
-    scan_interest_rate_changes,
-    scan_needed_worker_accounts,
     scan_recently_needed_collectors,
     scan_account_locks,
     scan_creditor_participations,
@@ -425,21 +346,28 @@ for scan in _all_scans:
 
 @swpt_trade.command("scan_all")
 def scan_all():  # pragma: no cover
+    """Start a process that garbage collects rows in all relevant tables.
+
+    For each one of the relevant tables, the default intended duration
+    of a single pass will be used.
+    """
+
     app = current_app._get_current_object()
+    error_in = None
 
     def wrap(f):
         def wrapper_func(*args, **kwargs):
+            nonlocal error_in
             logger = logging.getLogger(__name__)
             ctx = app.app_context()
             ctx.push()
-            while True:
-                try:
-                    f(*args, **kwargs)
-                except Exception:
-                    logger.exception("Caught error in %s.", f.__name__)
-                else:
-                    logger.error("Unexpected return from %s.", f.__name__)
-                time.sleep(60.0)
+            try:
+                f(*args, **kwargs)
+            except Exception:
+                logger.exception("Caught error in %s.", f.__name__)
+            else:
+                logger.error("Unexpected return from %s.", f.__name__)
+            error_in = f.__name__
         return wrapper_func
 
     for t in [
@@ -452,5 +380,9 @@ def scan_all():  # pragma: no cover
     ]:
         t.start()
 
-    while True:
+    while error_in is None:
         time.sleep(5.0)
+
+    logger = logging.getLogger(__name__)
+    logger.error("Exiting because an error has occurred in %s.", error_in)
+    sys.exit(1)

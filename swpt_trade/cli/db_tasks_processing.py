@@ -3,6 +3,7 @@ import time
 import click
 import signal
 import sys
+import random
 from typing import Any
 from datetime import timedelta
 from flask import current_app
@@ -14,8 +15,10 @@ from swpt_pythonlib.multiproc_utils import (
     spawn_worker_processes,
     try_unblock_signals,
 )
+from swpt_trade.extensions import db
 from swpt_trade.utils import u16_to_i16
 from swpt_trade import procedures
+from swpt_trade import sync_collectors
 from swpt_trade.run_transfers import process_rescheduled_transfers
 from .common import swpt_trade
 
@@ -52,15 +55,6 @@ def handle_pristine_collectors(threads, wait, quit_early):
     not set, the default number of seconds is 60.
     """
 
-    # TODO: Consider allowing load-sharing between multiple processes
-    #       or containers. This may also be true for the other
-    #       "process_*" CLI commands. A possible way to do this is to
-    #       separate the `args collection` in multiple buckets,
-    #       assigning a dedicated process/container for each bucket.
-    #       Note that this would makes sense only if the load is
-    #       CPU-bound, which is unlikely, especially if we
-    #       re-implement the logic in stored procedures.
-
     threads = threads or current_app.config[
         "HANDLE_PRISTINE_COLLECTORS_THREADS"
     ]
@@ -77,33 +71,33 @@ def handle_pristine_collectors(threads, wait, quit_early):
     hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
     hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
 
-    def get_args_collection():
-        return procedures.get_pristine_collectors(
+    def iter_args_collections():
+        return sync_collectors.iter_pristine_collectors(
             hash_mask=hash_mask,
             hash_prefix=hash_prefix,
-            max_count=max_count,
+            yield_per=max_count,
         )
 
     def handle_pristine_collector(debtor_id, collector_id):
-        assert sharding_realm.match(collector_id)
-        procedures.configure_worker_account(
-            debtor_id=debtor_id,
-            collector_id=collector_id,
-            max_postponement=max_postponement,
-        )
-        procedures.mark_requested_collector(
-            debtor_id=debtor_id, collector_id=collector_id
-        )
+        try:
+            assert sharding_realm.match(collector_id)
+            procedures.configure_worker_account(
+                debtor_id=debtor_id,
+                collector_id=collector_id,
+                max_postponement=max_postponement,
+            )
+        finally:
+            db.session.close()
 
     logger = logging.getLogger(__name__)
     logger.info("Started pristine collector accounts processor.")
+    time.sleep(wait * random.random())
 
     ThreadPoolProcessor(
         threads,
-        get_args_collection=get_args_collection,
+        iter_args_collections=iter_args_collections,
         process_func=handle_pristine_collector,
         wait_seconds=wait,
-        max_count=max_count,
     ).run(quit_early=quit_early)
 
 
@@ -196,3 +190,46 @@ def trigger_transfers(
         ),
     )
     sys.exit(1)
+
+
+@swpt_trade.command("apply_collector_changes")
+@with_appcontext
+@click.option(
+    "-w",
+    "--wait",
+    type=float,
+    help=(
+        "The minimal number of seconds between"
+        " the queries to obtain collector changes."
+    ),
+)
+@click.option(
+    "--quit-early",
+    is_flag=True,
+    default=False,
+    help="Exit after some time (mainly useful during testing).",
+)
+def apply_collector_changes(wait, quit_early):
+    """Run a process which applies pending collector changes.
+
+    If --wait is not specified, 1/4th of the value of the configuration
+    variable HANDLE_PRISTINE_COLLECTORS_PERIOD is taken. If it is
+    not set, the default number of seconds is 15.
+    """
+
+    wait = (
+        wait
+        if wait is not None
+        else current_app.config["HANDLE_PRISTINE_COLLECTORS_PERIOD"] / 4
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Started collector changes processor.")
+    time.sleep(wait * random.random())
+    iteration_counter = 0
+
+    while not (quit_early and iteration_counter > 0):
+        iteration_counter += 1
+        started_at = time.time()
+        sync_collectors.process_collector_status_changes()
+        sync_collectors.create_needed_collector_accounts()
+        time.sleep(max(0.0, wait + started_at - time.time()))

@@ -15,7 +15,6 @@ from swpt_trade.models import (
     DebtorLocatorClaim,
     FetchDebtorInfoSignal,
     DiscoverDebtorSignal,
-    ActivateCollectorSignal,
     ConfigureAccountSignal,
     PrepareTransferSignal,
     FinalizeTransferSignal,
@@ -24,10 +23,9 @@ from swpt_trade.models import (
     DebtorInfoFetch,
     DebtorInfoDocument,
     TradingPolicy,
-    RecentlyNeededCollector,
     WorkerTurn,
     AccountLock,
-    ActiveCollector,
+    UsableCollector,
     CreditorParticipation,
     DispatchingStatus,
     WorkerCollecting,
@@ -35,6 +33,7 @@ from swpt_trade.models import (
     WorkerSending,
     WorkerDispatching,
     TransferAttempt,
+    CollectorStatusChange,
     TS0,
     DATE0,
     MAX_INT32,
@@ -769,116 +768,18 @@ def test_process_updated_flags_signal(db_session, current_ts):
     assert tps[0].config_flags == 4567
 
 
-@pytest.mark.parametrize("status", [0, 1])
-def test_activate_collector(db_session, current_ts, status):
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=123,
-            status=status,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=777,
-            collector_id=123,
-            status=status,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=321,
-            status=status,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.commit()
-
-    # non-existing account
-    assert not p.activate_collector(
-        debtor_id=666,
-        collector_id=999,
-        account_id="acconut999",
-    )
-
-    # existing account
-    assert p.activate_collector(
-        debtor_id=666,
-        collector_id=123,
-        account_id="acconut123",
-    )
-
-    # already activated account
-    assert not p.activate_collector(
-        debtor_id=666,
-        collector_id=123,
-        account_id="changed-acconut-id",
-    )
-
+def test_insert_collector_accounts(db_session):
+    p.insert_collector_accounts([(666, 1000)])
+    p.insert_collector_accounts([(666, 1000), (666, 1001)])
     cas = CollectorAccount.query.all()
-    cas.sort(key=lambda r: (r.debtor_id, r.collector_id))
-    assert len(cas) == 3
-    assert cas[0].status == 2
-    assert cas[0].account_id == "acconut123"
-    assert cas[0].latest_status_change_at >= current_ts
-    assert cas[1].status == status
-    assert cas[1].account_id == ""
-    assert cas[2].status == status
-    assert cas[2].account_id == ""
-
-
-def test_mark_requested_collector(db_session, current_ts):
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=123,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=777,
-            collector_id=123,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.add(
-        CollectorAccount(
-            debtor_id=666,
-            collector_id=321,
-            latest_status_change_at=current_ts - timedelta(days=1),
-        )
-    )
-    db_session.commit()
-
-    # non-existing account
-    assert not p.mark_requested_collector(
-        debtor_id=666,
-        collector_id=999,
-    )
-
-    # existing account
-    assert p.mark_requested_collector(
-        debtor_id=666,
-        collector_id=123,
-    )
-
-    # already marked account
-    assert not p.mark_requested_collector(
-        debtor_id=666,
-        collector_id=123,
-    )
-
-    cas = CollectorAccount.query.all()
-    cas.sort(key=lambda r: (r.debtor_id, r.collector_id))
-    assert len(cas) == 3
-    assert cas[0].status == 1
-    assert cas[0].latest_status_change_at >= current_ts
-    assert cas[1].status == 0
-    assert cas[2].status == 0
+    cas.sort(key=lambda x: (x.debtor_id, x.collector_id))
+    assert len(cas) == 2
+    assert cas[0].debtor_id == 666
+    assert cas[0].collector_id == 1000
+    assert cas[0].status == 0
+    assert cas[1].debtor_id == 666
+    assert cas[1].collector_id == 1001
+    assert cas[0].status == 0
 
 
 def test_ensure_collector_accounts(db_session):
@@ -1086,7 +987,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.last_change_seqnum == 1
     assert wa.interest_rate == 0.0
     assert len(DiscoverDebtorSignal.query.all()) == 0
-    assert len(ActivateCollectorSignal.query.all()) == 0
+    assert len(CollectorStatusChange.query.all()) == 0
     assert len(ConfigureAccountSignal.query.all()) == 0
     ircs = InterestRateChange.query.all()
     ircs.sort(key=lambda t: (
@@ -1121,7 +1022,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.last_change_seqnum == 1
     assert wa.interest_rate == 0.0
     assert len(DiscoverDebtorSignal.query.all()) == 0
-    assert len(ActivateCollectorSignal.query.all()) == 0
+    assert len(CollectorStatusChange.query.all()) == 0
     assert len(ConfigureAccountSignal.query.all()) == 0
     assert len(InterestRateChange.query.all()) == 3
 
@@ -1143,10 +1044,11 @@ def test_process_account_update_signal(db_session, current_ts):
     assert dds.debtor_id == 666
     assert dds.iri == "https://example.com/666"
     assert dds.force_locator_refetch is True
-    acs = ActivateCollectorSignal.query.one()
-    assert acs.debtor_id == 666
-    assert acs.creditor_id == 123
-    assert acs.account_id == "Account123"
+    csc = CollectorStatusChange.query.one()
+    assert csc.collector_id == 123
+    assert csc.debtor_id == 666
+    assert csc.to_status == 2
+    assert csc.account_id == "Account123"
     assert len(ConfigureAccountSignal.query.all()) == 0
     assert len(InterestRateChange.query.all()) == 3
 
@@ -1164,7 +1066,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.last_change_ts == current_ts
     assert wa.last_change_seqnum == 2
     assert len(DiscoverDebtorSignal.query.all()) == 1
-    assert len(ActivateCollectorSignal.query.all()) == 1
+    assert len(CollectorStatusChange.query.all()) == 1
     cas = ConfigureAccountSignal.query.one()
     assert cas.debtor_id == 666
     assert cas.creditor_id == 124
@@ -1216,7 +1118,7 @@ def test_process_account_update_signal(db_session, current_ts):
     assert wa.transfer_note_max_bytes == 500
     assert wa.last_heartbeat_ts == current_ts
     assert len(ConfigureAccountSignal.query.all()) == 1
-    assert len(ActivateCollectorSignal.query.all()) == 2
+    assert len(CollectorStatusChange.query.all()) == 2
     assert len(DiscoverDebtorSignal.query.all()) == 2
     ircs = InterestRateChange.query.all()
     ircs.sort(key=lambda t: (
@@ -1239,20 +1141,6 @@ def test_process_account_update_signal(db_session, current_ts):
     assert ircs[3].debtor_id == 666
     assert ircs[3].change_ts == TS0 + timedelta(days=10)
     assert ircs[3].interest_rate == 5.0
-
-
-def test_mark_as_recently_needed_collector(db_session, current_ts):
-    assert len(RecentlyNeededCollector.query.all()) == 0
-    assert p.is_recently_needed_collector(666) is False
-    assert p.is_recently_needed_collector(777) is False
-    assert len(RecentlyNeededCollector.query.all()) == 0
-    p.mark_as_recently_needed_collector(666)
-    assert p.is_recently_needed_collector(666) is True
-    assert p.is_recently_needed_collector(777) is False
-    rncs = RecentlyNeededCollector.query.all()
-    assert len(rncs) == 1
-    assert rncs[0].debtor_id == 666
-    assert rncs[0].needed_at >= current_ts
 
 
 def test_try_to_compact_interest_rate_changes(db_session, current_ts):
@@ -1439,7 +1327,7 @@ def test_process_candidate_offer_signal(
     db_session.add(wt1)
     db_session.add(wt2)
     db_session.add(
-        ActiveCollector(
+        UsableCollector(
             debtor_id=666,
             collector_id=999,
             account_id="TestCollectorAccount999",
@@ -1680,7 +1568,7 @@ def wt_2_5(db_session, current_ts):
 @pytest.fixture(scope="function")
 def collector_id(db_session, current_ts):
     db_session.add(
-        ActiveCollector(
+        UsableCollector(
             debtor_id=666,
             collector_id=999,
             account_id="TestCollectorAccount999",
@@ -2364,6 +2252,11 @@ def test_process_revise_account_lock_signal_self_lock(
     assert al.account_last_transfer_number is not None
     assert al.has_been_revised is True
     assert len(FinalizeTransferSignal.query.all()) == 0
+    wa = WorkerAccount.query.one()
+    assert wa.debtor_id == 666
+    assert wa.creditor_id == collector_id
+    assert wa.surplus_spent_amount == (-amount if amount < 0 else 0)
+    assert wa.surplus_last_transfer_number == 1
 
     # process again (must be a noop)
     p.process_revise_account_lock_signal(
@@ -2374,6 +2267,11 @@ def test_process_revise_account_lock_signal_self_lock(
     assert len(CreditorParticipation.query.all()) == 0
     assert len(FinalizeTransferSignal.query.all()) == 0
     assert len(AccountLock.query.all()) == 1
+    wa = WorkerAccount.query.one()
+    assert wa.debtor_id == 666
+    assert wa.creditor_id == collector_id
+    assert wa.surplus_spent_amount == (-amount if amount < 0 else 0)
+    assert wa.surplus_last_transfer_number == 1
 
 
 @pytest.mark.parametrize("is_collector_trade", [True, False])
@@ -3482,3 +3380,177 @@ def test_process_start_dispatching_signal(db_session, wt_3_10, current_ts):
     assert airs.debtor_id == 666
     assert airs.creditor_id == 123
     assert airs.is_dispatching is True
+
+
+def test_process_calculate_surplus_signal(db_session, current_ts):
+    params = {
+        "creation_date": DATE0,
+        "last_change_ts": current_ts - timedelta(days=368),
+        "last_change_seqnum": 1,
+        "principal": 13000,
+        "interest": -3000,
+        "interest_rate": 0.0,
+        "last_interest_rate_change_ts": TS0,
+        "config_flags": 0,
+        "last_transfer_number": 2,
+        "last_transfer_committed_at": TS0,
+        "demurrage_rate": -50.0,
+        "commit_period": 1000000,
+        "transfer_note_max_bytes": 500,
+        "debtor_info_iri": "https://example.com/666",
+        "surplus_amount": 400,
+        "surplus_spent_amount": 300,
+        "surplus_last_transfer_number": 123,
+    }
+
+    # The surplus account can be successfully calculated.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=666,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=5),
+        )
+    )
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=666,
+            account_id="666",
+            last_heartbeat_ts=current_ts - timedelta(days=3),
+            **params,
+        )
+    )
+
+    # `blocked_amount_ts` is not recent enough.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=777,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=25),
+        )
+    )
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=777,
+            account_id="777",
+            last_heartbeat_ts=current_ts - timedelta(days=3),
+            **params,
+        )
+    )
+
+    # `last_heartbeat_ts` is not recent enough.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=888,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=5),
+        )
+    )
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=888,
+            account_id="888",
+            last_heartbeat_ts=current_ts - timedelta(days=4.5),
+            **params,
+        )
+    )
+
+    # No corresponding WorkerAccount.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000005,
+            debtor_id=666,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=5),
+        )
+    )
+
+    # No corresponding NeededWorkerAccount.
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000006,
+            debtor_id=666,
+            account_id="666",
+            last_heartbeat_ts=current_ts - timedelta(days=3),
+            **params,
+        )
+    )
+
+    db_session.commit()
+    assert len(CollectorStatusChange.query.all()) == 0
+
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=666,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=666,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=777,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=888,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000005,
+        debtor_id=666,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000006,
+        debtor_id=666,
+    )
+    cscs = CollectorStatusChange.query.all()
+    cscs.sort(key=lambda t: (t.collector_id, t.debtor_id))
+    assert len(cscs) == 1
+    assert cscs[0].collector_id == 0x0000010000000004
+    assert cscs[0].debtor_id == 666
+    assert cscs[0].from_status == 3
+    assert cscs[0].to_status == 2
+    assert cscs[0].account_id is None
+
+    was = WorkerAccount.query.all()
+    was.sort(key=lambda t: (t.creditor_id, t.debtor_id))
+    assert len(was) == 4
+    assert was[0].creditor_id == 0x0000010000000004
+    assert was[0].debtor_id == 666
+    assert was[0].surplus_ts == current_ts - timedelta(days=3)
+    assert 8950 < was[0].surplus_amount < 9050
+    assert was[0].surplus_spent_amount == 0
+    assert was[0].surplus_last_transfer_number > 123
+
+    assert was[1].creditor_id == 0x0000010000000004
+    assert was[1].debtor_id == 777
+    assert was[1].surplus_ts == TS0
+    assert was[1].surplus_amount == 400
+    assert was[1].surplus_spent_amount == 300
+    assert was[1].surplus_last_transfer_number == 123
+
+    assert was[2].creditor_id == 0x0000010000000004
+    assert was[2].debtor_id == 888
+    assert was[2].surplus_ts == TS0
+    assert was[2].surplus_amount == 400
+    assert was[2].surplus_spent_amount == 300
+    assert was[2].surplus_last_transfer_number == 123
+
+    assert was[3].creditor_id == 0x0000010000000006
+    assert was[3].debtor_id == 666
+    assert was[3].surplus_ts == TS0
+    assert was[3].surplus_amount == 400
+    assert was[3].surplus_spent_amount == 300
+    assert was[3].surplus_last_transfer_number == 123
+
+    nwas = NeededWorkerAccount.query.all()
+    assert len(nwas) == 4

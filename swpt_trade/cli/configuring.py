@@ -104,15 +104,22 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     # Declare a queue and a corresponding dead-letter queue.
     #
     # TODO: Using a "quorum" queue here (with a "stream" dead-letter
-    # queue) looks like a good idea, but quorum queues consume lots of
+    # queue) is not a good idea, because quorum queues consume lots of
     # memory when there are lots of messages in the queue. In our
     # case, we can have lots of internal messages generated in a very
-    # short period of time. A possible solution for this would be to
-    # use two queues instead of one: One queue (a quorum queue) for
-    # the external messages, promising high-availability; and another
-    # queue (a classic queue, or a length-limited quorum queue) for
-    # the internal messages, of which we could have a lot, but for
-    # which we do not necessarily need high-availability.
+    # short period of time. The problem with the current use of
+    # classical queues is that their support for high-availability is
+    # limited. Probably the best solution is to use a stream instead
+    # of a queue here, but this requires some big changes. It is also
+    # possible to use two queues instead of one: One queue (a quorum
+    # queue) for the external messages; and another classical queue or
+    # a stream for the internal messages, of which we could have a
+    # lot, but for which we do not necessarily need high-availability.
+    # *However*, if the two queue are located on different broker
+    # servers, it might become feasible to use quorum queues for both,
+    # because in this case the broker that has too long queries will
+    # apply "back pressure", but this will not impact the other
+    # broker.
     channel.queue_declare(dead_letter_queue_name, durable=True)
     logger.info('Declared "%s" dead-letter queue.', dead_letter_queue_name)
 
@@ -293,10 +300,11 @@ def verify_shard_content():
     with db.engine.connect() as conn:
         logger = logging.getLogger(__name__)
         try:
+            # NOTE: Basically, every table that relies on a table
+            # scanner to clean up the records from the parent shard
+            # must be listed here.
             verify_table(conn, models.AccountLock.creditor_id)
             verify_table(conn, models.CreditorParticipation.creditor_id)
-            verify_table(conn, models.InterestRateChange.creditor_id)
-            verify_table(conn, models.NeededWorkerAccount.creditor_id)
             verify_table(conn, models.TradingPolicy.creditor_id)
             verify_table(conn, models.DebtorLocatorClaim.debtor_id)
             verify_table(conn, models.RecentlyNeededCollector.debtor_id)
@@ -312,6 +320,8 @@ def verify_shard_content():
                 models.DebtorInfoDocument.debtor_info_locator,
                 match_str=True,
             )
+
+            # These are the SMP signals that this app emits.
             verify_table(conn, models.ConfigureAccountSignal.creditor_id)
             verify_table(conn, models.PrepareTransferSignal.creditor_id)
             verify_table(conn, models.FinalizeTransferSignal.creditor_id)

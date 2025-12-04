@@ -18,7 +18,6 @@ def test_sibnalbus_burst_count(app):
     assert isinstance(m.FetchDebtorInfoSignal.signalbus_burst_count, int)
     assert isinstance(m.DiscoverDebtorSignal.signalbus_burst_count, int)
     assert isinstance(m.ConfirmDebtorSignal.signalbus_burst_count, int)
-    assert isinstance(m.ActivateCollectorSignal.signalbus_burst_count, int)
     assert isinstance(m.CandidateOfferSignal.signalbus_burst_count, int)
     assert isinstance(m.StoreDocumentSignal.signalbus_burst_count, int)
     assert isinstance(m.NeededCollectorSignal.signalbus_burst_count, int)
@@ -28,6 +27,7 @@ def test_sibnalbus_burst_count(app):
     assert isinstance(m.AccountIdResponseSignal.signalbus_burst_count, int)
     assert isinstance(m.StartSendingSignal.signalbus_burst_count, int)
     assert isinstance(m.StartDispatchingSignal.signalbus_burst_count, int)
+    assert isinstance(m.CalculateSurplusSignal.signalbus_burst_count, int)
     assert isinstance(m.ReplayedAccountTransferSignal.signalbus_burst_count, int)
 
 

@@ -108,11 +108,11 @@ case $1 in
         generate_oathkeeper_configuration
         exec supervisord -c "$APP_ROOT_DIR/supervisord-webserver.conf"
         ;;
-    handle_pristine_collectors | consume_messages | scan_all \
+    handle_pristine_collectors | apply_collector_changes \
+        | consume_messages | scan_all \
         | scan_debtor_info_documents | scan_debtor_locator_claims \
         | scan_trading_policies | scan_worker_accounts \
-        | scan_interest_rate_changes | scan_account_locks \
-        | scan_needed_worker_accounts | scan_recently_needed_collectors \
+        | scan_account_locks | scan_recently_needed_collectors \
         | scan_creditor_participations | scan_dispatching_statuses \
         | scan_worker_collectings | scan_worker_sendings \
         | scan_worker_receivings | scan_worker_dispatchings \
@@ -123,8 +123,9 @@ case $1 in
         ;;
     flush_configure_accounts | flush_prepare_transfers | flush_finalize_transfers \
         | flush_fetch_debtor_infos | flush_store_documents | flush_discover_debtors \
-        | flush_confirm_debtors | flush_activate_collectors | flush_candidate_offers \
-        | flush_needed_collectors | flush_revise_account_locks | flush_trigger_transfers \
+        | flush_confirm_debtors | flush_candidate_offers \
+        | flush_needed_collectors | flush_revise_account_locks \
+        | flush_trigger_transfers | flush_calculate_surpluses \
         | flush_account_id_requests | flush_account_id_responses | flush_start_sendings \
         | flush_start_dispatchings | flush_replayed_account_transfers | flush_all)
 
@@ -135,7 +136,6 @@ case $1 in
         flush_store_documents=StoreDocumentSignal
         flush_discover_debtors=DiscoverDebtorSignal
         flush_confirm_debtors=ConfirmDebtorSignal
-        flush_activate_collectors=ActivateCollectorSignal
         flush_candidate_offers=CandidateOfferSignal
         flush_needed_collectors=NeededCollectorSignal
         flush_revise_account_locks=ReviseAccountLockSignal
@@ -144,6 +144,7 @@ case $1 in
         flush_account_id_responses=AccountIdResponseSignal
         flush_start_sendings=StartSendingSignal
         flush_start_dispatchings=StartDispatchingSignal
+        flush_calculate_surpluses=CalculateSurplusSignal
         flush_replayed_account_transfers=ReplayedAccountTransferSignal
         flush_all=
 

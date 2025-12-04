@@ -2,31 +2,55 @@ import math
 from typing import TypeVar, Callable, Optional
 from datetime import date, datetime, timezone, timedelta
 from swpt_pythonlib.utils import Seqnum
-from sqlalchemy.orm import load_only
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import exc, load_only, Load
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     HUGE_NEGLIGIBLE_AMOUNT,
     DEFAULT_CONFIG_FLAGS,
+    WORST_NODE_CLOCKS_MISMATCH,
+    KNOWN_SURPLUS_AMOUNT_PREDICATE,
+    WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     NeededWorkerAccount,
     WorkerAccount,
     InterestRateChange,
     RecentlyNeededCollector,
     ConfigureAccountSignal,
-    ActivateCollectorSignal,
     DiscoverDebtorSignal,
+    CollectorStatusChange,
+    NeededCollectorAccount,
 )
+from swpt_trade.utils import (
+    generate_collector_account_pkeys,
+    contain_principal_overflow,
+    calc_demurrage,
+    calc_balance_at,
+)
+
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
 EPS = 1e-5
+WORKER_ACCOUNT_LOAD_OPTIONS = Load(WorkerAccount).load_only(
+    WorkerAccount.principal,
+    WorkerAccount.interest,
+    WorkerAccount.interest_rate,
+    WorkerAccount.demurrage_rate,
+    WorkerAccount.last_change_ts,
+    WorkerAccount.last_heartbeat_ts,
+    WorkerAccount.surplus_amount,
+    WorkerAccount.surplus_ts,
+    WorkerAccount.surplus_spent_amount,
+    WorkerAccount.surplus_last_transfer_number,
+)
 
 
 @atomic
 def configure_worker_account(
         *,
-        debtor_id: int,
         collector_id: int,
+        debtor_id: int,
         max_postponement: timedelta,
 ) -> None:
     def has_worker_account():
@@ -80,6 +104,14 @@ def configure_worker_account(
                 config_flags=DEFAULT_CONFIG_FLAGS,
             )
         )
+        db.session.add(
+            CollectorStatusChange(
+                collector_id=collector_id,
+                debtor_id=debtor_id,
+                from_status=0,
+                to_status=1,
+            )
+        )
 
 
 @atomic
@@ -114,7 +146,6 @@ def process_account_update_signal(
         db.session.query(
             NeededWorkerAccount.query
             .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-            .with_for_update(read=True)
             .exists()
         )
         .scalar()
@@ -221,9 +252,11 @@ def process_account_update_signal(
 
     if must_activate_collector:
         db.session.add(
-            ActivateCollectorSignal(
+            CollectorStatusChange(
+                collector_id=creditor_id,
                 debtor_id=debtor_id,
-                creditor_id=creditor_id,
+                from_status=1,
+                to_status=2,
                 account_id=account_id,
             )
         )
@@ -254,15 +287,13 @@ def process_account_purge_signal(
         db.session.query(
             NeededWorkerAccount.query
             .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-            .with_for_update(read=True)
             .exists()
         )
         .scalar()
     )
     worker_account = (
-        WorkerAccount.query.filter_by(
-            creditor_id=creditor_id, debtor_id=debtor_id
-        )
+        WorkerAccount.query
+        .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
         .filter(WorkerAccount.creation_date <= creation_date)
         .with_for_update()
         .options(load_only(WorkerAccount.creation_date))
@@ -272,6 +303,82 @@ def process_account_purge_signal(
         db.session.delete(worker_account)
 
     return is_needed_account
+
+
+@atomic
+def process_calculate_surplus_signal(
+        *,
+        collector_id: int,
+        debtor_id: int,
+) -> None:
+    query = (
+        db.session.query(WorkerAccount, NeededWorkerAccount)
+        .join(NeededWorkerAccount, WORKER_ACCOUNT_TABLES_JOIN_PREDICATE)
+        .filter(
+            WorkerAccount.creditor_id == collector_id,
+            WorkerAccount.debtor_id == debtor_id,
+            KNOWN_SURPLUS_AMOUNT_PREDICATE,
+        )
+        .options(WORKER_ACCOUNT_LOAD_OPTIONS)
+        .with_for_update(of=WorkerAccount)
+    )
+    try:
+        worker_account, needed_worker_account = query.one()
+    except exc.NoResultFound:
+        return
+
+    if (
+            worker_account.surplus_ts
+            < needed_worker_account.collection_disabled_since
+    ):
+        # Because the time intervals that we calculate depend on
+        # timestamps generated on two different nodes, the intervals
+        # can not be known for certain with a very good precision.
+        # Therefore, if the interest rate becomes too low or too high,
+        # our calculations may become quite inaccurate. Here we
+        # estimate the worst possible "too low interest rate" relative
+        # error.
+        safety_cushion = 0.9999 * calc_demurrage(
+            worker_account.demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
+        )
+
+        # Here we set the highest interest rate for our calculation to
+        # 0%, thus entirely eliminating "to high interest rate"
+        # problem.
+        safe_interest_rate = min(worker_account.interest_rate, 0.0)
+
+        worker_account.surplus_amount = max(
+            0,
+            contain_principal_overflow(
+                math.floor(
+                    calc_balance_at(
+                        principal=worker_account.principal,
+                        interest=worker_account.interest,
+                        interest_rate=safe_interest_rate,
+                        last_change_ts=worker_account.last_change_ts,
+                        at=worker_account.last_heartbeat_ts,
+                    ) * safety_cushion
+                )
+                - 1
+                - needed_worker_account.blocked_amount
+            ),
+        )
+        worker_account.surplus_ts = worker_account.last_heartbeat_ts
+        worker_account.surplus_spent_amount = 0
+        worker_account.surplus_last_transfer_number += 1
+
+        assert (
+            worker_account.surplus_ts
+            >= needed_worker_account.collection_disabled_since
+        )
+        db.session.add(
+            CollectorStatusChange(
+                collector_id=collector_id,
+                debtor_id=debtor_id,
+                from_status=3,
+                to_status=2,
+            )
+        )
 
 
 @atomic
@@ -345,8 +452,20 @@ def compact_interest_rate_changes(
 
 
 @atomic
-def is_recently_needed_collector(debtor_id: int) -> bool:
-    return (
+def register_needed_colector(
+        *,
+        debtor_id: int,
+        needed_at: datetime,
+        min_collector_id: int,
+        max_collector_id: int,
+        number_of_accounts: int,
+) -> None:
+    # NOTE: When there are more than one "worker" servers, it is quite
+    # likely that more than one `NeededCollectorSignal` will be
+    # received for a given debtor ID because every "worker" server may
+    # send such a signal. Here we try to avoid making repetitive
+    # queries to the central database.
+    has_been_recently_needed = (
         db.session.query(
             RecentlyNeededCollector.query
             .filter_by(debtor_id=debtor_id)
@@ -354,17 +473,7 @@ def is_recently_needed_collector(debtor_id: int) -> bool:
         )
         .scalar()
     )
-
-
-@atomic
-def mark_as_recently_needed_collector(
-        debtor_id: int,
-        needed_at: Optional[datetime] = None,
-) -> None:
-    if needed_at is None:
-        needed_at = datetime.now(tz=timezone.utc)
-
-    if not is_recently_needed_collector(debtor_id):
+    if not has_been_recently_needed:
         with db.retry_on_integrity_error():
             db.session.add(
                 RecentlyNeededCollector(
@@ -372,6 +481,26 @@ def mark_as_recently_needed_collector(
                     needed_at=needed_at,
                 )
             )
+        db.session.execute(
+            postgresql.insert(NeededCollectorAccount)
+            .execution_options(synchronize_session=False)
+            .on_conflict_do_nothing(
+                index_elements=[
+                    NeededCollectorAccount.debtor_id,
+                    NeededCollectorAccount.collector_id,
+                ]
+            ),
+            [
+                {"debtor_id": x, "collector_id": y}
+                for x, y in generate_collector_account_pkeys(
+                        number_of_collector_account_pkeys=number_of_accounts,
+                        debtor_id=debtor_id,
+                        min_collector_id=min_collector_id,
+                        max_collector_id=max_collector_id,
+                        existing_collector_ids=set(),
+                )
+            ]
+        )
 
 
 def _discard_unneeded_account(

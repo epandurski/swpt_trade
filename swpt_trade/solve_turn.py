@@ -1,7 +1,10 @@
+import math
 from typing import TypeVar, Callable
-from datetime import datetime, timezone
-from sqlalchemy import select, insert, delete
-from sqlalchemy.sql.expression import and_
+from itertools import groupby
+from datetime import datetime, timezone, timedelta
+from sqlalchemy import select, insert, update, delete, func, union_all
+from sqlalchemy.sql.expression import text, tuple_
+from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     CollectorAccount,
@@ -15,13 +18,21 @@ from swpt_trade.models import (
     CollectorCollecting,
     CreditorGiving,
     CreditorTaking,
+    OverloadedCurrency,
+    HoardedCurrency,
 )
+from swpt_trade import procedures
 from swpt_trade.solver import Solver
-from swpt_trade.utils import batched, calc_hash
+from swpt_trade.utils import batched, calc_hash, get_primary_collector_id
 
-INSERT_BATCH_SIZE = 50000
+INSERT_BATCH_SIZE = 5000
+DELETE_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 
+COLLECTOR_ACCOUNT_PK = tuple_(
+    CollectorAccount.debtor_id,
+    CollectorAccount.collector_id,
+)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -44,6 +55,14 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     solver.analyze_offers()
 
     _try_to_commit_solver_results(solver, turn_id)
+
+    # At this point, the trading turn has successfully advanced to
+    # phase 3. The next few calls are not bound to this specific
+    # trading turn, but should generally be run near the end of each
+    # turn.
+    _strengthen_overloaded_currencies()
+    _disable_some_collector_accounts()
+    _delete_stuck_collector_accounts()
 
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
@@ -119,44 +138,51 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
+        _detect_overloaded_currencies(turn_id)
+        _saturate_hoarded_currencies(turn_id)
 
         turn.phase = 3
         turn.phase_deadline = None
         turn.collection_started_at = datetime.now(tz=timezone.utc)
 
         # NOTE: When reaching turn phase 3, all records for the given
-        # turn from the `CurrencyInfo`, `SellOffer`, and `BuyOffer`
-        # tables will be deleted. This however, does not guarantee
-        # that a worker process will not continue to insert new rows
-        # for the given turn in these tables. Therefore, in order to
-        # ensure that such obsolete records will be deleted
-        # eventually, here we delete all records for which the turn
-        # phase 3 has been reached.
+        # turn from the `CurrencyInfo`, `SellOffer`, `BuyOffer`, and
+        # `HoardedCurrency` tables will be deleted. This however, does
+        # not guarantee that a worker process will not continue to
+        # insert new rows for the given turn in these tables.
+        # Therefore, in order to ensure that such obsolete records
+        # will be deleted eventually, here we delete all records for
+        # which the turn phase 3 has been reached.
         db.session.execute(
             delete(CurrencyInfo)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == CurrencyInfo.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == CurrencyInfo.turn_id,
+                Turn.phase >= 3,
             )
         )
         db.session.execute(
             delete(SellOffer)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == SellOffer.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == SellOffer.turn_id,
+                Turn.phase >= 3,
             )
         )
         db.session.execute(
             delete(BuyOffer)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    Turn.turn_id == BuyOffer.turn_id,
-                    Turn.phase >= 3,
-                )
+                Turn.turn_id == BuyOffer.turn_id,
+                Turn.phase >= 3,
+            )
+        )
+        db.session.execute(
+            delete(HoardedCurrency)
+            .execution_options(synchronize_session=False)
+            .where(
+                Turn.turn_id == HoardedCurrency.turn_id,
+                Turn.phase >= 3,
             )
         )
 
@@ -165,7 +191,8 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.takings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
             insert(CreditorTaking).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -180,7 +207,8 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             insert(CollectorCollecting).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -201,7 +229,8 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
     ):
         db.session.execute(
             insert(CollectorSending).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -216,7 +245,8 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             insert(CollectorReceiving).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -235,7 +265,8 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.givings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
             insert(CollectorDispatching).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -250,7 +281,8 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
         )
         db.session.execute(
             insert(CreditorGiving).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
             ),
             [
                 {
@@ -263,3 +295,298 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
                 } for ac in account_changes
             ],
         )
+
+
+def _detect_overloaded_currencies(turn_id: int) -> None:
+    max_transfers_count = current_app.config["TRANSFERS_COLLECTOR_LIMIT"]
+    assert max_transfers_count > 0
+
+    cd = CollectorDispatching
+    dispatchings = (
+        select(
+            cd.debtor_id.label("debtor_id"),
+            cd.collector_id.label("collector_id"),
+            func.count(cd.creditor_id).label("transfers_count"),
+        )
+        .select_from(cd)
+        .where(cd.turn_id == turn_id)
+        .group_by(cd.debtor_id, cd.collector_id)
+        .subquery(name="dispatchings")
+    )
+    dispatching_overloads = (
+        select(
+            dispatchings.c.debtor_id.label("debtor_id"),
+            func.count(dispatchings.c.collector_id).label("collectors_count"),
+        )
+        .select_from(dispatchings)
+        .group_by(dispatchings.c.debtor_id)
+        .having(func.max(dispatchings.c.transfers_count) > max_transfers_count)
+    )
+
+    cc = CollectorCollecting
+    collectings = (
+        select(
+            cc.debtor_id.label("debtor_id"),
+            cc.collector_id.label("collector_id"),
+            func.count(cc.creditor_id).label("transfers_count"),
+        )
+        .select_from(cc)
+        .where(cc.turn_id == turn_id)
+        .group_by(cc.debtor_id, cc.collector_id)
+        .subquery(name="collectings")
+    )
+    collecting_overloads = (
+        select(
+            collectings.c.debtor_id.label("debtor_id"),
+            func.count(collectings.c.collector_id).label("collectors_count"),
+        )
+        .select_from(collectings)
+        .group_by(collectings.c.debtor_id)
+        .having(func.max(collectings.c.transfers_count) > max_transfers_count)
+    )
+
+    overloads = (
+        union_all(dispatching_overloads, collecting_overloads)
+        .subquery(name="overloads")
+    )
+    db.session.execute(
+        insert(OverloadedCurrency)
+        .execution_options(synchronize_session=False)
+        .from_select(
+            [
+                "turn_id",
+                "debtor_id",
+                "collectors_count",
+            ],
+            select(
+                turn_id,
+                overloads.c.debtor_id,
+                func.max(overloads.c.collectors_count),
+            )
+            .select_from(overloads)
+            .group_by(overloads.c.debtor_id)
+        )
+    )
+
+
+def _strengthen_overloaded_currencies() -> None:
+    """Double the number of existing collector accounts for all
+    overloaded currencies.
+    """
+
+    cfg = current_app.config
+    min_collector_id = cfg["MIN_COLLECTOR_ID"]
+    max_collector_id = cfg["MAX_COLLECTOR_ID"]
+
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    OverloadedCurrency.turn_id,
+                    OverloadedCurrency.debtor_id,
+                    OverloadedCurrency.collectors_count,
+                )
+        ) as result:
+            for row in result:
+                procedures.ensure_collector_accounts(
+                    debtor_id=row.debtor_id,
+                    min_collector_id=min_collector_id,
+                    max_collector_id=max_collector_id,
+                    number_of_accounts=2 * row.collectors_count,
+                )
+                procedures.forget_overloaded_currency(
+                    turn_id=row.turn_id,
+                    debtor_id=row.debtor_id,
+                )
+
+
+def _saturate_hoarded_currencies(turn_id: int) -> None:
+    """Ensure hoarded currencies utilize the maximum number of
+    creditor IDs.
+
+    NOTE: Surplus amounts will accumulate on collectors with different
+    creditor IDs (between MIN_COLLECTOR_ID and MAX_COLLECTOR_ID).
+    Thus, a surplus selling offer could come from any creditor in this
+    interval, and therefore, in order to reliably match buying and
+    selling offers, surplus buying offers should also be registered
+    from all possible creditor IDs in this interval.
+    """
+
+    cfg = current_app.config
+    min_collector_id = cfg["MIN_COLLECTOR_ID"]
+    max_collector_id = cfg["MAX_COLLECTOR_ID"]
+    assert min_collector_id <= max_collector_id
+    number_of_ids = 1 + max_collector_id - min_collector_id
+
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(HoardedCurrency.debtor_id)
+                .join(
+                    CollectorAccount,
+                    CollectorAccount.debtor_id == HoardedCurrency.debtor_id,
+                    isouter=True,
+                )
+                .where(HoardedCurrency.turn_id == turn_id)
+                .group_by(HoardedCurrency.debtor_id)
+                .having(
+                    func.count(CollectorAccount.collector_id) < number_of_ids
+                )
+        ) as result:
+            for row in result:
+                procedures.insert_collector_accounts(
+                    (row.debtor_id, c_id)
+                    for c_id in range(min_collector_id, max_collector_id + 1)
+                )
+
+
+def _disable_some_collector_accounts() -> None:
+    """Try to disable some of the active collector accounts (status ==
+    2), so that the surplus amounts accumulated on them can be
+    detected.
+
+    NOTE: If possible, this function will not disable more than ~1/3
+    of the active collector accounts for any given currency. Also,
+    collector accounts that have not been active for at least
+    `APP_COLLECTOR_ACTIVITY_MIN_DAYS` days, will not be disabled.
+    """
+
+    current_ts = datetime.now(tz=timezone.utc)
+    cfg = current_app.config
+    min_collector_id = cfg["MIN_COLLECTOR_ID"]
+    max_collector_id = cfg["MAX_COLLECTOR_ID"]
+    activity_cutoff_ts = current_ts - timedelta(
+        days=cfg["APP_COLLECTOR_ACTIVITY_MIN_DAYS"]
+    )
+    waiting_to_be_disabled = []
+    waiting_to_be_ensured_to_exist = set()
+
+    @atomic
+    def process_waiting():
+        if waiting_to_be_disabled:
+            db.session.execute(
+                update(CollectorAccount)
+                .execution_options(synchronize_session=False)
+                .where(
+                    COLLECTOR_ACCOUNT_PK.in_(waiting_to_be_disabled),
+                    CollectorAccount.status == 2,
+                )
+                .values(
+                    status=3,
+                    latest_status_change_at=current_ts,
+                )
+            )
+            waiting_to_be_disabled.clear()
+
+        if waiting_to_be_ensured_to_exist:
+            procedures.insert_collector_accounts(
+                waiting_to_be_ensured_to_exist
+            )
+            waiting_to_be_ensured_to_exist.clear()
+
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    CollectorAccount.debtor_id,
+                    CollectorAccount.collector_id,
+                    CollectorAccount.status,
+                    CollectorAccount.latest_status_change_at,
+                )
+                .where(CollectorAccount.status >= text("2"))
+                .order_by(CollectorAccount.debtor_id)
+        ) as result:
+            for debtor_id, group in groupby(result, lambda r: r.debtor_id):
+                primary_collector_id = None
+                rows = list(group)
+                rows.sort(
+                    key=lambda x: (
+                        x.status, x.latest_status_change_at, x.collector_id
+                    )
+                )
+                number_of_disabled = sum(1 for r in rows if r.status != 2)
+                max_number_to_disable = (
+                    math.ceil(len(rows) / 3) - number_of_disabled
+                )
+                for n, row in enumerate(rows):
+                    if (
+                        n >= max_number_to_disable
+                        or row.status != 2
+                        or row.latest_status_change_at > activity_cutoff_ts
+                    ):
+                        break
+
+                    collector_id = row.collector_id
+                    waiting_to_be_disabled.append((debtor_id, collector_id))
+
+                    # NOTE: Each disabled collector account will
+                    # eventually be activated again. At the time of
+                    # activation, an attempt may be made to transfer
+                    # the calculated surplus amount to another
+                    # collector account (the primary collector
+                    # account). Here we ensure that the primary
+                    # collector account exists. In some rare cases, it
+                    # may happen that the creation of the primary
+                    # collector account has failed, and the account
+                    # has been deleted.
+                    if primary_collector_id is None:
+                        primary_collector_id = get_primary_collector_id(
+                            debtor_id=debtor_id,
+                            min_collector_id=min_collector_id,
+                            max_collector_id=max_collector_id,
+                        )
+                    if collector_id != primary_collector_id:
+                        waiting_to_be_ensured_to_exist.add(
+                            (debtor_id, primary_collector_id)
+                        )
+
+                    if len(waiting_to_be_disabled) > INSERT_BATCH_SIZE:
+                        process_waiting()  # pragma: no cover
+
+            process_waiting()
+
+
+def _delete_stuck_collector_accounts() -> None:
+    """Delete collector accounts which are stuck at `status==1` for
+    quite a long time.
+
+    Collector accounts could become stuck at `status==1` if the issued
+    `ConfigureAccount` SMP message has been lost (Which must never
+    happen under normal circumstances.), or when an otherwise
+    successfully created worker account has been, for some reason,
+    removed (purged) from the accounting authority server.
+    """
+
+    current_ts = datetime.now(tz=timezone.utc)
+    cutoff_ts = current_ts - timedelta(
+        days=2 * current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
+    )
+    with db.engines['solver'].connect() as conn:
+        with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                select(
+                    CollectorAccount.debtor_id,
+                    CollectorAccount.collector_id,
+                )
+                .where(
+                    CollectorAccount.status == text("1"),
+                    CollectorAccount.latest_status_change_at < cutoff_ts,
+                )
+        ) as result:
+            for rows in result.partitions(DELETE_BATCH_SIZE):
+                to_delete = (
+                    db.session.execute(
+                        select(
+                            CollectorAccount.debtor_id,
+                            CollectorAccount.collector_id,
+                        )
+                        .where(COLLECTOR_ACCOUNT_PK.in_(rows))
+                        .with_for_update(skip_locked=True)
+                    )
+                    .all()
+                )
+                if to_delete:
+                    db.session.execute(
+                        delete(CollectorAccount)
+                        .execution_options(synchronize_session=False)
+                        .where(COLLECTOR_ACCOUNT_PK.in_(to_delete))
+                    )
+                db.session.commit()
+
+    db.session.close()

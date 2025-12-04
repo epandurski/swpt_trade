@@ -1,6 +1,6 @@
 from __future__ import annotations
 from datetime import date, timedelta
-from .common import get_now_utc, MAX_INT16, MAX_INT32, MIN_INT64
+from .common import get_now_utc, MAX_INT16, MAX_INT32, MIN_INT64, MAX_INT64
 from sqlalchemy.dialects import postgresql as pg
 from sqlalchemy.sql.expression import null, true, false, or_, and_
 from swpt_trade.extensions import db
@@ -61,45 +61,6 @@ class WorkerTurn(db.Model):
     )
 
 
-class RecentlyNeededCollector(db.Model):
-    debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
-    needed_at = db.Column(
-        db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
-    )
-    __table_args__ = (
-        db.CheckConstraint(debtor_id != 0),
-        {
-            "comment": (
-                'Indicates that the creation of a collector account for the'
-                ' currency with the given debtor ID has been recently'
-                ' requested. This information is used to prevent "worker"'
-                ' servers from making repetitive queries to the central'
-                " database."
-            ),
-        },
-    )
-
-
-class ActiveCollector(db.Model):
-    debtor_id = db.Column(db.BigInteger, primary_key=True)
-    collector_id = db.Column(db.BigInteger, primary_key=True)
-    account_id = db.Column(db.String, nullable=False)
-    __table_args__ = (
-        db.CheckConstraint(account_id != ""),
-        {
-            "comment": (
-                'Represents an active Swaptacular account which can be'
-                ' used to collect and dispatch transfers. Each "Worker"'
-                ' servers will maintain its own copy of this table (that is:'
-                ' no rows-sharding) by periodically copying the relevant'
-                ' records from the solver\'s "collector_account" table.'
-                ' "Worker" servers will use this local copy so as to avoid'
-                ' querying the central database too often.'
-            ),
-        },
-    )
-
-
 # This sequence is used to generate `coordinator_request_id`s for the
 # issued `PrepareTransfer` SMP messages.
 #
@@ -139,6 +100,12 @@ class AccountLock(db.Model):
         ),
         nullable=False,
     )
+    max_locked_amount = db.Column(
+        db.BigInteger,
+        nullable=False,
+        default=MAX_INT64,
+        comment="An upper limit for the actual locked amount.",
+    )
     transfer_id = db.Column(db.BigInteger)
     finalized_at = db.Column(
         db.TIMESTAMP(timezone=True),
@@ -150,6 +117,7 @@ class AccountLock(db.Model):
     has_been_revised = db.Column(db.BOOLEAN, nullable=False, default=False)
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
+        db.CheckConstraint(max_locked_amount >= 0),
         db.CheckConstraint(or_(finalized_at == null(), transfer_id != null())),
         db.CheckConstraint(
             or_(
@@ -248,8 +216,8 @@ class DispatchingStatus(db.Model):
     # create a "covering" index instead.
 
     collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     inserted_at = db.Column(
         db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
     )
@@ -433,8 +401,8 @@ class WorkerCollecting(db.Model):
     # "covering" index instead.
 
     collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     amount = db.Column(db.BigInteger, nullable=False)
     collected = db.Column(db.BOOLEAN, nullable=False, default=False)
@@ -445,8 +413,8 @@ class WorkerCollecting(db.Model):
         db.Index(
             "idx_worker_collecting_not_collected",
             collector_id,
-            turn_id,
             debtor_id,
+            turn_id,
             creditor_id,
             postgresql_where=collected == false(),
         ),
@@ -472,8 +440,8 @@ class WorkerSending(db.Model):
     # "covering" index instead.
 
     from_collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     to_collector_id = db.Column(db.BigInteger, primary_key=True)
     amount = db.Column(db.BigInteger, nullable=False)
     purge_after = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
@@ -501,8 +469,8 @@ class WorkerReceiving(db.Model):
     # "covering" index instead.
 
     to_collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     from_collector_id = db.Column(db.BigInteger, primary_key=True)
     expected_amount = db.Column(db.BigInteger, nullable=False)
     received_amount = db.Column(
@@ -523,8 +491,8 @@ class WorkerReceiving(db.Model):
         db.Index(
             "idx_worker_receiving_not_received",
             to_collector_id,
-            turn_id,
             debtor_id,
+            turn_id,
             from_collector_id,
             postgresql_where=received_amount == 0,
         ),
@@ -549,8 +517,8 @@ class WorkerDispatching(db.Model):
     # "covering" index instead.
 
     collector_id = db.Column(db.BigInteger, primary_key=True)
-    turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
+    turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     amount = db.Column(db.BigInteger, nullable=False)
     purge_after = db.Column(db.TIMESTAMP(timezone=True), nullable=False)

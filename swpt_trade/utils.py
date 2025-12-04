@@ -2,7 +2,8 @@ from __future__ import annotations
 import re
 import math
 import array
-from typing import Self
+from random import Random
+from typing import Self, Iterable
 from enum import Enum
 from dataclasses import dataclass
 from hashlib import md5
@@ -99,23 +100,23 @@ class DispatchingData:
     def _get_value(self, *args):
         return self._data[*args]
 
-    def register_collecting(self, collector_id, turn_id, debtor_id, amount):
+    def register_collecting(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[0] = contain_principal_overflow(value[0] + amount)
 
-    def register_sending(self, collector_id, turn_id, debtor_id, amount):
+    def register_sending(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[1] = contain_principal_overflow(value[1] + amount)
 
-    def register_receiving(self, collector_id, turn_id, debtor_id, amount):
+    def register_receiving(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[2] = contain_principal_overflow(value[2] + amount)
         value[3] += 1
 
-    def register_dispatching(self, collector_id, turn_id, debtor_id, amount):
+    def register_dispatching(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
         value = self._get_value(collector_id, turn_id, debtor_id)
         value[4] = contain_principal_overflow(value[4] + amount)
@@ -278,3 +279,92 @@ def calc_demurrage(demurrage_rate: float, period: timedelta) -> float:
     k = calc_k(demurrage_rate)
     t = max(0.0, period.total_seconds())
     return min(math.exp(k * t), 1.0)
+
+
+def pseudorandom_id_generator(
+        *,
+        seed: int,
+        min_id: int,
+        max_id: int,
+) -> Iterable[int]:
+    assert min_id <= max_id
+
+    rgen = Random(0)
+    rgen.seed(seed, version=2)
+    while True:
+        yield rgen.randint(min_id, max_id)
+
+
+def get_primary_collector_id(
+        *,
+        debtor_id: int,
+        min_collector_id: int,
+        max_collector_id: int,
+) -> int:
+    return next(
+        pseudorandom_id_generator(
+            seed=debtor_id,
+            min_id=min_collector_id,
+            max_id=max_collector_id,
+        )
+    )
+
+
+def generate_collector_account_pkeys(
+        *,
+        number_of_collector_account_pkeys: int,
+        debtor_id: int,
+        min_collector_id: int,
+        max_collector_id: int,
+        existing_collector_ids: set,
+) -> list[tuple[int, int]]:
+    assert number_of_collector_account_pkeys > 0
+
+    # NOTE: Because we rely on being able to randomly pick
+    # non-existing IDs between `min_collector_id` and
+    # `max_collector_id`, we can not utilize the range of available
+    # IDs at 100%. Here we ensure a 1/4 safety margin.
+    if (
+            number_of_collector_account_pkeys + len(existing_collector_ids)
+            > (1 + max_collector_id - min_collector_id) * 3 // 4
+    ):
+        raise RuntimeError(
+            "The number of available collector IDs is not big enough."
+        )
+
+    new_accounts = []
+    n = 0
+    for collector_id in pseudorandom_id_generator(
+            seed=debtor_id,
+            min_id=min_collector_id,
+            max_id=max_collector_id,
+    ):
+        if collector_id not in existing_collector_ids:
+            new_accounts.append((debtor_id, collector_id))
+            existing_collector_ids.add(collector_id)
+            n += 1
+            if n == number_of_collector_account_pkeys:
+                break
+
+    return new_accounts
+
+
+def calc_balance_at(
+    *,
+    principal: int,
+    interest: float,
+    interest_rate: float,
+    last_change_ts: datetime,
+    at: datetime,
+) -> float:
+    balance = principal + interest
+
+    if balance > 0.0:
+        if interest_rate < -99.9999:
+            return 0.0
+
+        k = calc_k(interest_rate)
+        t = max(0.0, (at - last_change_ts).total_seconds())
+        balance *= math.exp(k * t)
+
+    return balance

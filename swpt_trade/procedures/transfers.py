@@ -1,3 +1,4 @@
+import logging
 import random
 import math
 from typing import TypeVar, Callable, Tuple, Optional
@@ -31,7 +32,7 @@ from swpt_trade.models import (
     cr_seq,
     WorkerTurn,
     AccountLock,
-    ActiveCollector,
+    UsableCollector,
     PrepareTransferSignal,
     FinalizeTransferSignal,
     TriggerTransferSignal,
@@ -129,11 +130,17 @@ def process_candidate_offer_signal(
     ):
         return
 
-    active_collectors = (
-        ActiveCollector.query
-        .filter_by(debtor_id=debtor_id)
-        .all()
-    )
+    active_collectors = db.session.execute(
+        select(
+            UsableCollector.collector_id,
+            UsableCollector.account_id,
+        )
+        .where(
+            UsableCollector.debtor_id == debtor_id,
+            UsableCollector.disabled_at == null(),
+        )
+    ).all()
+
     try:
         collector = random.choice(active_collectors)
     except IndexError:
@@ -169,6 +176,7 @@ def process_candidate_offer_signal(
         account_lock.collector_id = collector.collector_id
         account_lock.initiated_at = current_ts
         account_lock.amount = amount
+        account_lock.max_locked_amount = max_locked_amount
         account_lock.transfer_id = None
         account_lock.finalized_at = None
         account_lock.released_at = None
@@ -184,6 +192,7 @@ def process_candidate_offer_signal(
                 coordinator_request_id=coordinator_request_id,
                 collector_id=collector.collector_id,
                 initiated_at=current_ts,
+                max_locked_amount=max_locked_amount,
                 amount=amount,
             )
             db.session.add(account_lock)
@@ -462,7 +471,11 @@ def process_revise_account_lock_signal(
                 # neither possible nor needed. Instead, we simply
                 # release the account lock.
                 dismiss()
-                acd, altn = _register_collector_trade(creditor_id, amount)
+                acd, altn = _register_collector_trade(
+                    debtor_id,
+                    creditor_id,
+                    amount,
+                )
                 lock.released_at = lock.finalized_at = current_ts
                 lock.account_creation_date = acd
                 lock.account_last_transfer_number = altn
@@ -512,16 +525,22 @@ def release_seller_account_lock(
             debtor_id=debtor_id,
             turn_id=turn_id,
         )
-        .filter(AccountLock.amount == acquired_amount)
-        .filter(AccountLock.finalized_at != null())
-        .filter(AccountLock.released_at == null())
+        .filter(
+            AccountLock.amount == acquired_amount,
+            AccountLock.finalized_at != null(),
+            AccountLock.released_at == null(),
+        )
         .with_for_update()
         .one_or_none()
     )
     if lock:
         if is_collector_trade:
             account_creation_date, account_transfer_number = (
-                _register_collector_trade(creditor_id, acquired_amount)
+                _register_collector_trade(
+                    debtor_id,
+                    creditor_id,
+                    acquired_amount,
+                )
             )
         lock.released_at = current_ts
         lock.account_creation_date = account_creation_date
@@ -559,15 +578,14 @@ def update_worker_collecting_record(
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
         db.session.execute(
             update(WorkerCollecting)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    WorkerCollecting.collector_id == collector_id,
-                    WorkerCollecting.turn_id == turn_id,
-                    WorkerCollecting.debtor_id == debtor_id,
-                    WorkerCollecting.creditor_id == creditor_id,
-                    WorkerCollecting.amount == acquired_amount,
-                    WorkerCollecting.collected == false(),
-                )
+                WorkerCollecting.collector_id == collector_id,
+                WorkerCollecting.debtor_id == debtor_id,
+                WorkerCollecting.turn_id == turn_id,
+                WorkerCollecting.creditor_id == creditor_id,
+                WorkerCollecting.amount == acquired_amount,
+                WorkerCollecting.collected == false(),
             )
             .values(collected=True)
         )
@@ -602,13 +620,12 @@ def delete_worker_sending_record(
 ) -> None:
     db.session.execute(
         delete(WorkerSending)
+        .execution_options(synchronize_session=False)
         .where(
-            and_(
-                WorkerSending.from_collector_id == from_collector_id,
-                WorkerSending.turn_id == turn_id,
-                WorkerSending.debtor_id == debtor_id,
-                WorkerSending.to_collector_id == to_collector_id,
-            )
+            WorkerSending.from_collector_id == from_collector_id,
+            WorkerSending.debtor_id == debtor_id,
+            WorkerSending.turn_id == turn_id,
+            WorkerSending.to_collector_id == to_collector_id,
         )
     )
 
@@ -645,14 +662,13 @@ def update_worker_receiving_record(
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
         db.session.execute(
             update(WorkerReceiving)
+            .execution_options(synchronize_session=False)
             .where(
-                and_(
-                    WorkerReceiving.to_collector_id == to_collector_id,
-                    WorkerReceiving.turn_id == turn_id,
-                    WorkerReceiving.debtor_id == debtor_id,
-                    WorkerReceiving.from_collector_id == from_collector_id,
-                    WorkerReceiving.received_amount == 0,
-                )
+                WorkerReceiving.to_collector_id == to_collector_id,
+                WorkerReceiving.debtor_id == debtor_id,
+                WorkerReceiving.turn_id == turn_id,
+                WorkerReceiving.from_collector_id == from_collector_id,
+                WorkerReceiving.received_amount == 0,
             )
             .values(received_amount=acquired_amount)
         )
@@ -687,13 +703,12 @@ def delete_worker_dispatching_record(
 ) -> None:
     db.session.execute(
         delete(WorkerDispatching)
+        .execution_options(synchronize_session=False)
         .where(
-            and_(
-                WorkerDispatching.collector_id == collector_id,
-                WorkerDispatching.turn_id == turn_id,
-                WorkerDispatching.debtor_id == debtor_id,
-                WorkerDispatching.creditor_id == creditor_id,
-            )
+            WorkerDispatching.collector_id == collector_id,
+            WorkerDispatching.debtor_id == debtor_id,
+            WorkerDispatching.turn_id == turn_id,
+            WorkerDispatching.creditor_id == creditor_id,
         )
     )
 
@@ -718,17 +733,23 @@ def release_buyer_account_lock(
             debtor_id=debtor_id,
             turn_id=turn_id,
         )
-        .filter(AccountLock.amount > 0)
-        .filter(AccountLock.transfer_id != null())
-        .filter(AccountLock.finalized_at == null())
-        .filter(AccountLock.released_at == null())
+        .filter(
+            AccountLock.amount > 0,
+            AccountLock.transfer_id != null(),
+            AccountLock.finalized_at == null(),
+            AccountLock.released_at == null(),
+        )
         .with_for_update()
         .one_or_none()
     )
     if lock:
         if is_collector_trade:
             account_creation_date, account_transfer_number = (
-                _register_collector_trade(creditor_id, acquired_amount)
+                _register_collector_trade(
+                    debtor_id,
+                    creditor_id,
+                    acquired_amount,
+                )
             )
         lock.released_at = lock.finalized_at = current_ts
         lock.account_creation_date = account_creation_date
@@ -746,28 +767,43 @@ def release_buyer_account_lock(
 
 
 def _register_collector_trade(
+        debtor_id: int,
         collector_id: int,
         amount: int,
 ) -> Tuple[date, int]:
-    # TODO: Consider implementing this function.
-    #
     # This function will be called when a collector account
     # participates in a trading turn. The `amount` will be negative
     # when the collector account is the seller, and will be positive
     # when the collector account is the buyer.
-    #
-    # It can be very useful to make a collector account participate in
-    # circular trades like any "normal" creditor account, because this
-    # allows exchanging accumulated (collected) useless surpluses for
-    # useful currencies.
-    #
-    # The implementation of this function should update the amount
-    # that is available on the collector account.
 
-    account_creation_date = DATE0  # currently, a made-up date
-    account_last_transfer_number = 0  # currently, a made-up number
+    worker_account = (
+        WorkerAccount.query
+        .filter_by(debtor_id=debtor_id, creditor_id=collector_id)
+        .with_for_update()
+        .one_or_none()
+    )
+    if worker_account:
+        worker_account.surplus_last_transfer_number += 1
 
-    return account_creation_date, account_last_transfer_number
+        # When selling -- increase the spent surplus amount. When
+        # buying -- do nothing, because the buying offers coming from
+        # worker accounts are always unlimited.
+        if amount < 0:
+            worker_account.surplus_spent_amount -= amount
+
+        return (
+            worker_account.creation_date,
+            worker_account.surplus_last_transfer_number,
+        )
+    else:
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "A collector trade has been registered, but the corresponding"
+            " WorkerAccount(creditor_id=%d, debtor_id=%d) does not exist.",
+            collector_id,
+            debtor_id,
+        )
+        return DATE0, 0
 
 
 @atomic
@@ -785,10 +821,8 @@ def process_account_id_request_signal(
                 TradingPolicy.latest_ledger_update_id,
             )
             .where(
-                and_(
-                    TradingPolicy.creditor_id == creditor_id,
-                    TradingPolicy.debtor_id == debtor_id,
-                )
+                TradingPolicy.creditor_id == creditor_id,
+                TradingPolicy.debtor_id == debtor_id,
             )
         ).one_or_none()
 
@@ -798,11 +832,9 @@ def process_account_id_request_signal(
                 WorkerAccount.creation_date - DATE0,
             )
             .where(
-                and_(
-                    WorkerAccount.creditor_id == creditor_id,
-                    WorkerAccount.debtor_id == debtor_id,
-                    WorkerAccount.account_id != "",
-                )
+                WorkerAccount.creditor_id == creditor_id,
+                WorkerAccount.debtor_id == debtor_id,
+                WorkerAccount.account_id != "",
             )
         ).one_or_none()
 
@@ -1055,10 +1087,8 @@ def _get_demurrage_info(attempt: TransferAttempt) -> DemurrageInfo:
                     WorkerAccount.last_interest_rate_change_ts,
                 )
                 .where(
-                    and_(
-                        WorkerAccount.creditor_id == collector_id,
-                        WorkerAccount.debtor_id == debtor_id,
-                    )
+                    WorkerAccount.creditor_id == collector_id,
+                    WorkerAccount.debtor_id == debtor_id,
                 )
             )
             .one()
@@ -1076,10 +1106,8 @@ def _get_demurrage_info(attempt: TransferAttempt) -> DemurrageInfo:
                 InterestRateChange.change_ts,
             )
             .where(
-                and_(
-                    InterestRateChange.creditor_id == collector_id,
-                    InterestRateChange.debtor_id == debtor_id,
-                )
+                InterestRateChange.creditor_id == collector_id,
+                InterestRateChange.debtor_id == debtor_id,
             )
             .order_by(InterestRateChange.change_ts.desc())
         )
@@ -1242,8 +1270,10 @@ def put_finalized_transfer_through_transfer_attempts(
             transfer_id=transfer_id,
             failure_code=null(),
         )
-        .filter(TransferAttempt.finalized_at != null())
-        .filter(TransferAttempt.coordinator_request_id != null())
+        .filter(
+            TransferAttempt.finalized_at != null(),
+            TransferAttempt.coordinator_request_id != null(),
+        )
         .with_for_update()
         .one_or_none()
     )
@@ -1315,9 +1345,11 @@ def process_rescheduled_transfers_batch(batch_size: int) -> int:
     current_ts = datetime.now(tz=timezone.utc)
 
     transfer_attempts = (
-        db.session.query(TransferAttempt)
-        .filter(TransferAttempt.rescheduled_for != null())
-        .filter(TransferAttempt.rescheduled_for <= current_ts)
+        TransferAttempt.query
+        .filter(
+            TransferAttempt.rescheduled_for != null(),
+            TransferAttempt.rescheduled_for <= current_ts,
+        )
         .options(load_only(TransferAttempt.rescheduled_for))
         .with_for_update(skip_locked=True)
         .limit(batch_size)
@@ -1352,8 +1384,8 @@ def process_start_sending_signal(
         .outerjoin(WorkerTurn, WorkerTurn.turn_id == DispatchingStatus.turn_id)
         .filter(
             DispatchingStatus.collector_id == collector_id,
-            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.debtor_id == debtor_id,
+            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.started_sending == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
@@ -1371,8 +1403,8 @@ def process_start_sending_signal(
 
     worker_collectings_predicate = and_(
         WorkerCollecting.collector_id == collector_id,
-        WorkerCollecting.turn_id == turn_id,
         WorkerCollecting.debtor_id == debtor_id,
+        WorkerCollecting.turn_id == turn_id,
     )
     dispatching_status.total_collected_amount = contain_principal_overflow(
         int(
@@ -1393,7 +1425,9 @@ def process_start_sending_signal(
     dispatching_status.awaiting_signal_flag = False
 
     db.session.execute(
-        delete(WorkerCollecting).where(worker_collectings_predicate)
+        delete(WorkerCollecting)
+        .execution_options(synchronize_session=False)
+        .where(worker_collectings_predicate)
     )
 
     if dispatching_status.amount_to_send > 0:
@@ -1406,17 +1440,19 @@ def process_start_sending_signal(
         )
         worker_sending_predicate = and_(
             WorkerSending.from_collector_id == collector_id,
-            WorkerSending.turn_id == turn_id,
             WorkerSending.debtor_id == debtor_id,
+            WorkerSending.turn_id == turn_id,
             nominal_amount_expression >= 1.0,
         )
 
         db.session.execute(
-            insert(TransferAttempt).from_select(
+            insert(TransferAttempt)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                     "nominal_amount",
@@ -1428,8 +1464,8 @@ def process_start_sending_signal(
                 ],
                 select(
                     WorkerSending.from_collector_id,
-                    WorkerSending.turn_id,
                     WorkerSending.debtor_id,
+                    WorkerSending.turn_id,
                     WorkerSending.to_collector_id,
                     false(),
                     nominal_amount_expression,
@@ -1443,18 +1479,20 @@ def process_start_sending_signal(
             )
         )
         db.session.execute(
-            insert(AccountIdRequestSignal).from_select(
+            insert(AccountIdRequestSignal)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                 ],
                 select(
                     WorkerSending.from_collector_id,
-                    WorkerSending.turn_id,
                     WorkerSending.debtor_id,
+                    WorkerSending.turn_id,
                     WorkerSending.to_collector_id,
                     false(),
                 )
@@ -1476,8 +1514,8 @@ def process_start_dispatching_signal(
         .outerjoin(WorkerTurn, WorkerTurn.turn_id == DispatchingStatus.turn_id)
         .filter(
             DispatchingStatus.collector_id == collector_id,
-            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.debtor_id == debtor_id,
+            DispatchingStatus.turn_id == turn_id,
             DispatchingStatus.all_sent == true(),
             DispatchingStatus.started_dispatching == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
@@ -1496,8 +1534,8 @@ def process_start_dispatching_signal(
 
     worker_receivings_predicate = and_(
         WorkerReceiving.to_collector_id == collector_id,
-        WorkerReceiving.turn_id == turn_id,
         WorkerReceiving.debtor_id == debtor_id,
+        WorkerReceiving.turn_id == turn_id,
     )
     dispatching_status.total_received_amount = contain_principal_overflow(
         int(
@@ -1518,7 +1556,9 @@ def process_start_dispatching_signal(
     dispatching_status.awaiting_signal_flag = False
 
     db.session.execute(
-        delete(WorkerReceiving).where(worker_receivings_predicate)
+        delete(WorkerReceiving)
+        .execution_options(synchronize_session=False)
+        .where(worker_receivings_predicate)
     )
 
     if dispatching_status.amount_to_dispatch > 0:
@@ -1531,16 +1571,18 @@ def process_start_dispatching_signal(
         )
         worker_dispatching_predicate = and_(
             WorkerDispatching.collector_id == collector_id,
-            WorkerDispatching.turn_id == turn_id,
             WorkerDispatching.debtor_id == debtor_id,
+            WorkerDispatching.turn_id == turn_id,
             nominal_amount_expression >= 1.0,
         )
         db.session.execute(
-            insert(TransferAttempt).from_select(
+            insert(TransferAttempt)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                     "nominal_amount",
@@ -1552,8 +1594,8 @@ def process_start_dispatching_signal(
                 ],
                 select(
                     WorkerDispatching.collector_id,
-                    WorkerDispatching.turn_id,
                     WorkerDispatching.debtor_id,
+                    WorkerDispatching.turn_id,
                     WorkerDispatching.creditor_id,
                     true(),
                     nominal_amount_expression,
@@ -1567,18 +1609,20 @@ def process_start_dispatching_signal(
             )
         )
         db.session.execute(
-            insert(AccountIdRequestSignal).from_select(
+            insert(AccountIdRequestSignal)
+            .execution_options(synchronize_session=False)
+            .from_select(
                 [
                     "collector_id",
-                    "turn_id",
                     "debtor_id",
+                    "turn_id",
                     "creditor_id",
                     "is_dispatching",
                 ],
                 select(
                     WorkerDispatching.collector_id,
-                    WorkerDispatching.turn_id,
                     WorkerDispatching.debtor_id,
+                    WorkerDispatching.turn_id,
                     WorkerDispatching.creditor_id,
                     true(),
                 )
