@@ -441,7 +441,7 @@ def _check_config_sanity(c):  # pragma: nocover
         )
 
     if (
-            c["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
+            2 * c["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
             > parse_timedelta(c["TURN_PERIOD"]).seconds
     ):
         raise RuntimeError(
