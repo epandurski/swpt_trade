@@ -35,6 +35,7 @@ WORKER_ACCOUNT_LOAD_OPTIONS = Load(WorkerAccount).load_only(
     WorkerAccount.interest,
     WorkerAccount.interest_rate,
     WorkerAccount.last_change_ts,
+    WorkerAccount.last_heartbeat_ts,
     WorkerAccount.surplus_amount,
     WorkerAccount.surplus_ts,
     WorkerAccount.surplus_spent_amount,

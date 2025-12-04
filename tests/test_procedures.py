@@ -23,7 +23,6 @@ from swpt_trade.models import (
     DebtorInfoFetch,
     DebtorInfoDocument,
     TradingPolicy,
-    RecentlyNeededCollector,
     WorkerTurn,
     AccountLock,
     UsableCollector,
@@ -3381,3 +3380,177 @@ def test_process_start_dispatching_signal(db_session, wt_3_10, current_ts):
     assert airs.debtor_id == 666
     assert airs.creditor_id == 123
     assert airs.is_dispatching is True
+
+
+def test_process_calculate_surplus_signal(db_session, current_ts):
+    params = {
+        "creation_date": DATE0,
+        "last_change_ts": current_ts - timedelta(days=368),
+        "last_change_seqnum": 1,
+        "principal": 13000,
+        "interest": -3000,
+        "interest_rate": 5.0,
+        "last_interest_rate_change_ts": TS0,
+        "config_flags": 0,
+        "last_transfer_number": 2,
+        "last_transfer_committed_at": TS0,
+        "demurrage_rate": -50.0,
+        "commit_period": 1000000,
+        "transfer_note_max_bytes": 500,
+        "debtor_info_iri": "https://example.com/666",
+        "surplus_amount": 400,
+        "surplus_spent_amount": 300,
+        "surplus_last_transfer_number": 123,
+    }
+
+    # The surplus account can be successfully calculated.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=666,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=5),
+        )
+    )
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=666,
+            account_id="666",
+            last_heartbeat_ts=current_ts - timedelta(days=3),
+            **params,
+        )
+    )
+
+    # `blocked_amount_ts` is not recent enough.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=777,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=25),
+        )
+    )
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=777,
+            account_id="777",
+            last_heartbeat_ts=current_ts - timedelta(days=3),
+            **params,
+        )
+    )
+
+    # `last_heartbeat_ts` is not recent enough.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=888,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=5),
+        )
+    )
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000004,
+            debtor_id=888,
+            account_id="888",
+            last_heartbeat_ts=current_ts - timedelta(days=4.5),
+            **params,
+        )
+    )
+
+    # No corresponding WorkerAccount.
+    db_session.add(
+        NeededWorkerAccount(
+            creditor_id=0x0000010000000005,
+            debtor_id=666,
+            collection_disabled_since=current_ts - timedelta(days=20),
+            blocked_amount=1000,
+            blocked_amount_ts=current_ts - timedelta(days=5),
+        )
+    )
+
+    # No corresponding NeededWorkerAccount.
+    db_session.add(
+        WorkerAccount(
+            creditor_id=0x0000010000000006,
+            debtor_id=666,
+            account_id="666",
+            last_heartbeat_ts=current_ts - timedelta(days=3),
+            **params,
+        )
+    )
+
+    db_session.commit()
+    assert len(CollectorStatusChange.query.all()) == 0
+
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=666,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=666,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=777,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000004,
+        debtor_id=888,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000005,
+        debtor_id=666,
+    )
+    p.process_calculate_surplus_signal(
+        collector_id=0x0000010000000006,
+        debtor_id=666,
+    )
+    cscs = CollectorStatusChange.query.all()
+    cscs.sort(key=lambda t: (t.collector_id, t.debtor_id))
+    assert len(cscs) == 1
+    assert cscs[0].collector_id == 0x0000010000000004
+    assert cscs[0].debtor_id == 666
+    assert cscs[0].from_status == 3
+    assert cscs[0].to_status == 2
+    assert cscs[0].account_id is None
+
+    was = WorkerAccount.query.all()
+    was.sort(key=lambda t: (t.creditor_id, t.debtor_id))
+    assert len(was) == 4
+    assert was[0].creditor_id == 0x0000010000000004
+    assert was[0].debtor_id == 666
+    assert was[0].surplus_ts == current_ts - timedelta(days=3)
+    assert 9450 < was[0].surplus_amount < 9550
+    assert was[0].surplus_spent_amount == 0
+    assert was[0].surplus_last_transfer_number > 123
+
+    assert was[1].creditor_id == 0x0000010000000004
+    assert was[1].debtor_id == 777
+    assert was[1].surplus_ts == TS0
+    assert was[1].surplus_amount == 400
+    assert was[1].surplus_spent_amount == 300
+    assert was[1].surplus_last_transfer_number == 123
+
+    assert was[2].creditor_id == 0x0000010000000004
+    assert was[2].debtor_id == 888
+    assert was[2].surplus_ts == TS0
+    assert was[2].surplus_amount == 400
+    assert was[2].surplus_spent_amount == 300
+    assert was[2].surplus_last_transfer_number == 123
+
+    assert was[3].creditor_id == 0x0000010000000006
+    assert was[3].debtor_id == 666
+    assert was[3].surplus_ts == TS0
+    assert was[3].surplus_amount == 400
+    assert was[3].surplus_spent_amount == 300
+    assert was[3].surplus_last_transfer_number == 123
+
+    nwas = NeededWorkerAccount.query.all()
+    assert len(nwas) == 4
