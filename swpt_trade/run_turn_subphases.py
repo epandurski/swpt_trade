@@ -399,7 +399,7 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
             return MAX_INT64
         worst_surplus_demurrage = calc_demurrage(
             row.demurrage_rate,
-            collection_deadline - min(row.surplus_ts, current_ts),
+            collection_deadline - row.surplus_ts,
         )
         available_surplus_amount = max(
             0,

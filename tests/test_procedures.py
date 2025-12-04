@@ -3491,26 +3491,32 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=666,
+        min_demurrage_rate=-50,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=666,
+        min_demurrage_rate=-50,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=777,
+        min_demurrage_rate=-50,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=888,
+        min_demurrage_rate=-50,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000005,
         debtor_id=666,
+        min_demurrage_rate=-50,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000006,
         debtor_id=666,
+        min_demurrage_rate=-50,
     )
     cscs = CollectorStatusChange.query.all()
     cscs.sort(key=lambda t: (t.collector_id, t.debtor_id))

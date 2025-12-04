@@ -8,6 +8,7 @@ from swpt_trade.extensions import db
 from swpt_trade.models import (
     HUGE_NEGLIGIBLE_AMOUNT,
     DEFAULT_CONFIG_FLAGS,
+    WORST_NODE_CLOCKS_MISMATCH,
     KNOWN_SURPLUS_AMOUNT_PREDICATE,
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     NeededWorkerAccount,
@@ -22,6 +23,7 @@ from swpt_trade.models import (
 from swpt_trade.utils import (
     generate_collector_account_pkeys,
     contain_principal_overflow,
+    calc_demurrage,
     calc_balance_at,
 )
 
@@ -307,6 +309,7 @@ def process_calculate_surplus_signal(
         *,
         collector_id: int,
         debtor_id: int,
+        min_demurrage_rate: float,
 ) -> None:
     query = (
         db.session.query(WorkerAccount, NeededWorkerAccount)
@@ -328,6 +331,24 @@ def process_calculate_surplus_signal(
             worker_account.surplus_ts
             < needed_worker_account.collection_disabled_since
     ):
+        # Because the time intervals that we calculate depend on
+        # timestamps generated on two different nodes, the intervals
+        # can not be known for certain with a very good precision.
+        # Therefore, if the interest rate becomes too low or too high,
+        # our calculations may become very inaccurate. Here we
+        # estimate the worst possible "too low" relative error.
+        safety_cushion = calc_demurrage(
+            min_demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
+        )
+
+        # Here we ensure that the "too high" error can not become
+        # greater than the "too low" error. For example, if the
+        # demurrage rate (that is: the lowest possible interest rate)
+        # is -50%, we set the highest interest rate for our
+        # calculation to +100%, which will result in the same worst
+        # possible relative error.
+        max_interest_rate = (10000 / (100 + min_demurrage_rate)) - 100
+
         worker_account.surplus_amount = max(
             0,
             contain_principal_overflow(
@@ -335,10 +356,13 @@ def process_calculate_surplus_signal(
                     calc_balance_at(
                         principal=worker_account.principal,
                         interest=worker_account.interest,
-                        interest_rate=worker_account.interest_rate,
+                        interest_rate=min(
+                            worker_account.interest_rate,
+                            max_interest_rate,
+                        ),
                         last_change_ts=worker_account.last_change_ts,
                         at=worker_account.last_heartbeat_ts,
-                    ) * 0.997  # some safety cushion
+                    ) * safety_cushion
                 )
                 - 1
                 - needed_worker_account.blocked_amount
