@@ -335,7 +335,7 @@ def process_calculate_surplus_signal(
         # timestamps generated on two different nodes, the intervals
         # can not be known for certain with a very good precision.
         # Therefore, if the interest rate becomes too low or too high,
-        # our calculations may become very inaccurate. Here we
+        # our calculations may become quite inaccurate. Here we
         # estimate the worst possible "too low interest rate" relative
         # error.
         safety_cushion = 0.9999 * calc_demurrage(
@@ -345,7 +345,7 @@ def process_calculate_surplus_signal(
         # Here we set the highest interest rate for our calculation to
         # 0%, thus entirely eliminating "to high interest rate"
         # problem.
-        interest_rate = min(worker_account.interest_rate, 0.0)
+        safe_interest_rate = min(worker_account.interest_rate, 0.0)
 
         worker_account.surplus_amount = max(
             0,
@@ -354,7 +354,7 @@ def process_calculate_surplus_signal(
                     calc_balance_at(
                         principal=worker_account.principal,
                         interest=worker_account.interest,
-                        interest_rate=interest_rate,
+                        interest_rate=safe_interest_rate,
                         last_change_ts=worker_account.last_change_ts,
                         at=worker_account.last_heartbeat_ts,
                     ) * safety_cushion
