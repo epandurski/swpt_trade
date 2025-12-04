@@ -397,13 +397,13 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         if hoarded:
             # Return a huge positive number (buy without limit).
             return MAX_INT64
-        worse_surplus_demurrage = calc_demurrage(
+        worst_surplus_demurrage = calc_demurrage(
             row.demurrage_rate,
             collection_deadline - min(row.surplus_ts, current_ts),
         )
         available_surplus_amount = max(
             0,
-            + math.floor(row.surplus_amount * worse_surplus_demurrage)
+            + math.floor(row.surplus_amount * worst_surplus_demurrage)
             - row.surplus_spent_amount
         )
         # We must make sure that the amount locked during the trading
