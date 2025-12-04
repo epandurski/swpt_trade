@@ -36,6 +36,7 @@ WORKER_ACCOUNT_LOAD_OPTIONS = Load(WorkerAccount).load_only(
     WorkerAccount.principal,
     WorkerAccount.interest,
     WorkerAccount.interest_rate,
+    WorkerAccount.demurrage_rate,
     WorkerAccount.last_change_ts,
     WorkerAccount.last_heartbeat_ts,
     WorkerAccount.surplus_amount,
@@ -309,7 +310,6 @@ def process_calculate_surplus_signal(
         *,
         collector_id: int,
         debtor_id: int,
-        min_demurrage_rate: float,
 ) -> None:
     query = (
         db.session.query(WorkerAccount, NeededWorkerAccount)
@@ -331,6 +331,8 @@ def process_calculate_surplus_signal(
             worker_account.surplus_ts
             < needed_worker_account.collection_disabled_since
     ):
+        demurrage_rate = worker_account.demurrage_rate
+
         # Because the time intervals that we calculate depend on
         # timestamps generated on two different nodes, the intervals
         # can not be known for certain with a very good precision.
@@ -338,7 +340,7 @@ def process_calculate_surplus_signal(
         # our calculations may become very inaccurate. Here we
         # estimate the worst possible "too low" relative error.
         safety_cushion = calc_demurrage(
-            min_demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
+            demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
         )
 
         # Here we ensure that the "too high" error can not become
@@ -347,7 +349,11 @@ def process_calculate_surplus_signal(
         # is -50%, we set the highest interest rate for our
         # calculation to +100%, which will result in the same worst
         # possible relative error.
-        max_interest_rate = (10000 / (100 + min_demurrage_rate)) - 100
+        max_interest_rate = (
+            (10000.0 / (100.0 + demurrage_rate)) - 100.0
+            if demurrage_rate > -99.9999
+            else 100000000.0
+        )
 
         worker_account.surplus_amount = max(
             0,

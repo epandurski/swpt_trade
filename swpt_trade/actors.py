@@ -732,7 +732,6 @@ def _on_calculate_surplus_signal(
     procedures.process_calculate_surplus_signal(
         collector_id=collector_id,
         debtor_id=debtor_id,
-        min_demurrage_rate=current_app.config["APP_MIN_DEMURRAGE_RATE"],
     )
 
 
