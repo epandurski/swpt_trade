@@ -365,7 +365,7 @@ def _check_config_sanity(c):  # pragma: nocover
             or c["MAX_COLLECTOR_ID"] is None
             or c["MIN_COLLECTOR_ID"] * c["MAX_COLLECTOR_ID"] <= 0
             or c["MIN_COLLECTOR_ID"] > c["MAX_COLLECTOR_ID"]
-            or c["MAX_COLLECTOR_ID"] - c["MIN_COLLECTOR_ID"] > 100000
+            or c["MAX_COLLECTOR_ID"] - c["MIN_COLLECTOR_ID"] > 16384
     ):
         raise RuntimeError(
             "Invalid values for MIN_COLLECTOR_ID and MAX_COLLECTOR_ID."

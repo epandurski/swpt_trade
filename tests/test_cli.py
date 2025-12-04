@@ -3204,11 +3204,13 @@ def test_run_phase3_subphase5(
     assert ncas[0].creditor_id == 0x0000010000000004
     assert ncas[0].debtor_id == 666
     assert ncas[0].collection_disabled_since == current_ts - timedelta(days=2)
-    assert ncas[0].blocked_amount is None
+    assert ncas[0].blocked_amount_ts == m.TS0
+    assert ncas[0].blocked_amount == 0
     assert ncas[1].creditor_id == 0x0000010000000004
     assert ncas[1].debtor_id == 777
     assert ncas[1].collection_disabled_since is None
-    assert ncas[1].blocked_amount is None
+    assert ncas[1].blocked_amount_ts == m.TS0
+    assert ncas[1].blocked_amount == 0
     assert ncas[2].creditor_id == 0x0000010000000004
     assert ncas[2].debtor_id == 999
     assert (

@@ -282,7 +282,6 @@ def upgrade_():
     sa.Column('blocked_amount', sa.BigInteger(), nullable=True),
     sa.Column('blocked_amount_ts', sa.TIMESTAMP(timezone=True), nullable=True),
     sa.CheckConstraint('blocked_amount >= 0'),
-    sa.CheckConstraint('blocked_amount IS NULL AND blocked_amount_ts IS NULL OR blocked_amount IS NOT NULL AND blocked_amount_ts IS NOT NULL'),
     sa.PrimaryKeyConstraint('creditor_id', 'debtor_id'),
     comment='Represents the fact that a "worker" server has requested the configuration (aka creation) of a Swaptacular account, which will be used to collect and dispatch transfers.'
     )
