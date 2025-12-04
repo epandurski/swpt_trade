@@ -339,7 +339,7 @@ def process_calculate_surplus_signal(
         # Therefore, if the interest rate becomes too low or too high,
         # our calculations may become very inaccurate. Here we
         # estimate the worst possible "too low" relative error.
-        safety_cushion = calc_demurrage(
+        safety_cushion = 0.9999 * calc_demurrage(
             demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
         )
 
