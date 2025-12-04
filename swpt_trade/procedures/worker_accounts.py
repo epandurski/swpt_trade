@@ -331,29 +331,21 @@ def process_calculate_surplus_signal(
             worker_account.surplus_ts
             < needed_worker_account.collection_disabled_since
     ):
-        demurrage_rate = worker_account.demurrage_rate
-
         # Because the time intervals that we calculate depend on
         # timestamps generated on two different nodes, the intervals
         # can not be known for certain with a very good precision.
         # Therefore, if the interest rate becomes too low or too high,
         # our calculations may become very inaccurate. Here we
-        # estimate the worst possible "too low" relative error.
+        # estimate the worst possible "too low interest rate" relative
+        # error.
         safety_cushion = 0.9999 * calc_demurrage(
-            demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
+            worker_account.demurrage_rate, WORST_NODE_CLOCKS_MISMATCH
         )
 
-        # Here we ensure that the "too high" error can not become
-        # greater than the "too low" error. For example, if the
-        # demurrage rate (that is: the lowest possible interest rate)
-        # is -50%, we set the highest interest rate for our
-        # calculation to +100%, which will result in the same worst
-        # possible relative error.
-        max_interest_rate = (
-            (10000.0 / (100.0 + demurrage_rate)) - 100.0
-            if demurrage_rate > -99.9999
-            else 100000000.0
-        )
+        # Here we set the highest interest rate for our calculation to
+        # 0%, thus entirely eliminating "to high interest rate"
+        # problem.
+        interest_rate = min(worker_account.interest_rate, 0.0)
 
         worker_account.surplus_amount = max(
             0,
@@ -362,10 +354,7 @@ def process_calculate_surplus_signal(
                     calc_balance_at(
                         principal=worker_account.principal,
                         interest=worker_account.interest,
-                        interest_rate=min(
-                            worker_account.interest_rate,
-                            max_interest_rate,
-                        ),
+                        interest_rate=interest_rate,
                         last_change_ts=worker_account.last_change_ts,
                         at=worker_account.last_heartbeat_ts,
                     ) * safety_cushion

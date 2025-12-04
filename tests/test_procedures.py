@@ -3389,7 +3389,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
         "last_change_seqnum": 1,
         "principal": 13000,
         "interest": -3000,
-        "interest_rate": 5.0,
+        "interest_rate": 0.0,
         "last_interest_rate_change_ts": TS0,
         "config_flags": 0,
         "last_transfer_number": 2,
@@ -3527,7 +3527,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     assert was[0].creditor_id == 0x0000010000000004
     assert was[0].debtor_id == 666
     assert was[0].surplus_ts == current_ts - timedelta(days=3)
-    assert 9450 < was[0].surplus_amount < 9550
+    assert 8950 < was[0].surplus_amount < 9050
     assert was[0].surplus_spent_amount == 0
     assert was[0].surplus_last_transfer_number > 123
 
