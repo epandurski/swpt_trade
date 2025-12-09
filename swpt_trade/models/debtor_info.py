@@ -71,11 +71,6 @@ class DebtorLocatorClaim(db.Model):
                 ),
             )
         ),
-        db.Index(
-            "idx_debtor_locator_claim_latest_locator_fetch_at",
-            latest_locator_fetch_at,
-            postgresql_where=latest_locator_fetch_at != null(),
-        ),
         {
             "comment": (
                 "Represents a reliable claim made by a given debtor,"

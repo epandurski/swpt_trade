@@ -156,13 +156,6 @@ class CurrencyInfo(db.Model):
     peg_exchange_rate = db.Column(db.FLOAT)
     is_confirmed = db.Column(db.BOOLEAN, nullable=False)
     __table_args__ = (
-        db.Index(
-            "idx_currency_info_confirmed_debtor_id",
-            turn_id,
-            debtor_id,
-            unique=True,
-            postgresql_where=is_confirmed,
-        ),
         {
             "comment": (
                 'Represents relevant information about a given currency'
