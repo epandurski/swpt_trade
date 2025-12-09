@@ -6,6 +6,7 @@ from sqlalchemy.sql.expression import func, text, tuple_
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
 from swpt_trade.models import (
+    SET_SEQSCAN_ON,
     CollectorAccount,
     CollectorStatusChange,
     NeededCollectorAccount,
@@ -47,6 +48,7 @@ def process_collector_status_changes():
     )
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CollectorStatusChange.collector_id,
@@ -91,6 +93,7 @@ def create_needed_collector_accounts():
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     NeededCollectorAccount.debtor_id,
@@ -121,6 +124,7 @@ def iter_pristine_collectors(
         yield_per: int,
 ) -> Iterable[list[tuple[int, int]]]:
     with db.engines["solver"].connect() as s_conn:
+        s_conn.execute(SET_SEQSCAN_ON)
         with s_conn.execution_options(yield_per=yield_per).execute(
                 select(
                     CollectorAccount.debtor_id,

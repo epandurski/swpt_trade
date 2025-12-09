@@ -7,6 +7,8 @@ from sqlalchemy.sql.expression import text, tuple_
 from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
+    SET_SEQSCAN_ON,
+    SET_FORCE_CUSTOM_PLAN,
     CollectorAccount,
     Turn,
     CurrencyInfo,
@@ -67,6 +69,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CurrencyInfo.is_confirmed,
@@ -87,6 +90,7 @@ def _register_currencies(solver: Solver, turn_id: int) -> None:
 
 def _register_collector_accounts(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CollectorAccount.collector_id,
@@ -100,6 +104,7 @@ def _register_collector_accounts(solver: Solver, turn_id: int) -> None:
 
 def _register_sell_offers(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     SellOffer.creditor_id,
@@ -115,6 +120,7 @@ def _register_sell_offers(solver: Solver, turn_id: int) -> None:
 
 def _register_buy_offers(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     BuyOffer.creditor_id,
@@ -135,15 +141,25 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
         .one_or_none()
     )
     if turn and turn.phase == 2:
-        _write_takings(solver, turn_id)
-        _write_collector_transfers(solver, turn_id)
-        _write_givings(solver, turn_id)
-        _detect_overloaded_currencies(turn_id)
-        _saturate_hoarded_currencies(turn_id)
-
         turn.phase = 3
         turn.phase_deadline = None
         turn.collection_started_at = datetime.now(tz=timezone.utc)
+        db.session.flush()
+
+        _write_takings(solver, turn_id)
+        _write_collector_transfers(solver, turn_id)
+        _write_givings(solver, turn_id)
+        _saturate_hoarded_currencies(turn_id)
+
+        db.session.execute(
+            SET_SEQSCAN_ON,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            SET_FORCE_CUSTOM_PLAN,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        _detect_overloaded_currencies(turn_id)
 
         # NOTE: When reaching turn phase 3, all records for the given
         # turn from the `CurrencyInfo`, `SellOffer`, `BuyOffer`, and
@@ -379,6 +395,7 @@ def _strengthen_overloaded_currencies() -> None:
     max_collector_id = cfg["MAX_COLLECTOR_ID"]
 
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     OverloadedCurrency.turn_id,
@@ -418,6 +435,7 @@ def _saturate_hoarded_currencies(turn_id: int) -> None:
     number_of_ids = 1 + max_collector_id - min_collector_id
 
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(HoardedCurrency.debtor_id)
                 .join(
@@ -483,6 +501,7 @@ def _disable_some_collector_accounts() -> None:
             waiting_to_be_ensured_to_exist.clear()
 
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CollectorAccount.debtor_id,
@@ -559,6 +578,7 @@ def _delete_stuck_collector_accounts() -> None:
         days=2 * current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
     )
     with db.engines['solver'].connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CollectorAccount.debtor_id,

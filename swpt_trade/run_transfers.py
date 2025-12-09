@@ -15,6 +15,7 @@ from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
 from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
+    SET_SEQSCAN_ON,
     DispatchingStatus,
     WorkerCollecting,
     WorkerSending,
@@ -63,6 +64,8 @@ def process_delayed_account_transfers() -> int:
     count = 0
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
+
         # NOTE: Each row in this cursor contains a lot of data.
         # Therefore, we use `INSERT_BATCH_SIZE` here, because using
         # the bigger `SELECT_BATCH_SIZE` may consume too much memory.
@@ -169,6 +172,7 @@ def signal_dispatching_statuses_ready_to_send() -> None:
     ).exists()
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
@@ -245,6 +249,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
     ).exists()
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
@@ -305,6 +310,7 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
     ).exists()
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
@@ -383,6 +389,7 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
     ).exists()
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,

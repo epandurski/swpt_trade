@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from flask import current_app
+from sqlalchemy import text
 from swpt_trade.extensions import db, publisher
 from swpt_pythonlib import rabbitmq
 from swpt_pythonlib.utils import ShardingRealm
@@ -26,6 +27,8 @@ AGENT_TRANSFER_NOTE_FORMAT = "-cXchge"
 DEFAULT_CONFIG_FLAGS = 0
 ACCOUNT_ID_MAX_BYTES = 100
 CT_AGENT = "agent"
+SET_SEQSCAN_ON = text("SET LOCAL enable_seqscan = on")
+SET_FORCE_CUSTOM_PLAN = text("SET LOCAL plan_cache_mode = force_custom_plan")
 
 SMP_MESSAGE_TYPES = set([
     "ConfigureAccount",
