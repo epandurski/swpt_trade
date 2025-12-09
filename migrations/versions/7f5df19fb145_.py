@@ -758,6 +758,8 @@ def upgrade_solver():
     sa.PrimaryKeyConstraint('turn_id', 'debtor_info_locator'),
     comment='Represents relevant information about a given currency (aka debtor), so that the currency can participate in a given trading turn. The "solver" server will populate this table before the start of phase 2 of each turn, and will delete the records before advancing to phase 3. "Worker" servers will read from this table, so as to generate relevant buy and sell offers.'
     )
+    with op.batch_alter_table('currency_info', schema=None) as batch_op:
+        batch_op.create_index('idx_currency_info_confirmed_debtor_id', ['turn_id', 'debtor_id'], unique=True, postgresql_where=sa.text('is_confirmed'))
 
     op.create_table('debtor_info',
     sa.Column('turn_id', sa.Integer(), nullable=False),
@@ -836,6 +838,9 @@ def downgrade_solver():
     op.drop_table('overloaded_currency')
     op.drop_table('hoarded_currency')
     op.drop_table('debtor_info')
+    with op.batch_alter_table('currency_info', schema=None) as batch_op:
+        batch_op.drop_index('idx_currency_info_confirmed_debtor_id', postgresql_where=sa.text('is_confirmed'))
+
     op.drop_table('currency_info')
     op.drop_table('creditor_taking')
     op.drop_table('creditor_giving')
