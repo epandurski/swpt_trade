@@ -12,6 +12,10 @@ atomic: Callable[[T], T] = db.atomic
 class RecentlyNeededCollectorsScanner(TableScanner):
     table = RecentlyNeededCollector.__table__
     pk = table.c.debtor_id
+    columns = [
+        RecentlyNeededCollector.debtor_id,
+        RecentlyNeededCollector.needed_at,
+    ]
 
     def __init__(self):
         super().__init__()
