@@ -8,6 +8,7 @@ from flask import current_app
 from flask.cli import with_appcontext
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
+from swpt_trade.models import SET_SEQSCAN_ON
 from .common import swpt_trade
 
 # TODO: Consider implementing a CLI command which extracts trading
@@ -298,6 +299,7 @@ def verify_shard_content():
                     raise InvalidRecord
 
     with db.engine.connect() as conn:
+        conn.execute(SET_SEQSCAN_ON)
         logger = logging.getLogger(__name__)
         try:
             # NOTE: Basically, every table that relies on a table

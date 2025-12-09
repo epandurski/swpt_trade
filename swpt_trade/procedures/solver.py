@@ -10,6 +10,8 @@ from swpt_trade.utils import (
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TS0,
+    SET_SEQSCAN_ON,
+    SET_FORCE_CUSTOM_PLAN,
     Turn,
     DebtorInfo,
     CollectorAccount,
@@ -89,6 +91,19 @@ def try_to_advance_turn_to_phase2(
         .one_or_none()
     )
     if turn and turn.phase == 1:
+        turn.phase = 2
+        turn.phase_deadline = current_ts + phase2_duration
+        turn.collection_deadline = current_ts + max_commit_period
+
+        db.session.flush()
+        db.session.execute(
+            SET_SEQSCAN_ON,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            SET_FORCE_CUSTOM_PLAN,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
         active_debtor = (
             # These are debtors that are confirmed, for which there
             # are at least one active (status == 2) collector account.
@@ -146,10 +161,6 @@ def try_to_advance_turn_to_phase2(
                 .where(DebtorInfo.turn_id == turn_id),
             )
         )
-
-        turn.phase = 2
-        turn.phase_deadline = current_ts + phase2_duration
-        turn.collection_deadline = current_ts + max_commit_period
 
         # NOTE: When reaching turn phase 2, all records for the given
         # turn from the `DebtorInfo` and `ConfirmedDebtor` tables will

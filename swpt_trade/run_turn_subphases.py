@@ -4,7 +4,6 @@ from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from itertools import groupby
 from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
-from sqlalchemy.orm import load_only
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import (
     null,
@@ -29,10 +28,11 @@ from swpt_trade.utils import (
 from swpt_trade.extensions import db
 from swpt_trade.solver import CandidateOfferAuxData, BidProcessor
 from swpt_trade.models import (
-    TS0,
     MAX_INT64,
     KNOWN_SURPLUS_AMOUNT_PREDICATE,
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
+    SET_SEQSCAN_ON,
+    SET_FORCE_CUSTOM_PLAN,
     DebtorInfoDocument,
     DebtorLocatorClaim,
     DebtorInfo,
@@ -72,6 +72,11 @@ NEEDED_WORKER_ACCOUNT_PK = tuple_(
     NeededWorkerAccount.creditor_id,
     NeededWorkerAccount.debtor_id,
 )
+INTEREST_RATE_CHANGE_PK = tuple_(
+    InterestRateChange.creditor_id,
+    InterestRateChange.debtor_id,
+    InterestRateChange.change_ts,
+)
 KILL_ACCOUNTS_BATCH_SIZE = 1000
 INSERT_BATCH_SIZE = 5000
 UPDATE_BATCH_SIZE = 5000
@@ -103,6 +108,7 @@ def run_phase1_subphase0(turn_id: int) -> None:
                     db.engine.connect() as w_conn,
                     db.engines["solver"].connect() as s_conn,
             ):
+                w_conn.execute(SET_SEQSCAN_ON)
                 _populate_debtor_infos(w_conn, s_conn, turn_id)
                 _populate_confirmed_debtors(w_conn, s_conn, turn_id)
                 _populate_hoarded_currencies(w_conn, s_conn, turn_id)
@@ -265,6 +271,8 @@ def run_phase2_subphase0(turn_id: int) -> None:
         .one_or_none()
     )
     if worker_turn:
+        worker_turn.worker_turn_subphase = 5
+
         if worker_turn.phase_deadline > datetime.now(tz=timezone.utc):
             bp = BidProcessor(
                 worker_turn.base_debtor_info_locator,
@@ -279,14 +287,16 @@ def run_phase2_subphase0(turn_id: int) -> None:
                 turn_id,
                 worker_turn.collection_deadline,
             )
+            db.session.flush()
+            db.session.execute(SET_SEQSCAN_ON)
+            db.session.execute(SET_FORCE_CUSTOM_PLAN)
             _copy_usable_collectors(bp)
             _insert_needed_collector_signals(bp)
-
-        worker_turn.worker_turn_subphase = 5
 
 
 def _load_currencies(bp: BidProcessor, turn_id: int) -> None:
     with db.engines["solver"].connect() as s_conn:
+        s_conn.execute(SET_SEQSCAN_ON)
         with s_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CurrencyInfo.is_confirmed,
@@ -333,6 +343,7 @@ def _generate_user_candidate_offers(bp, turn_id):
         )
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     TradingPolicy.creditor_id,
@@ -437,6 +448,8 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         }
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
+
         # NOTE: Disabled collector accounts (status == 3) must not try
         # to sell their surplus amounts, because this may interfere
         # with correctly determining the new surplus amounts.
@@ -535,9 +548,13 @@ def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
 
 
 def _copy_usable_collectors(bp: BidProcessor) -> None:
-    with db.engines["solver"].connect() as s_conn:
-        UsableCollector.query.delete(synchronize_session=False)
+    db.session.execute(
+        delete(UsableCollector)
+        .execution_options(synchronize_session=False)
+    )
 
+    with db.engines["solver"].connect() as s_conn:
+        s_conn.execute(SET_SEQSCAN_ON)
         with s_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CollectorAccount.debtor_id,
@@ -612,6 +629,7 @@ def run_phase2_subphase5(turn_id: int) -> None:
                     db.engine.connect() as w_conn,
                     db.engines["solver"].connect() as s_conn,
             ):
+                w_conn.execute(SET_SEQSCAN_ON)
                 _populate_sell_offers(w_conn, s_conn, turn_id)
                 _populate_buy_offers(w_conn, s_conn, turn_id)
 
@@ -736,6 +754,7 @@ def run_phase3_subphase0(turn_id: int) -> None:
         statuses = DispatchingData(worker_turn.turn_id)
 
         with db.engines["solver"].connect() as s_conn:
+            s_conn.execute(SET_SEQSCAN_ON)
             _copy_creditor_takings(s_conn, worker_turn)
             _copy_creditor_givings(s_conn, worker_turn)
             _copy_collector_collectings(s_conn, worker_turn, statuses)
@@ -1089,6 +1108,7 @@ def _insert_revise_account_lock_signals(worker_turn):
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     AccountLock.creditor_id,
@@ -1136,6 +1156,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
         hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
 
         with db.engines["solver"].connect() as s_conn:
+            s_conn.execute(SET_SEQSCAN_ON)
             s_conn.execute(
                 delete(CreditorTaking)
                 .execution_options(synchronize_session=False)
@@ -1192,12 +1213,16 @@ def run_phase3_subphase5(turn_id: int) -> None:
             )
             s_conn.commit()
 
+        worker_turn.worker_turn_subphase = 10
+
+        db.session.flush()
+        db.session.execute(SET_SEQSCAN_ON)
+        db.session.execute(SET_FORCE_CUSTOM_PLAN)
+
         _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
         _update_worker_account_surplus_amounts()
         _kill_broken_worker_accounts()
-
-        worker_turn.worker_turn_subphase = 10
 
 
 def _update_needed_worker_account_disabled_since() -> None:
@@ -1303,6 +1328,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
     )
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     NeededWorkerAccount.creditor_id,
@@ -1331,6 +1357,7 @@ def _update_worker_account_surplus_amounts() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     NeededWorkerAccount.creditor_id,
@@ -1392,6 +1419,7 @@ def _kill_broken_worker_accounts() -> None:
     ).exists()
 
     with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     NeededWorkerAccount.creditor_id,
@@ -1455,20 +1483,24 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     # removed manually at some point in the very distant
     # future) is minimal.
     interest_rate_changes_to_delete = (
-        InterestRateChange.query
-        .filter(
-            tuple_(
+        db.session.execute(
+            select(
                 InterestRateChange.creditor_id,
                 InterestRateChange.debtor_id,
-            ).in_(primary_keys)
+                InterestRateChange.change_ts,
+            )
+            .where(
+                tuple_(
+                    InterestRateChange.creditor_id,
+                    InterestRateChange.debtor_id,
+                ).in_(primary_keys)
+            )
+            .with_for_update(skip_locked=True)
         )
-        .options(load_only(InterestRateChange.change_ts))
-        .with_for_update(skip_locked=True)
         .all()
     )
-    for x in interest_rate_changes_to_delete:
-        db.session.delete(x)
-
-    db.session.flush()
-    for x in interest_rate_changes_to_delete:
-        db.session.expunge(x)
+    for batch in batched(interest_rate_changes_to_delete, DELETE_BATCH_SIZE):
+        db.session.execute(
+            delete(InterestRateChange)
+            .where(INTEREST_RATE_CHANGE_PK.in_(batch))
+        )
