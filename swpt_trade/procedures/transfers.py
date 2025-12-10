@@ -7,6 +7,7 @@ from datetime import datetime, date, timezone, timedelta
 from sqlalchemy import select, insert, delete, update
 from sqlalchemy.sql.expression import (
     and_,
+    tuple_,
     null,
     true,
     false,
@@ -55,6 +56,14 @@ T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 TD_TOLERABLE_ROUNDING_ERROR = timedelta(seconds=2)
 TD_CLOCK_PRECISION_SAFETY_MARGIN = timedelta(minutes=10)
+
+TRANSFER_ATTEMPT_PK = tuple_(
+    TransferAttempt.collector_id,
+    TransferAttempt.turn_id,
+    TransferAttempt.debtor_id,
+    TransferAttempt.creditor_id,
+    TransferAttempt.is_dispatching,
+)
 
 # Transfer status codes:
 SC_OK = "OK"
@@ -1340,23 +1349,31 @@ def _reschedule_failed_attempt(
 
 
 @atomic
-def process_rescheduled_transfers_batch(batch_size: int) -> int:
-    assert batch_size > 0
-    current_ts = datetime.now(tz=timezone.utc)
-
+def process_rescheduled_transfers_batch(
+        transfer_attempt_pks: list,
+        current_ts: datetime,
+) -> int:
+    count = 0
     transfer_attempts = (
         TransferAttempt.query
         .filter(
-            TransferAttempt.rescheduled_for != null(),
-            TransferAttempt.rescheduled_for <= current_ts,
+            TRANSFER_ATTEMPT_PK.in_(transfer_attempt_pks),
+
+            # The reason we use this complex expression here (instead
+            # of the simple `TransferAttempt.rescheduled_for <=
+            # current_ts`), is to ensure that the planner will not
+            # decide to use the index on the `rescheduled_for` column
+            # for the prepared generic plan.
+            func.least(TransferAttempt.rescheduled_for, T_INFINITY)
+            <= current_ts,
         )
         .options(load_only(TransferAttempt.rescheduled_for))
         .with_for_update(skip_locked=True)
-        .limit(batch_size)
         .all()
     )
 
     for attempt in transfer_attempts:
+        assert attempt.rescheduled_for <= current_ts
         db.session.add(
             TriggerTransferSignal(
                 collector_id=attempt.collector_id,
@@ -1367,8 +1384,9 @@ def process_rescheduled_transfers_batch(batch_size: int) -> int:
             )
         )
         attempt.rescheduled_for = None
+        count += 1
 
-    return len(transfer_attempts)
+    return count
 
 
 @atomic

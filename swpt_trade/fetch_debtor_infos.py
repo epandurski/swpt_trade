@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from marshmallow import ValidationError
 from flask import current_app
-from sqlalchemy.sql.expression import and_, null
+from sqlalchemy import select
+from sqlalchemy.sql.expression import tuple_, and_, null, func
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_pythonlib.swpt_uris import parse_debtor_uri
 from swpt_trade.extensions import db
@@ -20,6 +21,8 @@ from swpt_trade.models import (
     FetchDebtorInfoSignal,
     StoreDocumentSignal,
     MAX_INT16,
+    SET_SEQSCAN_ON,
+    T_INFINITY,
 )
 
 T = TypeVar("T")
@@ -27,6 +30,10 @@ FetchTuple = Tuple[DebtorInfoFetch, Optional[DebtorInfoDocument]]
 Classifcation = Tuple[List[FetchTuple], List[FetchTuple], List[FetchTuple]]
 atomic: Callable[[T], T] = db.atomic
 
+DEBTOR_INFO_FETCH_PK = tuple_(
+    DebtorInfoFetch.iri,
+    DebtorInfoFetch.debtor_id,
+)
 RETRY_MIN_WAIT_SECONDS = 60.0  # 1 minute
 coininfo_schema = CoinInfoDocumentSchema()
 
@@ -46,38 +53,43 @@ class InvalidDebtorInfoDocument(Exception):
 
 def process_debtor_info_fetches(max_connections: int, timeout: float) -> int:
     count = 0
+    current_ts = datetime.now(tz=timezone.utc)
     batch_size = current_app.config["APP_DEBTOR_INFO_FETCH_BURST_COUNT"]
 
-    while True:
-        n = _process_debtor_info_fetches_batch(
-            batch_size, max_connections, timeout
-        )
-        count += n
-        if n < batch_size:
-            break
+    with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
+        with w_conn.execution_options(yield_per=batch_size).execute(
+                select(
+                    DebtorInfoFetch.iri,
+                    DebtorInfoFetch.debtor_id,
+                )
+                .where(DebtorInfoFetch.next_attempt_at <= current_ts)
+        ) as result:
+            for rows in result.partitions():
+                count += _process_debtor_info_fetches_batch(
+                    rows, current_ts, max_connections, timeout
+                )
 
     return count
 
 
 @atomic
 def _process_debtor_info_fetches_batch(
-        batch_size: int,
+        debtor_info_fetch_pks: list,
+        current_ts: datetime,
         max_connections: int,
         timeout: float,
 ) -> int:
-    max_distance_to_base = current_app.config["MAX_DISTANCE_TO_BASE"]
+    cfg = current_app.config
+    expiry_period = timedelta(days=cfg["APP_DEBTOR_INFO_EXPIRY_DAYS"])
+    max_distance_to_base = cfg["MAX_DISTANCE_TO_BASE"]
     assert max_distance_to_base > 1
-    assert batch_size > 0
     assert max_connections > 0
     assert timeout > 0.0
 
-    debtor_info_expiry_period = timedelta(
-        days=current_app.config["APP_DEBTOR_INFO_EXPIRY_DAYS"]
-    )
     fetch_results = _query_and_resolve_pending_fetches(
-        batch_size, max_connections, timeout
+        debtor_info_fetch_pks, current_ts, max_connections, timeout
     )
-
     for r in fetch_results:
         fetch = r.fetch
         errorcode = r.errorcode
@@ -135,7 +147,7 @@ def _process_debtor_info_fetches_batch(
                     )
 
         if retry:
-            _retry_fetch(fetch, errorcode, debtor_info_expiry_period)
+            _retry_fetch(fetch, errorcode, expiry_period)
         else:
             db.session.delete(fetch)
 
@@ -143,13 +155,12 @@ def _process_debtor_info_fetches_batch(
 
 
 def _query_and_resolve_pending_fetches(
-        batch_size: int,
+        debtor_info_fetch_pks: list,
+        current_ts: datetime,
         max_connections: int,
         timeout: float,
 ) -> List[FetchResult]:
-    current_ts = datetime.now(tz=timezone.utc)
-
-    # Query the database for pending `DebtorInfoFetch`es.
+    # Lock the `DebtorInfoFetch`es that need to be processed.
     fetch_tuples: List[FetchTuple] = (
         db.session.query(DebtorInfoFetch, DebtorInfoDocument)
         .outerjoin(
@@ -159,13 +170,22 @@ def _query_and_resolve_pending_fetches(
                 DebtorInfoFetch.forced_iri == null(),
             ),
         )
-        .filter(DebtorInfoFetch.next_attempt_at <= current_ts)
+        .filter(
+            DEBTOR_INFO_FETCH_PK.in_(debtor_info_fetch_pks),
+
+            # The reason we use this complex expression here (instead
+            # of the simple `DebtorInfoFetch.next_attempt_at <=
+            # current_ts`), is to ensure that the planner will not
+            # decide to use the index on the `next_attempt_at` column
+            # for the prepared generic plan.
+            func.least(DebtorInfoFetch.next_attempt_at, T_INFINITY)
+            <= current_ts,
+        )
         .with_for_update(of=DebtorInfoFetch, skip_locked=True)
-        .limit(batch_size)
         .all()
     )
 
-    # Resolve the `DebtorInfoFetch`es that we've got.
+    # Resolve the `DebtorInfoFetch`es that we have locked.
     wrong_shard, cached, new = _classify_fetch_tuples(fetch_tuples)
     wrong_shard_results = [FetchResult(fetch=f) for f, _ in wrong_shard]
     cached_results = [FetchResult(fetch=f, document=d) for f, d in cached]
