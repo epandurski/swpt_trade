@@ -2,6 +2,7 @@ import logging
 import time
 import signal
 import sys
+import random
 import click
 from typing import Any
 from flask import current_app
@@ -98,6 +99,7 @@ def fetch_debtor_infos(
         try_unblock_signals()
 
         with app.app_context():
+            time.sleep(wait * random.random())
             while not stopped:
                 started_at = time.time()
                 try:
