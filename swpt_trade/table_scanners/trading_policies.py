@@ -19,6 +19,24 @@ atomic: Callable[[T], T] = db.atomic
 class TradingPoliciesScanner(TableScanner):
     table = TradingPolicy.__table__
     pk = tuple_(table.c.creditor_id, table.c.debtor_id)
+    columns = [
+        TradingPolicy.creditor_id,
+        TradingPolicy.debtor_id,
+        TradingPolicy.account_id,
+        TradingPolicy.account_id_is_obsolete,
+        TradingPolicy.creation_date,
+        TradingPolicy.principal,
+        TradingPolicy.last_transfer_number,
+        TradingPolicy.policy_name,
+        TradingPolicy.min_principal,
+        TradingPolicy.max_principal,
+        TradingPolicy.peg_debtor_id,
+        TradingPolicy.peg_exchange_rate,
+        TradingPolicy.config_flags,
+        TradingPolicy.latest_ledger_update_ts,
+        TradingPolicy.latest_policy_update_ts,
+        TradingPolicy.latest_flags_update_ts,
+    ]
 
     def __init__(self):
         super().__init__()

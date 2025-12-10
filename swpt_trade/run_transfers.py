@@ -10,12 +10,14 @@ from sqlalchemy.sql.expression import (
     true,
     false,
     text,
+    null,
 )
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
 from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
+    TransferAttempt,
     DispatchingStatus,
     WorkerCollecting,
     WorkerSending,
@@ -46,13 +48,26 @@ atomic: Callable[[T], T] = db.atomic
 
 def process_rescheduled_transfers() -> int:
     count = 0
+    current_ts = datetime.now(tz=timezone.utc)
     batch_size = current_app.config["APP_RESCHEDULED_TRANSFERS_BURST_COUNT"]
 
-    while True:
-        n = process_rescheduled_transfers_batch(batch_size)
-        count += n
-        if n < batch_size:
-            break
+    with db.engine.connect() as w_conn:
+        w_conn.execute(SET_SEQSCAN_ON)
+        with w_conn.execution_options(yield_per=batch_size).execute(
+                select(
+                    TransferAttempt.collector_id,
+                    TransferAttempt.turn_id,
+                    TransferAttempt.debtor_id,
+                    TransferAttempt.creditor_id,
+                    TransferAttempt.is_dispatching,
+                )
+                .where(
+                    TransferAttempt.rescheduled_for != null(),
+                    TransferAttempt.rescheduled_for <= current_ts,
+                )
+        ) as result:
+            for rows in result.partitions():
+                count += process_rescheduled_transfers_batch(rows, current_ts)
 
     return count
 
