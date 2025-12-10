@@ -155,6 +155,7 @@ def trigger_transfers(
         try_unblock_signals()
 
         with app.app_context():
+            time.sleep(wait * random.random())
             while not stopped:
                 started_at = time.time()
                 try:
