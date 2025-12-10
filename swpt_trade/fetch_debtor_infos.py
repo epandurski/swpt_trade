@@ -88,7 +88,11 @@ def _process_debtor_info_fetches_batch(
     assert timeout > 0.0
 
     fetch_results = _query_and_resolve_pending_fetches(
-        debtor_info_fetch_pks, current_ts, max_connections, timeout
+        debtor_info_fetch_pks,
+        current_ts,
+        expiry_period,
+        max_connections,
+        timeout,
     )
     for r in fetch_results:
         fetch = r.fetch
@@ -157,6 +161,7 @@ def _process_debtor_info_fetches_batch(
 def _query_and_resolve_pending_fetches(
         debtor_info_fetch_pks: list,
         current_ts: datetime,
+        expiry_period: timedelta,
         max_connections: int,
         timeout: float,
 ) -> List[FetchResult]:
@@ -186,7 +191,9 @@ def _query_and_resolve_pending_fetches(
     )
 
     # Resolve the `DebtorInfoFetch`es that we have locked.
-    wrong_shard, cached, new = _classify_fetch_tuples(fetch_tuples)
+    wrong_shard, cached, new = _classify_fetch_tuples(
+        fetch_tuples, current_ts, expiry_period
+    )
     wrong_shard_results = [FetchResult(fetch=f) for f, _ in wrong_shard]
     cached_results = [FetchResult(fetch=f, document=d) for f, d in cached]
     new_results = _make_https_requests(
@@ -198,18 +205,18 @@ def _query_and_resolve_pending_fetches(
     return all_results
 
 
-def _classify_fetch_tuples(fetch_tuples: List[FetchTuple]) -> Classifcation:
+def _classify_fetch_tuples(
+        fetch_tuples: List[FetchTuple],
+        current_ts: datetime,
+        expiry_period: timedelta,
+) -> Classifcation:
     """Classify the list of pending fetches in 3 categories.
 
     1. Fetches this shard is not responsible for (and must be ignored).
     2. Fetches for which we have a cached response.
     3. Fetches for which an HTTPS request must be made.
     """
-    current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
-    expiry_period = timedelta(
-        days=current_app.config["APP_DEBTOR_INFO_EXPIRY_DAYS"]
-    )
     wrong_shard: List[FetchTuple] = []
     cached: List[FetchTuple] = []
     new: List[FetchTuple] = []
