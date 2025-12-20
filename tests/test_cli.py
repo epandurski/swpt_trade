@@ -256,7 +256,7 @@ def test_trigger_transfers(app, db_session, current_ts):
     assert tts[0].is_dispatching is True
 
 
-def test_roll_transfers(app, db_session, current_ts):
+def test_roll_dispatchings(app, db_session, current_ts):
     db.session.add(
         m.DispatchingStatus(
             collector_id=999,
@@ -283,7 +283,7 @@ def test_roll_transfers(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "roll_transfers",
+            "roll_dispatchings",
             "--quit-early",
         ]
     )

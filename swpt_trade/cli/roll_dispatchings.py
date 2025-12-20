@@ -7,7 +7,7 @@ from flask.cli import with_appcontext
 from .common import swpt_trade
 
 
-@swpt_trade.command("roll_transfers")
+@swpt_trade.command("roll_dispatchings")
 @with_appcontext
 @click.option(
     "-w",
@@ -27,11 +27,11 @@ from .common import swpt_trade
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def roll_transfers(wait, quit_early):
+def roll_dispatchings(wait, quit_early):
     """Run a process which polls the worker's database for collector
     accounts that are ready to initiate transfers.
     """
-    from swpt_trade import run_transfers
+    from swpt_trade import process_transfers as pt
 
     cfg = current_app.config
     wait_interval: timedelta = cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"] / 12
@@ -48,10 +48,10 @@ def roll_transfers(wait, quit_early):
             "Looking for collector accounts ready to initiate transfers."
         )
         started_at = time.time()
-        run_transfers.signal_dispatching_statuses_ready_to_send()
-        run_transfers.update_dispatching_statuses_with_everything_sent()
-        run_transfers.signal_dispatching_statuses_ready_to_dispatch()
-        run_transfers.delete_dispatching_statuses_with_everything_dispatched()
+        pt.signal_dispatching_statuses_ready_to_send()
+        pt.update_dispatching_statuses_with_everything_sent()
+        pt.signal_dispatching_statuses_ready_to_dispatch()
+        pt.delete_dispatching_statuses_with_everything_dispatched()
 
         if quit_early:
             break
@@ -83,7 +83,7 @@ def roll_delayed_account_transfers(wait, quit_early):
     """Run a process which polls the worker's database for delayed
     account transfers ready to be processed.
     """
-    from swpt_trade import run_transfers
+    from swpt_trade.process_transfers import process_delayed_account_transfers
 
     cfg = current_app.config
     wait_interval: timedelta = cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"] / 12
@@ -100,7 +100,7 @@ def roll_delayed_account_transfers(wait, quit_early):
             "Looking for delayed account transfers ready to be processed."
         )
         started_at = time.time()
-        n = run_transfers.process_delayed_account_transfers()
+        n = process_delayed_account_transfers()
         logger.info("Replayed %d account transfer messages.", n)
 
         if quit_early:

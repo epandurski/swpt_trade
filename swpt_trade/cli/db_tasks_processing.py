@@ -19,7 +19,6 @@ from swpt_trade.extensions import db
 from swpt_trade.utils import u16_to_i16
 from swpt_trade import procedures
 from swpt_trade import sync_collectors
-from swpt_trade.run_transfers import process_rescheduled_transfers
 from .common import swpt_trade
 
 
@@ -137,6 +136,8 @@ def trigger_transfers(
 ) -> None:
     """Run processes that trigger rescheduled transfer attempts.
     """
+    from swpt_trade.process_transfers import process_rescheduled_transfers
+
     logger = logging.getLogger(__name__)
     logger.info("Started triggering transfer attempts.")
 
