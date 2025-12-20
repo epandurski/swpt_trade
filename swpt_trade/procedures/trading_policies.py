@@ -1,5 +1,6 @@
 from typing import TypeVar, Callable, Optional
 from datetime import datetime, date
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import TradingPolicy
 
@@ -22,6 +23,7 @@ def process_updated_ledger_signal(
     trading_policy = (
         TradingPolicy.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
+        .options(load_only(TradingPolicy.latest_ledger_update_id))
         .with_for_update()
         .one_or_none()
     )
@@ -74,6 +76,7 @@ def process_updated_policy_signal(
     trading_policy = (
         TradingPolicy.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
+        .options(load_only(TradingPolicy.latest_policy_update_id))
         .with_for_update()
         .one_or_none()
     )
@@ -115,6 +118,7 @@ def process_updated_flags_signal(
     trading_policy = (
         TradingPolicy.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
+        .options(load_only(TradingPolicy.latest_flags_update_id))
         .with_for_update()
         .one_or_none()
     )

@@ -403,6 +403,9 @@ def _strengthen_overloaded_currencies() -> None:
                     OverloadedCurrency.collectors_count,
                 )
         ) as result:
+            # NOTE: We should be able to afford to sequentially
+            # process all the overloaded currencies here, because an
+            # overloaded currency should be a quite rare thing.
             for row in result:
                 procedures.ensure_collector_accounts(
                     debtor_id=row.debtor_id,
