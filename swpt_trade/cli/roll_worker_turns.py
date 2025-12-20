@@ -78,9 +78,21 @@ def roll_worker_turns(wait, quit_early):
             assert 0 <= subphase < 10
 
             if phase == 1 and subphase == 0:
-                run_phase1_subphase0(turn_id)
+                done_in_time = run_phase1_subphase0(turn_id)
+                if not done_in_time:  # pragma: nocover
+                    logger.error(
+                        "The phase 1 duration might be too small."
+                        " If you receive this error regularly, consider"
+                        " increasing TURN_PHASE1_DURATION."
+                    )
             elif phase == 2 and subphase == 0:
-                run_phase2_subphase0(turn_id)
+                done_in_time = run_phase2_subphase0(turn_id)
+                if not done_in_time:  # pragma: nocover
+                    logger.error(
+                        "The phase 2 duration might be too small."
+                        " If you receive this error regularly, consider"
+                        " increasing TURN_PHASE2_DURATION."
+                    )
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
                 cushion_interval = (

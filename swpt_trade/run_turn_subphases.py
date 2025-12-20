@@ -91,7 +91,8 @@ atomic: Callable[[T], T] = db.atomic
 
 
 @atomic
-def run_phase1_subphase0(turn_id: int) -> None:
+def run_phase1_subphase0(turn_id: int) -> bool:
+    done_in_time = False
     worker_turn = (
         WorkerTurn.query
         .filter_by(
@@ -113,7 +114,12 @@ def run_phase1_subphase0(turn_id: int) -> None:
                 _populate_confirmed_debtors(w_conn, s_conn, turn_id)
                 _populate_hoarded_currencies(w_conn, s_conn, turn_id)
 
+            if worker_turn.phase_deadline > datetime.now(tz=timezone.utc):
+                done_in_time = True
+
         worker_turn.worker_turn_subphase = 10
+
+    return done_in_time
 
 
 def _populate_debtor_infos(w_conn, s_conn, turn_id):
@@ -259,7 +265,8 @@ def _populate_hoarded_currencies(w_conn, s_conn, turn_id):
 
 
 @atomic
-def run_phase2_subphase0(turn_id: int) -> None:
+def run_phase2_subphase0(turn_id: int) -> bool:
+    done_in_time = False
     worker_turn = (
         WorkerTurn.query
         .filter_by(
@@ -292,6 +299,11 @@ def run_phase2_subphase0(turn_id: int) -> None:
             db.session.execute(SET_FORCE_CUSTOM_PLAN)
             _copy_usable_collectors(bp)
             _insert_needed_collector_signals(bp)
+
+            if worker_turn.phase_deadline > datetime.now(tz=timezone.utc):
+                done_in_time = True
+
+    return done_in_time
 
 
 def _load_currencies(bp: BidProcessor, turn_id: int) -> None:
