@@ -612,7 +612,8 @@ def _insert_needed_collector_signals(bp: BidProcessor) -> None:
 
 
 @atomic
-def run_phase2_subphase5(turn_id: int) -> None:
+def run_phase2_subphase5(turn_id: int) -> bool:
+    done_in_time = False
     worker_turn = (
         WorkerTurn.query
         .filter_by(
@@ -633,7 +634,12 @@ def run_phase2_subphase5(turn_id: int) -> None:
                 _populate_sell_offers(w_conn, s_conn, turn_id)
                 _populate_buy_offers(w_conn, s_conn, turn_id)
 
+            if worker_turn.phase_deadline > datetime.now(tz=timezone.utc):
+                done_in_time = True
+
         worker_turn.worker_turn_subphase = 10
+
+    return done_in_time
 
 
 def _populate_sell_offers(w_conn, s_conn, turn_id):

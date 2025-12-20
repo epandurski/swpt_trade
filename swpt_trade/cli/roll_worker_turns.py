@@ -83,15 +83,27 @@ def roll_worker_turns(wait, quit_early):
                 run_phase2_subphase0(turn_id)
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
-                cushion_interval = min(
-                    # We ensure that the cushion interval does not
-                    # exceed 10% of the time between the start of the
-                    # turn, and the phase deadline.
-                    current_app.config["APP_TURN_PHASE_CUSHION_PERIOD"],
-                    0.1 * (phase_deadline - worker_turn.started_at),
+                cushion_interval = (
+                    # NOTE: The cushion interval is some fraction of
+                    # the time between the start of the turn, and the
+                    # phase deadline. The cushion interval should be
+                    # big enough so that all buying and selling offers
+                    # can be successfully written to the solver's
+                    # database before the phase 2 deadline. Note that
+                    # the needed cushion interval may become quite big
+                    # when there are a lot of offers, and a lot of
+                    # worker servers.
+                    current_app.config["APP_TURN_PHASE2_CUSHION_RATIO"]
+                    * (phase_deadline - worker_turn.started_at)
                 )
                 if current_ts > phase_deadline - cushion_interval:
-                    run_phase2_subphase5(turn_id)
+                    done_in_time = run_phase2_subphase5(turn_id)
+                    if not done_in_time:  # pragma: nocover
+                        logger.error(
+                            "The phase 2 cushion interval might be too small."
+                            " If you receive this error regularly, consider"
+                            " increasing TURN_PHASE2_DURATION."
+                        )
             elif phase == 3 and subphase == 0:
                 run_phase3_subphase0(turn_id)
             elif phase == 3 and subphase == 5:
