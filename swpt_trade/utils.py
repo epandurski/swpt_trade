@@ -2,8 +2,9 @@ from __future__ import annotations
 import re
 import math
 import array
+import functools
 from random import Random
-from typing import Self, Iterable
+from typing import TypeVar, Self, Iterable, Callable, Optional
 from enum import Enum
 from dataclasses import dataclass
 from hashlib import md5
@@ -23,6 +24,7 @@ MIN_INT64 = -1 << 63
 MAX_INT64 = (1 << 63) - 1
 SECONDS_IN_DAY = 24 * 60 * 60
 SECONDS_IN_YEAR = 365.25 * SECONDS_IN_DAY
+T = TypeVar("T")
 
 
 @dataclass
@@ -143,6 +145,16 @@ class DispatchingData:
                 "started_dispatching": False,
                 "awaiting_signal_flag": False,
             }
+
+
+def allow_none(func: Callable[[str], T]) -> Callable[[str], Optional[T]]:
+    @functools.wraps(func)
+    def wrapped(s: str) -> Optional[T]:
+        if not s:
+            return None
+        return func(s)
+
+    return wrapped
 
 
 def parse_timedelta(s: str) -> timedelta:
