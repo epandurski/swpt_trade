@@ -2260,7 +2260,7 @@ def test_run_phase2_subphase5(
 
     phase_deadline = (
         current_ts
-        + current_app.config['OFFERS_POURING_MAX_DURATION'] / 2
+        + current_app.config['OFFERS_POURING_DURATION'] / 2
     )
     t1 = m.Turn(
         base_debtor_info_locator="https://example.com/666",

@@ -95,16 +95,17 @@ def roll_worker_turns(wait, quit_early):
                     )
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
-                if (
-                        phase_deadline - current_ts
-                        <= current_app.config["OFFERS_POURING_MAX_DURATION"]
-                ):
+                offers_pouring_duration = (
+                    current_app.config["OFFERS_POURING_DURATION"]
+                    or 0.1 * (phase_deadline - worker_turn.started_at)
+                )
+                if current_ts > phase_deadline - offers_pouring_duration:
                     done_in_time = run_phase2_subphase5(turn_id)
                     if not done_in_time:  # pragma: nocover
                         logger.error(
                             "The offers pouring duration might be too small."
                             " If you receive this error regularly, consider"
-                            " increasing OFFERS_POURING_MAX_DURATION."
+                            " increasing OFFERS_POURING_DURATION."
                         )
             elif phase == 3 and subphase == 0:
                 run_phase3_subphase0(turn_id)

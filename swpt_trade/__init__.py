@@ -226,7 +226,7 @@ class Configuration(metaclass=MetaEnvReader):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
 
-    OFFERS_POURING_MAX_DURATION: parse_timedelta = parse_timedelta("5m")
+    OFFERS_POURING_DURATION: parse_timedelta = None
     TRANSFERS_HEALTHY_MAX_COMMIT_DELAY: parse_timedelta = parse_timedelta("2h")
     TRANSFERS_AMOUNT_CUT = 1e-5
     TRANSFERS_COLLECTOR_LIMIT = 100000
