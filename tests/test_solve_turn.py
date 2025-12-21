@@ -21,7 +21,7 @@ from swpt_trade.models import (
 def test_try_to_advance_turn_to_phase3(db_session):
     from flask import current_app
     turn = Turn(
-        phase=2,
+        phase=1,
         phase_deadline=TS0,
         collection_started_at=TS0,
         collection_deadline=TS0,
@@ -32,8 +32,13 @@ def test_try_to_advance_turn_to_phase3(db_session):
     )
     db_session.add(turn)
     db_session.flush()
-    db_session.commit()
     turn_id = turn.turn_id
+
+    db_session.commit()
+    assert try_to_advance_turn_to_phase3(turn) is False
+    turn = Turn.query.filter_by(turn_id=turn_id).one()
+    turn.phase = 2
+    db_session.commit()
 
     db_session.add(
         HoardedCurrency(

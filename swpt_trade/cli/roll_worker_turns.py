@@ -77,19 +77,16 @@ def roll_worker_turns(wait, quit_early):
             assert 1 <= phase <= 3
             assert 0 <= subphase < 10
 
-            def log_start_time():
+            def log_start():
                 logger.info(
-                    "Turn %i, phase %i, subphase %i:"
-                    " started running at %s.",
-                    turn_id, phase, subphase, current_ts
+                    "Turn %i, phase %i, subphase %i: started running.",
+                    turn_id, phase, subphase
                 )
 
-            def log_elapsed_time(done_in_time: bool = True):
-                elapsed_time = datetime.now(tz=timezone.utc) - current_ts
+            def log_completion(done_in_time: bool = True):
                 logger.info(
-                    "Turn %i, phase %i, subphase %i:"
-                    " took %i seconds to run to completion.",
-                    turn_id, phase, subphase, elapsed_time.total_seconds()
+                    "Turn %i, phase %i, subphase %i: completed.",
+                    turn_id, phase, subphase
                 )
                 if not done_in_time:  # pragma: nocover
                     logger.error(
@@ -99,14 +96,14 @@ def roll_worker_turns(wait, quit_early):
                     )
 
             if phase == 1 and subphase == 0:
-                log_start_time()
+                log_start()
                 done_in_time = run_phase1_subphase0(turn_id)
-                log_elapsed_time(done_in_time)
+                log_completion(done_in_time)
 
             elif phase == 2 and subphase == 0:
-                log_start_time()
+                log_start()
                 done_in_time = run_phase2_subphase0(turn_id)
-                log_elapsed_time(done_in_time)
+                log_completion(done_in_time)
 
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
@@ -115,19 +112,19 @@ def roll_worker_turns(wait, quit_early):
                     or 0.1 * (phase_deadline - worker_turn.started_at)
                 )
                 if current_ts >= phase_deadline - offers_pouring_duration:
-                    log_start_time()
+                    log_start()
                     done_in_time = run_phase2_subphase5(turn_id)
-                    log_elapsed_time(done_in_time)
+                    log_completion(done_in_time)
 
             elif phase == 3 and subphase == 0:
-                log_start_time()
+                log_start()
                 run_phase3_subphase0(turn_id)
-                log_elapsed_time()
+                log_completion()
 
             elif phase == 3 and subphase == 5:
-                log_start_time()
+                log_start()
                 run_phase3_subphase5(turn_id)
-                log_elapsed_time()
+                log_completion()
 
             else:  # pragma: no cover
                 raise RuntimeError(
