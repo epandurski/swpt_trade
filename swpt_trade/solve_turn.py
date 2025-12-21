@@ -40,7 +40,7 @@ T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
 
-def try_to_advance_turn_to_phase3(turn: Turn) -> None:
+def try_to_advance_turn_to_phase3(turn: Turn) -> bool:
     turn_id = turn.turn_id
     solver = Solver(
         turn.base_debtor_info_locator,
@@ -56,15 +56,18 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> None:
     _register_buy_offers(solver, turn_id)
     solver.analyze_offers()
 
-    _try_to_commit_solver_results(solver, turn_id)
+    if _try_to_commit_solver_results(solver, turn_id):
+        # At this point, the trading turn has successfully advanced to
+        # phase 3. The next few calls are not bound to this specific
+        # trading turn, but should generally be run near the end of
+        # each turn.
+        _strengthen_overloaded_currencies()
+        _disable_some_collector_accounts()
+        _delete_stuck_collector_accounts()
 
-    # At this point, the trading turn has successfully advanced to
-    # phase 3. The next few calls are not bound to this specific
-    # trading turn, but should generally be run near the end of each
-    # turn.
-    _strengthen_overloaded_currencies()
-    _disable_some_collector_accounts()
-    _delete_stuck_collector_accounts()
+        return True
+
+    return False
 
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
@@ -134,7 +137,7 @@ def _register_buy_offers(solver: Solver, turn_id: int) -> None:
 
 
 @atomic
-def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
+def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
     turn = (
         Turn.query.filter_by(turn_id=turn_id)
         .with_for_update()
@@ -201,6 +204,9 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> None:
                 Turn.phase >= 3,
             )
         )
+        return True
+
+    return False
 
 
 def _write_takings(solver: Solver, turn_id: int) -> None:
@@ -403,6 +409,9 @@ def _strengthen_overloaded_currencies() -> None:
                     OverloadedCurrency.collectors_count,
                 )
         ) as result:
+            # NOTE: We should be able to afford to sequentially
+            # process all the overloaded currencies here, because an
+            # overloaded currency should be a quite rare thing.
             for row in result:
                 procedures.ensure_collector_accounts(
                     debtor_id=row.debtor_id,

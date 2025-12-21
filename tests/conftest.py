@@ -1,7 +1,7 @@
 import pytest
 import sqlalchemy
 import flask_migrate
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from swpt_trade import create_app
 from swpt_trade.extensions import db
 
@@ -12,6 +12,7 @@ config_dict = {
     "OWNER_CREDITOR_ID": 12345,
     "TURN_PHASE1_DURATION": "0",
     "TURN_PHASE2_DURATION": "0",
+    "OFFERS_POURING_DURATION": timedelta(minutes=5),
     "TRANSFERS_COLLECTOR_LIMIT": 1,
     "APP_ENABLE_CORS": True,
     "APP_DEBTOR_INFO_FETCH_BURST_COUNT": 1,

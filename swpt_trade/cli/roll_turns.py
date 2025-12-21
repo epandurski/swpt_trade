@@ -85,7 +85,7 @@ def roll_turns(period, period_offset, check_interval, quit_early):
     logger.info("Started rolling turns.")
 
     while True:
-        logger.info("Trying to start a new turn and advance started turns.")
+        logger.info("Trying to start a new turn or advance started turns.")
         check_began_at = datetime.now(tz=timezone.utc)
         started_turns = procedures.start_new_turn_if_possible(
             turn_period=period,
@@ -97,17 +97,49 @@ def roll_turns(period, period_offset, check_interval, quit_early):
             min_trade_amount=c["MIN_TRADE_AMOUNT"],
         )
         for turn in started_turns:
+            turn_id = turn.turn_id
             phase = turn.phase
+            next_phase = phase + 1
+
+            def log_attempt():
+                logger.info(
+                    "Turn %i, phase %i:"
+                    " trying to advance to phase %i.",
+                    turn_id, phase, next_phase
+                )
+
+            def log_result(is_done: bool):
+                if is_done:
+                    logger.info(
+                        "Turn %i, phase %i:"
+                        " successfully advanced to phase %i.",
+                        turn_id, phase, next_phase
+                    )
+                else:  # pragma: no cover
+                    logger.info(
+                        "Turn %i, phase %i:"
+                        " can not advance to phase %i.",
+                        turn_id, phase, next_phase
+                    )
+
             if phase == 1 and turn.phase_deadline < check_began_at:
-                procedures.try_to_advance_turn_to_phase2(
-                    turn_id=turn.turn_id,
+                log_attempt()
+                is_done = procedures.try_to_advance_turn_to_phase2(
+                    turn_id=turn_id,
                     phase2_duration=phase2_duration,
                     max_commit_period=max_commit_period,
                 )
+                log_result(is_done)
+
             elif phase == 2 and turn.phase_deadline < check_began_at:
-                try_to_advance_turn_to_phase3(turn)
+                log_attempt()
+                is_done = try_to_advance_turn_to_phase3(turn)
+                log_result(is_done)
+
             elif phase == 3:
-                procedures.try_to_advance_turn_to_phase4(turn.turn_id)
+                log_attempt()
+                is_done = procedures.try_to_advance_turn_to_phase4(turn_id)
+                log_result(is_done)
 
         elapsed_time = datetime.now(tz=timezone.utc) - check_began_at
         wait_seconds = (check_interval - elapsed_time).total_seconds()

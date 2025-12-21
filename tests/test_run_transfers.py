@@ -1,5 +1,5 @@
 from datetime import timedelta
-from swpt_trade.run_transfers import process_rescheduled_transfers
+from swpt_trade.process_transfers import process_rescheduled_transfers
 from swpt_trade.models import (
     TransferAttempt,
     TriggerTransferSignal,
@@ -11,7 +11,7 @@ from swpt_trade.models import (
     StartSendingSignal,
     StartDispatchingSignal,
 )
-from swpt_trade.run_transfers import (
+from swpt_trade.process_transfers import (
     signal_dispatching_statuses_ready_to_send,
     update_dispatching_statuses_with_everything_sent,
     signal_dispatching_statuses_ready_to_dispatch,
@@ -87,8 +87,8 @@ def test_signal_dispatching_statuses_ready_to_send(
         db_session,
         current_ts,
 ):
-    mocker.patch("swpt_trade.run_transfers.INSERT_BATCH_SIZE", new=1)
-    mocker.patch("swpt_trade.run_transfers.SELECT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.INSERT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.SELECT_BATCH_SIZE", new=1)
 
     db_session.add(
         DispatchingStatus(
@@ -158,8 +158,8 @@ def test_update_dispatching_statuses_with_everything_sent(
         db_session,
         current_ts,
 ):
-    mocker.patch("swpt_trade.run_transfers.INSERT_BATCH_SIZE", new=1)
-    mocker.patch("swpt_trade.run_transfers.SELECT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.INSERT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.SELECT_BATCH_SIZE", new=1)
 
     db_session.add(
         DispatchingStatus(
@@ -228,8 +228,8 @@ def test_signal_dispatching_statuses_ready_to_dispatch(
         db_session,
         current_ts,
 ):
-    mocker.patch("swpt_trade.run_transfers.INSERT_BATCH_SIZE", new=1)
-    mocker.patch("swpt_trade.run_transfers.SELECT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.INSERT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.SELECT_BATCH_SIZE", new=1)
 
     db_session.add(
         DispatchingStatus(
@@ -305,8 +305,8 @@ def test_delete_dispatching_statuses_with_everything_dispatched(
         db_session,
         current_ts,
 ):
-    mocker.patch("swpt_trade.run_transfers.INSERT_BATCH_SIZE", new=1)
-    mocker.patch("swpt_trade.run_transfers.SELECT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.INSERT_BATCH_SIZE", new=1)
+    mocker.patch("swpt_trade.process_transfers.SELECT_BATCH_SIZE", new=1)
 
     db_session.add(
         DispatchingStatus(

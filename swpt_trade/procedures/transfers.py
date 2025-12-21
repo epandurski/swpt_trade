@@ -64,6 +64,55 @@ TRANSFER_ATTEMPT_PK = tuple_(
     TransferAttempt.creditor_id,
     TransferAttempt.is_dispatching,
 )
+ACCOUNT_LOCK_LOAD_ONLY_PK = load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+)
+ACCOUNT_LOCK_REVISE_ACCOUNT_LOAD_ONLY = load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+    AccountLock.transfer_id,
+    AccountLock.collector_id,
+    AccountLock.coordinator_request_id,
+    AccountLock.amount,
+)
+ACCOUNT_LOCK_PREPARED_TRANSFER_LOAD_ONLY = Load(AccountLock).load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+    AccountLock.collector_id,
+    AccountLock.turn_id,
+    AccountLock.initiated_at,
+    AccountLock.amount,
+    AccountLock.finalized_at,
+    AccountLock.transfer_id,
+    AccountLock.released_at,
+)
+ACCOUNT_LOCK_REJECTED_TRANSFER_LOAD_ONLY = load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+    AccountLock.transfer_id,
+    AccountLock.released_at,
+)
+ACCOUNT_LOCK_CANDIDATE_OFFER_LOAD_ONLY = load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+    AccountLock.account_last_transfer_number,
+    AccountLock.account_creation_date,
+    AccountLock.released_at,
+    AccountLock.collector_id,
+)
+WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY = Load(WorkerTurn).load_only(
+    WorkerTurn.collection_deadline,
+)
+WORKER_TURN_CANDIDATE_OFFER_LOAD_ONLY = load_only(
+    WorkerTurn.turn_id,
+    WorkerTurn.collection_deadline,
+    WorkerTurn.min_trade_amount,
+)
+WORKER_TURN_LOAD_ONLY_SUBPHASE = load_only(
+    WorkerTurn.phase,
+    WorkerTurn.worker_turn_subphase,
+)
 
 # Transfer status codes:
 SC_OK = "OK"
@@ -120,8 +169,12 @@ def process_candidate_offer_signal(
     # current time instead.
     worker_turn = (
         WorkerTurn.query
-        .filter_by(turn_id=turn_id, phase=2, worker_turn_subphase=5)
-        .options(load_only(WorkerTurn.collection_deadline))
+        .filter_by(
+            turn_id=turn_id,
+            phase=2,
+            worker_turn_subphase=5,
+        )
+        .options(WORKER_TURN_CANDIDATE_OFFER_LOAD_ONLY)
         .with_for_update(read=True, skip_locked=True)
         .one_or_none()
     )
@@ -130,7 +183,11 @@ def process_candidate_offer_signal(
 
     account_lock = (
         AccountLock.query
-        .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
+        .filter_by(
+            creditor_id=creditor_id,
+            debtor_id=debtor_id,
+        )
+        .options(ACCOUNT_LOCK_CANDIDATE_OFFER_LOAD_ONLY)
         .with_for_update()
         .one_or_none()
     )
@@ -276,6 +333,7 @@ def put_rejected_transfer_through_account_locks(
             creditor_id=coordinator_id,
             coordinator_request_id=coordinator_request_id,
         )
+        .options(ACCOUNT_LOCK_REJECTED_TRANSFER_LOAD_ONLY)
         .one_or_none()
     )
     if lock is None:
@@ -315,7 +373,10 @@ def put_prepared_transfer_through_account_locks(
             AccountLock.creditor_id == coordinator_id,
             AccountLock.coordinator_request_id == coordinator_request_id,
         )
-        .options(Load(WorkerTurn).load_only(WorkerTurn.collection_deadline))
+        .options(
+            ACCOUNT_LOCK_PREPARED_TRANSFER_LOAD_ONLY,
+            WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY,
+        )
     )
     try:
         lock, worker_turn = query.one()
@@ -426,6 +487,7 @@ def process_revise_account_lock_signal(
             finalized_at=null(),
             has_been_revised=False,
         )
+        .options(ACCOUNT_LOCK_REVISE_ACCOUNT_LOAD_ONLY)
         .with_for_update()
         .one_or_none()
     )
@@ -539,6 +601,7 @@ def release_seller_account_lock(
             AccountLock.finalized_at != null(),
             AccountLock.released_at == null(),
         )
+        .options(ACCOUNT_LOCK_LOAD_ONLY_PK)
         .with_for_update()
         .one_or_none()
     )
@@ -581,7 +644,7 @@ def update_worker_collecting_record(
     wt = (
         WorkerTurn.query
         .filter_by(turn_id=turn_id)
-        .options(load_only(WorkerTurn.phase, WorkerTurn.worker_turn_subphase))
+        .options(WORKER_TURN_LOAD_ONLY_SUBPHASE)
         .one_or_none()
     )
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
@@ -665,7 +728,7 @@ def update_worker_receiving_record(
     wt = (
         WorkerTurn.query
         .filter_by(turn_id=turn_id)
-        .options(load_only(WorkerTurn.phase, WorkerTurn.worker_turn_subphase))
+        .options(WORKER_TURN_LOAD_ONLY_SUBPHASE)
         .one_or_none()
     )
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
@@ -748,6 +811,7 @@ def release_buyer_account_lock(
             AccountLock.finalized_at == null(),
             AccountLock.released_at == null(),
         )
+        .options(ACCOUNT_LOCK_LOAD_ONLY_PK)
         .with_for_update()
         .one_or_none()
     )
@@ -1407,7 +1471,7 @@ def process_start_sending_signal(
             DispatchingStatus.started_sending == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
-        .options(load_only(WorkerTurn.collection_started_at))
+        .options(WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY)
         .with_for_update(of=DispatchingStatus)
     )
     try:
@@ -1538,7 +1602,7 @@ def process_start_dispatching_signal(
             DispatchingStatus.started_dispatching == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
-        .options(load_only(WorkerTurn.collection_started_at))
+        .options(WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY)
         .with_for_update(of=DispatchingStatus)
     )
     try:

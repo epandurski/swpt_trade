@@ -11,7 +11,7 @@ from typing import List
 from flask_cors import CORS
 from ast import literal_eval
 from swpt_pythonlib.utils import u64_to_i64, ShardingRealm
-from .utils import parse_timedelta
+from .utils import parse_timedelta, allow_none
 
 
 def _engine_options(s: str) -> dict:
@@ -226,6 +226,7 @@ class Configuration(metaclass=MetaEnvReader):
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
 
+    OFFERS_POURING_DURATION: allow_none(parse_timedelta) = None
     TRANSFERS_HEALTHY_MAX_COMMIT_DELAY: parse_timedelta = parse_timedelta("2h")
     TRANSFERS_AMOUNT_CUT = 1e-5
     TRANSFERS_COLLECTOR_LIMIT = 100000
@@ -270,7 +271,6 @@ class Configuration(metaclass=MetaEnvReader):
     APP_ENABLE_CORS = False
     APP_VERIFY_SSL_CERTS = True
     APP_TURN_MAX_COMMIT_PERIOD: parse_timedelta = parse_timedelta("30d")
-    APP_TURN_PHASE_CUSHION_PERIOD: parse_timedelta = parse_timedelta("5m")
     APP_INTEREST_RATE_HISTORY_PERIOD: parse_timedelta = parse_timedelta("180d")
     APP_MIN_DEMURRAGE_RATE = -50.0
     APP_MIN_TRANSFER_NOTE_MAX_BYTES = 80

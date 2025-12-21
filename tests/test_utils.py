@@ -6,6 +6,7 @@ from swpt_trade.utils import (
     SECONDS_IN_DAY,
     SECONDS_IN_YEAR,
     TransferNote,
+    allow_none,
     parse_timedelta,
     can_start_new_turn,
     batched,
@@ -20,6 +21,14 @@ from swpt_trade.utils import (
     DispatchingData,
     calc_balance_at,
 )
+
+
+def test_allow_none():
+    def f(s):
+        return s
+
+    assert allow_none(f)("") is None
+    assert allow_none(f)("something") == "something"
 
 
 def test_parse_timedelta():

@@ -256,7 +256,7 @@ def test_trigger_transfers(app, db_session, current_ts):
     assert tts[0].is_dispatching is True
 
 
-def test_roll_transfers(app, db_session, current_ts):
+def test_roll_dispatchings(app, db_session, current_ts):
     db.session.add(
         m.DispatchingStatus(
             collector_id=999,
@@ -283,7 +283,7 @@ def test_roll_transfers(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "roll_transfers",
+            "roll_dispatchings",
             "--quit-early",
         ]
     )
@@ -2260,7 +2260,7 @@ def test_run_phase2_subphase5(
 
     phase_deadline = (
         current_ts
-        + current_app.config['APP_TURN_PHASE_CUSHION_PERIOD'] / 2
+        + current_app.config['OFFERS_POURING_DURATION'] / 2
     )
     t1 = m.Turn(
         base_debtor_info_locator="https://example.com/666",

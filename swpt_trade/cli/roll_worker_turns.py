@@ -77,25 +77,55 @@ def roll_worker_turns(wait, quit_early):
             assert 1 <= phase <= 3
             assert 0 <= subphase < 10
 
+            def log_start():
+                logger.info(
+                    "Turn %i, phase %i, subphase %i: started running.",
+                    turn_id, phase, subphase
+                )
+
+            def log_completion(done_in_time: bool = True):
+                logger.info(
+                    "Turn %i, phase %i, subphase %i: completed.",
+                    turn_id, phase, subphase
+                )
+                if not done_in_time:  # pragma: nocover
+                    logger.error(
+                        "Turn %i, phase %i, subphase %i:"
+                        " failed to complete before the deadline.",
+                        turn_id, phase, subphase
+                    )
+
             if phase == 1 and subphase == 0:
-                run_phase1_subphase0(turn_id)
+                log_start()
+                done_in_time = run_phase1_subphase0(turn_id)
+                log_completion(done_in_time)
+
             elif phase == 2 and subphase == 0:
-                run_phase2_subphase0(turn_id)
+                log_start()
+                done_in_time = run_phase2_subphase0(turn_id)
+                log_completion(done_in_time)
+
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
-                cushion_interval = min(
-                    # We ensure that the cushion interval does not
-                    # exceed 10% of the time between the start of the
-                    # turn, and the phase deadline.
-                    current_app.config["APP_TURN_PHASE_CUSHION_PERIOD"],
-                    0.1 * (phase_deadline - worker_turn.started_at),
+                offers_pouring_duration = (
+                    current_app.config["OFFERS_POURING_DURATION"]
+                    or 0.1 * (phase_deadline - worker_turn.started_at)
                 )
-                if current_ts > phase_deadline - cushion_interval:
-                    run_phase2_subphase5(turn_id)
+                if current_ts >= phase_deadline - offers_pouring_duration:
+                    log_start()
+                    done_in_time = run_phase2_subphase5(turn_id)
+                    log_completion(done_in_time)
+
             elif phase == 3 and subphase == 0:
+                log_start()
                 run_phase3_subphase0(turn_id)
+                log_completion()
+
             elif phase == 3 and subphase == 5:
+                log_start()
                 run_phase3_subphase5(turn_id)
+                log_completion()
+
             else:  # pragma: no cover
                 raise RuntimeError(
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."

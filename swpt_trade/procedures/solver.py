@@ -83,7 +83,7 @@ def try_to_advance_turn_to_phase2(
         turn_id: int,
         phase2_duration: timedelta,
         max_commit_period: timedelta,
-) -> None:
+) -> bool:
     current_ts = datetime.now(tz=timezone.utc)
     turn = (
         Turn.query.filter_by(turn_id=turn_id)
@@ -104,24 +104,26 @@ def try_to_advance_turn_to_phase2(
             SET_FORCE_CUSTOM_PLAN,
             bind_arguments={"bind": db.engines["solver"]},
         )
-        active_debtor = (
-            # These are debtors that are confirmed, for which there
-            # are at least one active (status == 2) collector account.
+        active_collector_account = (
+            select(
+                CollectorAccount.debtor_id,
+                CollectorAccount.collector_id,
+            )
+            .select_from(CollectorAccount)
+            .where(
+                CollectorAccount.debtor_id == ConfirmedDebtor.debtor_id,
+                CollectorAccount.status == 2,
+            )
+        )
+        active_confirmed_debtor = (
             select(
                 ConfirmedDebtor.turn_id,
                 ConfirmedDebtor.debtor_id,
                 ConfirmedDebtor.debtor_info_locator,
             )
-            .distinct()
-            .join(
-                CollectorAccount,
-                and_(
-                    CollectorAccount.debtor_id == ConfirmedDebtor.debtor_id,
-                    CollectorAccount.status == 2,
-                ),
-            )
-            .where(ConfirmedDebtor.turn_id == turn_id)
-            .subquery(name="ad")
+            .select_from(ConfirmedDebtor)
+            .where(active_collector_account.exists())
+            .subquery(name="acd")
         )
         db.session.execute(
             insert(CurrencyInfo)
@@ -144,16 +146,18 @@ def try_to_advance_turn_to_phase2(
                     DebtorInfo.peg_debtor_id,
                     DebtorInfo.peg_exchange_rate,
                     (
-                        active_debtor.c.turn_id != null()
+                        active_confirmed_debtor.c.debtor_id != null()
                     ).label("is_confirmed"),
                 )
                 .select_from(DebtorInfo)
                 .join(
-                    active_debtor,
+                    active_confirmed_debtor,
                     and_(
-                        active_debtor.c.turn_id == DebtorInfo.turn_id,
-                        active_debtor.c.debtor_id == DebtorInfo.debtor_id,
-                        active_debtor.c.debtor_info_locator
+                        active_confirmed_debtor.c.turn_id
+                        == DebtorInfo.turn_id,
+                        active_confirmed_debtor.c.debtor_id
+                        == DebtorInfo.debtor_id,
+                        active_confirmed_debtor.c.debtor_info_locator
                         == DebtorInfo.debtor_info_locator,
                     ),
                     isouter=True,
@@ -186,10 +190,13 @@ def try_to_advance_turn_to_phase2(
                 Turn.phase >= 2,
             )
         )
+        return True
+
+    return False
 
 
 @atomic
-def try_to_advance_turn_to_phase4(turn_id: int) -> None:
+def try_to_advance_turn_to_phase4(turn_id: int) -> bool:
     turn = (
         Turn.query.filter_by(turn_id=turn_id)
         .with_for_update()
@@ -218,6 +225,9 @@ def try_to_advance_turn_to_phase4(turn_id: int) -> None:
             # There are no pending rows.
             turn.phase = 4
             turn.phase_deadline = None
+            return True
+
+    return False
 
 
 @atomic
