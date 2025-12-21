@@ -102,9 +102,9 @@ def roll_worker_turns(wait, quit_early):
                     done_in_time = run_phase2_subphase5(turn_id)
                     if not done_in_time:  # pragma: nocover
                         logger.error(
-                            "The phase 2 cushion interval might be too small."
+                            "The offers pouring duration might be too small."
                             " If you receive this error regularly, consider"
-                            " increasing TURN_PHASE2_DURATION."
+                            " increasing OFFERS_POURING_MAX_DURATION."
                         )
             elif phase == 3 and subphase == 0:
                 run_phase3_subphase0(turn_id)
