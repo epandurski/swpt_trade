@@ -64,6 +64,18 @@ TRANSFER_ATTEMPT_PK = tuple_(
     TransferAttempt.creditor_id,
     TransferAttempt.is_dispatching,
 )
+ACCOUNT_LOCK_LOAD_ONLY_PK = load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+)
+REVISE_ACCOUNT_LOCK_LOAD_ONLY = load_only(
+    AccountLock.creditor_id,
+    AccountLock.debtor_id,
+    AccountLock.transfer_id,
+    AccountLock.collector_id,
+    AccountLock.coordinator_request_id,
+    AccountLock.amount,
+)
 
 # Transfer status codes:
 SC_OK = "OK"
@@ -426,6 +438,7 @@ def process_revise_account_lock_signal(
             finalized_at=null(),
             has_been_revised=False,
         )
+        .options(REVISE_ACCOUNT_LOCK_LOAD_ONLY)
         .with_for_update()
         .one_or_none()
     )
@@ -539,6 +552,7 @@ def release_seller_account_lock(
             AccountLock.finalized_at != null(),
             AccountLock.released_at == null(),
         )
+        .options(ACCOUNT_LOCK_LOAD_ONLY_PK)
         .with_for_update()
         .one_or_none()
     )
@@ -748,6 +762,7 @@ def release_buyer_account_lock(
             AccountLock.finalized_at == null(),
             AccountLock.released_at == null(),
         )
+        .options(ACCOUNT_LOCK_LOAD_ONLY_PK)
         .with_for_update()
         .one_or_none()
     )
