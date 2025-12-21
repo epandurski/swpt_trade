@@ -95,20 +95,10 @@ def roll_worker_turns(wait, quit_early):
                     )
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
-                cushion_interval = (
-                    # NOTE: The cushion interval is some fraction of
-                    # the time between the start of the turn, and the
-                    # phase deadline. The cushion interval should be
-                    # big enough so that all buying and selling offers
-                    # can be successfully written to the solver's
-                    # database before the phase 2 deadline. Note that
-                    # the needed cushion interval may become quite big
-                    # when there are a lot of offers, and a lot of
-                    # worker servers.
-                    current_app.config["APP_TURN_PHASE2_CUSHION_RATIO"]
-                    * (phase_deadline - worker_turn.started_at)
-                )
-                if current_ts > phase_deadline - cushion_interval:
+                if (
+                        phase_deadline - current_ts
+                        <= current_app.config["OFFERS_POURING_MAX_DURATION"]
+                ):
                     done_in_time = run_phase2_subphase5(turn_id)
                     if not done_in_time:  # pragma: nocover
                         logger.error(

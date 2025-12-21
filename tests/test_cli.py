@@ -2258,7 +2258,10 @@ def test_run_phase2_subphase5(
     mocker.patch("swpt_trade.run_turn_subphases.SELECT_BATCH_SIZE", new=1)
     mocker.patch("swpt_trade.run_turn_subphases.BID_COUNTER_THRESHOLD", new=1)
 
-    phase_deadline = current_ts + timedelta(minutes=2)
+    phase_deadline = (
+        current_ts
+        + current_app.config['OFFERS_POURING_MAX_DURATION'] / 2
+    )
     t1 = m.Turn(
         base_debtor_info_locator="https://example.com/666",
         base_debtor_id=666,
