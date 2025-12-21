@@ -77,40 +77,58 @@ def roll_worker_turns(wait, quit_early):
             assert 1 <= phase <= 3
             assert 0 <= subphase < 10
 
+            def log_start_time():
+                logger.info(
+                    "Turn %i, phase %i, subphase %i:"
+                    " started running at %s.",
+                    turn_id, phase, subphase, current_ts
+                )
+
+            def log_elapsed_time(done_in_time: bool = True):
+                elapsed_time = datetime.now(tz=timezone.utc) - current_ts
+                logger.info(
+                    "Turn %i, phase %i, subphase %i:"
+                    " took %i seconds to run to completion.",
+                    turn_id, phase, subphase, elapsed_time.total_seconds()
+                )
+                if not done_in_time:  # pragma: nocover
+                    logger.error(
+                        "Turn %i, phase %i, subphase %i:"
+                        " failed to complete before the deadline.",
+                        turn_id, phase, subphase
+                    )
+
             if phase == 1 and subphase == 0:
+                log_start_time()
                 done_in_time = run_phase1_subphase0(turn_id)
-                if not done_in_time:  # pragma: nocover
-                    logger.error(
-                        "The phase 1 duration might be too small."
-                        " If you receive this error regularly, consider"
-                        " increasing TURN_PHASE1_DURATION."
-                    )
+                log_elapsed_time(done_in_time)
+
             elif phase == 2 and subphase == 0:
+                log_start_time()
                 done_in_time = run_phase2_subphase0(turn_id)
-                if not done_in_time:  # pragma: nocover
-                    logger.error(
-                        "The phase 2 duration might be too small."
-                        " If you receive this error regularly, consider"
-                        " increasing TURN_PHASE2_DURATION."
-                    )
+                log_elapsed_time(done_in_time)
+
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
                 offers_pouring_duration = (
                     current_app.config["OFFERS_POURING_DURATION"]
                     or 0.1 * (phase_deadline - worker_turn.started_at)
                 )
-                if current_ts > phase_deadline - offers_pouring_duration:
+                if current_ts >= phase_deadline - offers_pouring_duration:
+                    log_start_time()
                     done_in_time = run_phase2_subphase5(turn_id)
-                    if not done_in_time:  # pragma: nocover
-                        logger.error(
-                            "The offers pouring duration might be too small."
-                            " If you receive this error regularly, consider"
-                            " increasing OFFERS_POURING_DURATION."
-                        )
+                    log_elapsed_time(done_in_time)
+
             elif phase == 3 and subphase == 0:
+                log_start_time()
                 run_phase3_subphase0(turn_id)
+                log_elapsed_time()
+
             elif phase == 3 and subphase == 5:
+                log_start_time()
                 run_phase3_subphase5(turn_id)
+                log_elapsed_time()
+
             else:  # pragma: no cover
                 raise RuntimeError(
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."

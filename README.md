@@ -235,8 +235,9 @@ DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS=2
 # expected period of time, this pouring of offers is expected to take.
 # As a rule of thumb, this period should be increased as the number of
 # worker servers increases, and must be some fraction of the
-# "$TURN_PHASE2_DURATION" value. The default is 10% of the time
-# between the start of the turn and the phase 2 deadline.
+# "$TURN_PHASE2_DURATION" value. When not set, or the value is set to
+# an empty string, the duration defaults to 10% of the time between
+# the start of the turn and the phase 2 deadline.
 OFFERS_POURING_DURATION=5m
 
 # When the outgoing transfers are committed, a deadline for each
