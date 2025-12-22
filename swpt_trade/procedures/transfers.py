@@ -101,7 +101,8 @@ ACCOUNT_LOCK_CANDIDATE_OFFER_LOAD_ONLY = load_only(
     AccountLock.released_at,
     AccountLock.collector_id,
 )
-WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY = Load(WorkerTurn).load_only(
+WORKER_TURN_LOAD_ONLY_COLLECTION_DEADLINE = Load(WorkerTurn).load_only(
+    WorkerTurn.turn_id,
     WorkerTurn.collection_deadline,
 )
 WORKER_TURN_CANDIDATE_OFFER_LOAD_ONLY = load_only(
@@ -110,6 +111,7 @@ WORKER_TURN_CANDIDATE_OFFER_LOAD_ONLY = load_only(
     WorkerTurn.min_trade_amount,
 )
 WORKER_TURN_LOAD_ONLY_SUBPHASE = load_only(
+    WorkerTurn.turn_id,
     WorkerTurn.phase,
     WorkerTurn.worker_turn_subphase,
 )
@@ -375,7 +377,7 @@ def put_prepared_transfer_through_account_locks(
         )
         .options(
             ACCOUNT_LOCK_PREPARED_TRANSFER_LOAD_ONLY,
-            WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY,
+            WORKER_TURN_LOAD_ONLY_COLLECTION_DEADLINE,
         )
     )
     try:
@@ -1471,7 +1473,7 @@ def process_start_sending_signal(
             DispatchingStatus.started_sending == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
-        .options(WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY)
+        .options(WORKER_TURN_LOAD_ONLY_COLLECTION_DEADLINE)
         .with_for_update(of=DispatchingStatus)
     )
     try:
@@ -1602,7 +1604,7 @@ def process_start_dispatching_signal(
             DispatchingStatus.started_dispatching == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
-        .options(WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY)
+        .options(WORKER_TURN_LOAD_ONLY_COLLECTION_DEADLINE)
         .with_for_update(of=DispatchingStatus)
     )
     try:
