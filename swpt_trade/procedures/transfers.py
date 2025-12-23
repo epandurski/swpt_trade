@@ -110,6 +110,15 @@ DISPATCHING_STATUS_LOAD_ONLY_ESSENTIALS = load_only(
     DispatchingStatus.amount_to_receive,
     DispatchingStatus.total_received_amount,
 )
+TRANSFER_ATTEMPT_LOAD_ONLY_ESSENTIALS = load_only(
+    TransferAttempt.transfer_id,
+    TransferAttempt.attempted_at,
+    TransferAttempt.rescheduled_for,
+    TransferAttempt.finalized_at,
+    TransferAttempt.amount,
+    TransferAttempt.backoff_counter,
+    TransferAttempt.failure_code,
+)
 TRANSFER_ATTEMPT_LOAD_ONLY_RESCHEDULED_FOR = load_only(
     TransferAttempt.rescheduled_for,
 )
@@ -1226,6 +1235,7 @@ def put_rejected_transfer_through_transfer_attempts(
             coordinator_request_id=coordinator_request_id,
         )
         .filter(TransferAttempt.coordinator_request_id != null())
+        .options(TRANSFER_ATTEMPT_LOAD_ONLY_ESSENTIALS)
         .with_for_update()
         .one_or_none()
     )
@@ -1264,6 +1274,7 @@ def put_prepared_transfer_through_transfer_attempts(
             coordinator_request_id=coordinator_request_id,
         )
         .filter(TransferAttempt.coordinator_request_id != null())
+        .options(TRANSFER_ATTEMPT_LOAD_ONLY_ESSENTIALS)
         .with_for_update()
         .one_or_none()
     )
@@ -1348,6 +1359,7 @@ def put_finalized_transfer_through_transfer_attempts(
             TransferAttempt.finalized_at != null(),
             TransferAttempt.coordinator_request_id != null(),
         )
+        .options(TRANSFER_ATTEMPT_LOAD_ONLY_ESSENTIALS)
         .with_for_update()
         .one_or_none()
     )
