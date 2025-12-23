@@ -1,5 +1,6 @@
 from typing import TypeVar, Callable, Optional
 from datetime import datetime, timezone, timedelta
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     DebtorInfoDocument,
@@ -8,10 +9,12 @@ from swpt_trade.models import (
     DebtorInfoFetch,
 )
 
+DEBTOR_INFO_DOCUMENT_LOAD_ONLY_FETCHED_AT = load_only(
+    DebtorInfoDocument.fetched_at,
+)
+TD_HOUR = timedelta(hours=1)
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
-
-TD_HOUR = timedelta(hours=1)
 
 
 @atomic
@@ -202,6 +205,7 @@ def store_document(
     document = (
         DebtorInfoDocument.query
         .filter_by(debtor_info_locator=debtor_info_locator)
+        .options(DEBTOR_INFO_DOCUMENT_LOAD_ONLY_FETCHED_AT)
         .with_for_update()
         .one_or_none()
     )
