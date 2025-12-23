@@ -69,8 +69,6 @@ ACCOUNT_LOCK_LOAD_ONLY_PK = load_only(
     AccountLock.debtor_id,
 )
 ACCOUNT_LOCK_LOAD_ONLY_ESSENTIALS = load_only(
-    AccountLock.creditor_id,
-    AccountLock.debtor_id,
     AccountLock.transfer_id,
     AccountLock.collector_id,
     AccountLock.coordinator_request_id,
@@ -78,8 +76,6 @@ ACCOUNT_LOCK_LOAD_ONLY_ESSENTIALS = load_only(
     AccountLock.released_at,
 )
 ACCOUNT_LOCK_LOAD_ONLY_PREPARED_TRANSFER_DATA = load_only(
-    AccountLock.creditor_id,
-    AccountLock.debtor_id,
     AccountLock.collector_id,
     AccountLock.turn_id,
     AccountLock.initiated_at,
@@ -89,15 +85,12 @@ ACCOUNT_LOCK_LOAD_ONLY_PREPARED_TRANSFER_DATA = load_only(
     AccountLock.released_at,
 )
 ACCOUNT_LOCK_LOAD_ONLY_CANDIDATE_OFFER_DATA = load_only(
-    AccountLock.creditor_id,
-    AccountLock.debtor_id,
     AccountLock.account_last_transfer_number,
     AccountLock.account_creation_date,
     AccountLock.released_at,
     AccountLock.collector_id,
 )
 WORKER_TURN_LOAD_ONLY_ESSENTIALS = load_only(
-    WorkerTurn.turn_id,
     WorkerTurn.phase,
     WorkerTurn.worker_turn_subphase,
     WorkerTurn.collection_started_at,
@@ -105,22 +98,20 @@ WORKER_TURN_LOAD_ONLY_ESSENTIALS = load_only(
     WorkerTurn.min_trade_amount,
 )
 WORKER_ACCOUNT_LOAD_ONLY_ESSENTIALS = load_only(
-    WorkerAccount.creditor_id,
-    WorkerAccount.debtor_id,
     WorkerAccount.surplus_last_transfer_number,
     WorkerAccount.surplus_spent_amount,
     WorkerAccount.creation_date,
 )
 DISPATCHING_STATUS_LOAD_ONLY_ESSENTIALS = load_only(
-    DispatchingStatus.collector_id,
-    DispatchingStatus.debtor_id,
-    DispatchingStatus.turn_id,
     DispatchingStatus.amount_to_send,
     DispatchingStatus.amount_to_collect,
     DispatchingStatus.total_collected_amount,
     DispatchingStatus.amount_to_dispatch,
     DispatchingStatus.amount_to_receive,
     DispatchingStatus.total_received_amount,
+)
+TRANSFER_ATTEMPT_LOAD_ONLY_RESCHEDULED_FOR = load_only(
+    TransferAttempt.rescheduled_for,
 )
 
 # Transfer status codes:
@@ -1441,7 +1432,7 @@ def process_rescheduled_transfers_batch(
             func.least(TransferAttempt.rescheduled_for, T_INFINITY)
             <= current_ts,
         )
-        .options(load_only(TransferAttempt.rescheduled_for))
+        .options(TRANSFER_ATTEMPT_LOAD_ONLY_RESCHEDULED_FOR)
         .with_for_update(skip_locked=True)
         .all()
     )

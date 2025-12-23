@@ -3,7 +3,7 @@ from typing import TypeVar, Callable, Optional
 from datetime import date, datetime, timezone, timedelta
 from swpt_pythonlib.utils import Seqnum
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import exc, load_only, Load
+from sqlalchemy.orm import exc, load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     HUGE_NEGLIGIBLE_AMOUNT,
@@ -32,7 +32,11 @@ T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
 EPS = 1e-5
-WORKER_ACCOUNT_LOAD_OPTIONS = Load(WorkerAccount).load_only(
+WORKER_ACCOUNT_LOAD_ONLY_PK = load_only(
+    WorkerAccount.creditor_id,
+    WorkerAccount.debtor_id,
+)
+WORKER_ACCOUNT_LOAD_ONLY_CALCULATE_SURPLUS_DATA = load_only(
     WorkerAccount.principal,
     WorkerAccount.interest,
     WorkerAccount.interest_rate,
@@ -43,6 +47,14 @@ WORKER_ACCOUNT_LOAD_OPTIONS = Load(WorkerAccount).load_only(
     WorkerAccount.surplus_ts,
     WorkerAccount.surplus_spent_amount,
     WorkerAccount.surplus_last_transfer_number,
+)
+WORKER_ACCOUNT_LOAD_ONLY_ACCOUNT_UPDATE_DATA = load_only(
+    WorkerAccount.creation_date,
+    WorkerAccount.last_heartbeat_ts,
+    WorkerAccount.last_change_ts,
+    WorkerAccount.last_change_seqnum,
+    WorkerAccount.account_id,
+    WorkerAccount.debtor_info_iri,
 )
 
 
@@ -180,6 +192,7 @@ def process_account_update_signal(
     data = (
         WorkerAccount.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
+        .options(WORKER_ACCOUNT_LOAD_ONLY_ACCOUNT_UPDATE_DATA)
         .with_for_update()
         .one_or_none()
     )
@@ -296,7 +309,7 @@ def process_account_purge_signal(
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
         .filter(WorkerAccount.creation_date <= creation_date)
         .with_for_update()
-        .options(load_only(WorkerAccount.creation_date))
+        .options(WORKER_ACCOUNT_LOAD_ONLY_PK)
         .one_or_none()
     )
     if worker_account:
@@ -319,7 +332,7 @@ def process_calculate_surplus_signal(
             WorkerAccount.debtor_id == debtor_id,
             KNOWN_SURPLUS_AMOUNT_PREDICATE,
         )
-        .options(WORKER_ACCOUNT_LOAD_OPTIONS)
+        .options(WORKER_ACCOUNT_LOAD_ONLY_CALCULATE_SURPLUS_DATA)
         .with_for_update(of=WorkerAccount)
     )
     try:
