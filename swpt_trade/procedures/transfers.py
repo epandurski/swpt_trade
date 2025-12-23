@@ -16,7 +16,7 @@ from sqlalchemy.sql.expression import (
     text,
     cast,
 )
-from sqlalchemy.orm import exc, load_only, Load
+from sqlalchemy.orm import exc, load_only
 from swpt_trade.utils import (
     TransferNote,
     calc_demurrage,
@@ -68,15 +68,16 @@ ACCOUNT_LOCK_LOAD_ONLY_PK = load_only(
     AccountLock.creditor_id,
     AccountLock.debtor_id,
 )
-ACCOUNT_LOCK_REVISE_ACCOUNT_LOAD_ONLY = load_only(
+ACCOUNT_LOCK_LOAD_ONLY_ESSENTIALS = load_only(
     AccountLock.creditor_id,
     AccountLock.debtor_id,
     AccountLock.transfer_id,
     AccountLock.collector_id,
     AccountLock.coordinator_request_id,
     AccountLock.amount,
+    AccountLock.released_at,
 )
-ACCOUNT_LOCK_PREPARED_TRANSFER_LOAD_ONLY = Load(AccountLock).load_only(
+ACCOUNT_LOCK_LOAD_ONLY_PREPARED_TRANSFER_DATA = load_only(
     AccountLock.creditor_id,
     AccountLock.debtor_id,
     AccountLock.collector_id,
@@ -87,13 +88,7 @@ ACCOUNT_LOCK_PREPARED_TRANSFER_LOAD_ONLY = Load(AccountLock).load_only(
     AccountLock.transfer_id,
     AccountLock.released_at,
 )
-ACCOUNT_LOCK_REJECTED_TRANSFER_LOAD_ONLY = load_only(
-    AccountLock.creditor_id,
-    AccountLock.debtor_id,
-    AccountLock.transfer_id,
-    AccountLock.released_at,
-)
-ACCOUNT_LOCK_CANDIDATE_OFFER_LOAD_ONLY = load_only(
+ACCOUNT_LOCK_LOAD_ONLY_CANDIDATE_OFFER_DATA = load_only(
     AccountLock.creditor_id,
     AccountLock.debtor_id,
     AccountLock.account_last_transfer_number,
@@ -101,17 +96,31 @@ ACCOUNT_LOCK_CANDIDATE_OFFER_LOAD_ONLY = load_only(
     AccountLock.released_at,
     AccountLock.collector_id,
 )
-WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY = Load(WorkerTurn).load_only(
-    WorkerTurn.collection_deadline,
-)
-WORKER_TURN_CANDIDATE_OFFER_LOAD_ONLY = load_only(
+WORKER_TURN_LOAD_ONLY_ESSENTIALS = load_only(
     WorkerTurn.turn_id,
+    WorkerTurn.phase,
+    WorkerTurn.worker_turn_subphase,
+    WorkerTurn.collection_started_at,
     WorkerTurn.collection_deadline,
     WorkerTurn.min_trade_amount,
 )
-WORKER_TURN_LOAD_ONLY_SUBPHASE = load_only(
-    WorkerTurn.phase,
-    WorkerTurn.worker_turn_subphase,
+WORKER_ACCOUNT_LOAD_ONLY_ESSENTIALS = load_only(
+    WorkerAccount.creditor_id,
+    WorkerAccount.debtor_id,
+    WorkerAccount.surplus_last_transfer_number,
+    WorkerAccount.surplus_spent_amount,
+    WorkerAccount.creation_date,
+)
+DISPATCHING_STATUS_LOAD_ONLY_ESSENTIALS = load_only(
+    DispatchingStatus.collector_id,
+    DispatchingStatus.debtor_id,
+    DispatchingStatus.turn_id,
+    DispatchingStatus.amount_to_send,
+    DispatchingStatus.amount_to_collect,
+    DispatchingStatus.total_collected_amount,
+    DispatchingStatus.amount_to_dispatch,
+    DispatchingStatus.amount_to_receive,
+    DispatchingStatus.total_received_amount,
 )
 
 # Transfer status codes:
@@ -174,7 +183,7 @@ def process_candidate_offer_signal(
             phase=2,
             worker_turn_subphase=5,
         )
-        .options(WORKER_TURN_CANDIDATE_OFFER_LOAD_ONLY)
+        .options(WORKER_TURN_LOAD_ONLY_ESSENTIALS)
         .with_for_update(read=True, skip_locked=True)
         .one_or_none()
     )
@@ -187,7 +196,7 @@ def process_candidate_offer_signal(
             creditor_id=creditor_id,
             debtor_id=debtor_id,
         )
-        .options(ACCOUNT_LOCK_CANDIDATE_OFFER_LOAD_ONLY)
+        .options(ACCOUNT_LOCK_LOAD_ONLY_CANDIDATE_OFFER_DATA)
         .with_for_update()
         .one_or_none()
     )
@@ -333,7 +342,7 @@ def put_rejected_transfer_through_account_locks(
             creditor_id=coordinator_id,
             coordinator_request_id=coordinator_request_id,
         )
-        .options(ACCOUNT_LOCK_REJECTED_TRANSFER_LOAD_ONLY)
+        .options(ACCOUNT_LOCK_LOAD_ONLY_ESSENTIALS)
         .one_or_none()
     )
     if lock is None:
@@ -374,8 +383,8 @@ def put_prepared_transfer_through_account_locks(
             AccountLock.coordinator_request_id == coordinator_request_id,
         )
         .options(
-            ACCOUNT_LOCK_PREPARED_TRANSFER_LOAD_ONLY,
-            WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY,
+            ACCOUNT_LOCK_LOAD_ONLY_PREPARED_TRANSFER_DATA,
+            WORKER_TURN_LOAD_ONLY_ESSENTIALS,
         )
     )
     try:
@@ -487,7 +496,7 @@ def process_revise_account_lock_signal(
             finalized_at=null(),
             has_been_revised=False,
         )
-        .options(ACCOUNT_LOCK_REVISE_ACCOUNT_LOAD_ONLY)
+        .options(ACCOUNT_LOCK_LOAD_ONLY_ESSENTIALS)
         .with_for_update()
         .one_or_none()
     )
@@ -644,7 +653,7 @@ def update_worker_collecting_record(
     wt = (
         WorkerTurn.query
         .filter_by(turn_id=turn_id)
-        .options(WORKER_TURN_LOAD_ONLY_SUBPHASE)
+        .options(WORKER_TURN_LOAD_ONLY_ESSENTIALS)
         .one_or_none()
     )
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
@@ -728,7 +737,7 @@ def update_worker_receiving_record(
     wt = (
         WorkerTurn.query
         .filter_by(turn_id=turn_id)
-        .options(WORKER_TURN_LOAD_ONLY_SUBPHASE)
+        .options(WORKER_TURN_LOAD_ONLY_ESSENTIALS)
         .one_or_none()
     )
     if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
@@ -811,7 +820,7 @@ def release_buyer_account_lock(
             AccountLock.finalized_at == null(),
             AccountLock.released_at == null(),
         )
-        .options(ACCOUNT_LOCK_LOAD_ONLY_PK)
+        .options(ACCOUNT_LOCK_LOAD_ONLY_ESSENTIALS)
         .with_for_update()
         .one_or_none()
     )
@@ -852,6 +861,7 @@ def _register_collector_trade(
     worker_account = (
         WorkerAccount.query
         .filter_by(debtor_id=debtor_id, creditor_id=collector_id)
+        .options(WORKER_ACCOUNT_LOAD_ONLY_ESSENTIALS)
         .with_for_update()
         .one_or_none()
     )
@@ -1471,7 +1481,10 @@ def process_start_sending_signal(
             DispatchingStatus.started_sending == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
-        .options(WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY)
+        .options(
+            DISPATCHING_STATUS_LOAD_ONLY_ESSENTIALS,
+            WORKER_TURN_LOAD_ONLY_ESSENTIALS,
+        )
         .with_for_update(of=DispatchingStatus)
     )
     try:
@@ -1602,7 +1615,10 @@ def process_start_dispatching_signal(
             DispatchingStatus.started_dispatching == false(),
             DispatchingStatus.awaiting_signal_flag == true(),
         )
-        .options(WORKER_TURN_PREPARED_TRANSFER_LOAD_ONLY)
+        .options(
+            DISPATCHING_STATUS_LOAD_ONLY_ESSENTIALS,
+            WORKER_TURN_LOAD_ONLY_ESSENTIALS,
+        )
         .with_for_update(of=DispatchingStatus)
     )
     try:
