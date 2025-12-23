@@ -4,6 +4,16 @@ from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import TradingPolicy
 
+TRADING_POLICY_LOAD_ONLY_LATEST_LEDGER_UPDATE_ID = load_only(
+    TradingPolicy.latest_ledger_update_id,
+)
+TRADING_POLICY_LOAD_ONLY_LATEST_POLICY_UPDATE_ID = load_only(
+    TradingPolicy.latest_policy_update_id,
+)
+TRADING_POLICY_LOAD_ONLY_LATEST_FLAGS_UPDATE_ID = load_only(
+    TradingPolicy.latest_flags_update_id,
+)
+
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
@@ -23,7 +33,7 @@ def process_updated_ledger_signal(
     trading_policy = (
         TradingPolicy.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-        .options(load_only(TradingPolicy.latest_ledger_update_id))
+        .options(TRADING_POLICY_LOAD_ONLY_LATEST_LEDGER_UPDATE_ID)
         .with_for_update()
         .one_or_none()
     )
@@ -76,7 +86,7 @@ def process_updated_policy_signal(
     trading_policy = (
         TradingPolicy.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-        .options(load_only(TradingPolicy.latest_policy_update_id))
+        .options(TRADING_POLICY_LOAD_ONLY_LATEST_POLICY_UPDATE_ID)
         .with_for_update()
         .one_or_none()
     )
@@ -118,7 +128,7 @@ def process_updated_flags_signal(
     trading_policy = (
         TradingPolicy.query
         .filter_by(creditor_id=creditor_id, debtor_id=debtor_id)
-        .options(load_only(TradingPolicy.latest_flags_update_id))
+        .options(TRADING_POLICY_LOAD_ONLY_LATEST_FLAGS_UPDATE_ID)
         .with_for_update()
         .one_or_none()
     )
