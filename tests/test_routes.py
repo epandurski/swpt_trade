@@ -35,13 +35,13 @@ def test_ensure_collectors(client):
     }
 
     r = client.get(
-        "/trade/collectors/666/",
+        "/trade/collectors/666/list",
         headers={"X-Swpt-User-Id": "creditors:3"},
     )
     assert r.status_code == 403
 
     r = client.get(
-        "/trade/collectors/666/",
+        "/trade/collectors/666/list",
         headers={"X-Swpt-User-Id": "creditors:12345"},
     )
     assert r.status_code == 200
@@ -105,7 +105,7 @@ def test_ensure_collectors(client):
     assert len(cas) == 1
 
     r = client.get(
-        "/trade/collectors/666/",
+        "/trade/collectors/666/list",
         headers={"X-Swpt-User-Id": "creditors-supervisor"},
     )
     assert r.status_code == 200

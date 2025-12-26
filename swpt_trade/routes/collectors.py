@@ -26,11 +26,11 @@ collectors_api = Blueprint(
 collectors_api.before_request(ensure_owner)
 
 
-@collectors_api.route("collectors/<i64:debtorId>/", parameters=[DID])
-class DebtorCollectorsListEndpoint(MethodView):
+@collectors_api.route("collectors/<i64:debtorId>/list", parameters=[DID])
+class ListDebtorCollectorsEndpoint(MethodView):
     @collectors_api.response(200, schemas.DebtorCollectorsListSchema)
     @collectors_api.doc(
-        operationId="getDebtorCollectorsList",
+        operationId="listDebtorCollectors",
         security=specs.SCOPE_ACCESS_READONLY
     )
     def get(self, debtorId):
@@ -46,11 +46,11 @@ class DebtorCollectorsListEndpoint(MethodView):
 @collectors_api.route(
     "collectors/<i64:debtorId>/activate", parameters=[DID]
 )
-class ActivateCollectorsEndpoint(MethodView):
+class ActivateDebtorCollectorsEndpoint(MethodView):
     @collectors_api.arguments(schemas.ActivateCollectorsRequestSchema)
     @collectors_api.response(204)
     @collectors_api.doc(
-        operationId="activateCollectors", security=specs.SCOPE_ACTIVATE
+        operationId="activateDebtorCollectors", security=specs.SCOPE_ACTIVATE
     )
     def post(self, activate_collectors_request, debtorId):
         """Ensure a number of alive collector accounts.
