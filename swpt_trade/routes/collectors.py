@@ -1,11 +1,20 @@
-from flask import current_app
+from dataclasses import dataclass
+from typing import Sequence
+from flask import current_app, g
 from flask.views import MethodView
 from flask_smorest import abort
 from swpt_trade import procedures
-from .common import ensure_admin, Blueprint
+from swpt_trade.models import CollectorAccount
+from .common import ensure_owner, Blueprint
 from .specs import DID
 from . import specs
 from . import schemas
+
+
+@dataclass
+class DebtorCollectorsList:
+    debtor_id: int
+    collectors: Sequence[CollectorAccount]
 
 
 collectors_api = Blueprint(
@@ -14,11 +23,24 @@ collectors_api = Blueprint(
     url_prefix="/trade",
     description="""**Manage collector accounts.**""",
 )
-collectors_api.before_request(ensure_admin)
+collectors_api.before_request(ensure_owner)
 
 
-# TODO: Consider implementing endpoints that give information about
-# the already existing collector accounts.
+@collectors_api.route("collectors/<i64:debtorId>/", parameters=[DID])
+class DebtorCollectorsListEndpoint(MethodView):
+    @collectors_api.response(200, schemas.DebtorCollectorsListSchema)
+    @collectors_api.doc(
+        operationId="getDebtorCollectorsList",
+        security=specs.SCOPE_ACCESS_READONLY
+    )
+    def get(self, debtorId):
+        """Return the list of collector accounts for a given debtor.
+        """
+
+        return DebtorCollectorsList(
+            debtor_id=debtorId,
+            collectors=procedures.get_collector_accounts(debtorId),
+        )
 
 
 @collectors_api.route(
@@ -33,6 +55,10 @@ class ActivateCollectorsEndpoint(MethodView):
     def post(self, activate_collectors_request, debtorId):
         """Ensure a number of alive collector accounts.
         """
+
+        if not g.superuser:
+            abort(403)
+
         if debtorId == 0:
             abort(500)
 
