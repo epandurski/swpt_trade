@@ -371,6 +371,13 @@ def _check_config_sanity(c):  # pragma: nocover
             "Invalid values for MIN_COLLECTOR_ID and MAX_COLLECTOR_ID."
         )
 
+    if (
+            c["MIN_COLLECTOR_ID"]
+            >= c["OWNER_CREDITOR_ID"]
+            >= c["MAX_COLLECTOR_ID"]
+    ):
+        raise RuntimeError("Invalid value for MAX_COLLECTOR_ID.")
+
     if not (1e-10 <= c["TRANSFERS_AMOUNT_CUT"] <= 0.1):
         raise RuntimeError(
             "Invalid value for TRANSFERS_AMOUNT_CUT."
