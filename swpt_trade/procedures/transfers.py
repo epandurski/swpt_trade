@@ -893,31 +893,35 @@ def process_account_id_request_signal(
         debtor_id: int,
         creditor_id: int,
         is_dispatching: bool,
-) -> None:
+) -> bool:
     row = (
-        db.session.execute(
-            select(
-                TradingPolicy.account_id,
-                TradingPolicy.latest_ledger_update_id,
+        (
+            found := db.session.execute(
+                select(
+                    TradingPolicy.account_id,
+                    TradingPolicy.latest_ledger_update_id,
+                )
+                .where(
+                    TradingPolicy.creditor_id == creditor_id,
+                    TradingPolicy.debtor_id == debtor_id,
+                )
             )
-            .where(
-                TradingPolicy.creditor_id == creditor_id,
-                TradingPolicy.debtor_id == debtor_id,
+            .one_or_none()
+        )
+        or (
+            found := db.session.execute(
+                select(
+                    WorkerAccount.account_id,
+                    WorkerAccount.creation_date - DATE0,
+                )
+                .where(
+                    WorkerAccount.creditor_id == creditor_id,
+                    WorkerAccount.debtor_id == debtor_id,
+                    WorkerAccount.account_id != "",
+                )
             )
-        ).one_or_none()
-
-        or db.session.execute(
-            select(
-                WorkerAccount.account_id,
-                WorkerAccount.creation_date - DATE0,
-            )
-            .where(
-                WorkerAccount.creditor_id == creditor_id,
-                WorkerAccount.debtor_id == debtor_id,
-                WorkerAccount.account_id != "",
-            )
-        ).one_or_none()
-
+            .one_or_none()
+        )
         or ("", MIN_INT64)
     )
 
@@ -932,6 +936,7 @@ def process_account_id_request_signal(
             account_id_version=row[1],
         )
     )
+    return bool(found)
 
 
 @atomic

@@ -655,13 +655,24 @@ def _on_account_id_request_signal(
     *args,
     **kwargs
 ) -> None:
-    procedures.process_account_id_request_signal(
+    if not procedures.process_account_id_request_signal(
         collector_id=collector_id,
         turn_id=turn_id,
         debtor_id=debtor_id,
         creditor_id=creditor_id,
         is_dispatching=is_dispatching,
-    )
+    ):
+        _LOGGER.error(
+            'Can not fulfill account ID request:'
+            ' collector_id=%d, turn_id=%d,'
+            ' debtor_id=%d, creditor_id=%d, '
+            ' is_dispatching=%s.',
+            collector_id,
+            turn_id,
+            debtor_id,
+            creditor_id,
+            is_dispatching,
+        )
 
 
 def _on_account_id_response_signal(
