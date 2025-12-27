@@ -334,7 +334,7 @@ async def _make_https_request(
                 return FetchResult(
                     fetch=fetch,
                     errorcode=response.status,
-                    retry=True,
+                    retry=response.status != 410,
                 )
 
     except aiohttp.ClientError as e:

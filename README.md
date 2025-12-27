@@ -380,6 +380,17 @@ example values:
 MIN_COLLECTOR_ID=0x0000010000000000
 MAX_COLLECTOR_ID=0x00000100000003ff
 
+# The creditor ID of the user account of the owner of the creditors
+# agent node. The system will use the acumullated surpluses to buy the
+# same currencies that the user with this creditor ID buys.
+# Eventually, all bought amounts will be automatically transfered to
+# this user account. The creditor ID can be passed as a decimal number
+# (like "4294967296"), or a hexadecimal number (like "0x100000000").
+# Numbers between 0x8000000000000000 and 0xffffffffffffffff will be
+# automatically converted to their corresponding two's complement
+# negative numbers. The default is "0x00000100ffffffff".
+OWNER_CREDITOR_ID=1234567890
+
 # Requests to the "admin API" are protected by an OAuth
 # 2.0 authorization server. With every request, the client (a Web
 # browser, for example) presents a token, and to verify the
@@ -401,6 +412,12 @@ MAX_COLLECTOR_ID=0x00000100000003ff
 #    allowed to view the admin data, and to perform non-critical
 #    admin tasks. The default value for
 #    OAUTH2_SUPERVISOR_USERNAME is "creditors-supervisor".
+#
+# 3) An username that matches the regular expression
+#    "^creditors:([0-9]+)$" -- The system will block all such users,
+#    except the "creditors:<OWNER_CREDITOR_ID>" user. The "owner" user
+#    will be allowed to to view the admin data, and to perform
+#    non-critical admin tasks.
 OAUTH2_INTROSPECT_URL=http://localhost:4445/oauth2/introspect
 OAUTH2_SUPERUSER_USERNAME=creditors-superuser
 OAUTH2_SUPERVISOR_USERNAME=creditors-supervisor

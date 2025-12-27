@@ -69,7 +69,10 @@ def parse_swpt_user_id_header() -> Tuple[UserType, Optional[int]]:
     return user_type, creditor_id
 
 
-def ensure_admin():
-    user_type, _ = parse_swpt_user_id_header()
-    if user_type == UserType.CREDITOR:
+def ensure_owner():
+    user_type, creditor_id = parse_swpt_user_id_header()
+    if (
+            user_type == UserType.CREDITOR
+            and creditor_id != current_app.config["OWNER_CREDITOR_ID"]
+    ):
         abort(403)

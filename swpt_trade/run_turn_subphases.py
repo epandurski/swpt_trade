@@ -470,6 +470,17 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
             else_=WorkerAccount.surplus_amount
         )
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
+                # TODO: Consider skipping worker accounts that have
+                # been inactive for a long time. The way to do this
+                # probably would be to add a `last_used_ts` column to
+                # the WorkerAccount table, and update its value
+                # whenever a corresponding DispatchingStatus record
+                # has been created or deleted. However, this probably
+                # will not solve the problem with wasting resources on
+                # unused currencies, because bids for such currencies
+                # will probably continue to come from "normal" users,
+                # who do not care to remove them from their list of
+                # traded currencies.
                 select(
                     WorkerAccount.creditor_id,
                     WorkerAccount.debtor_id,

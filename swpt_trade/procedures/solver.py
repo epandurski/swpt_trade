@@ -267,6 +267,16 @@ def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
 
 
 @atomic
+def get_collector_accounts(debtor_id: int) -> Sequence[CollectorAccount]:
+    return (
+        CollectorAccount.query
+        .filter_by(debtor_id=debtor_id)
+        .order_by(CollectorAccount.collector_id)
+        .all()
+    )
+
+
+@atomic
 def ensure_collector_accounts(
         *,
         debtor_id: int,
