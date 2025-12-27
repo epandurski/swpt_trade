@@ -10,13 +10,9 @@ from .specs import DID
 from . import specs
 from . import schemas
 
-
-@dataclass
-class DebtorCollectorsList:
-    debtor_id: int
-    collectors: Sequence[CollectorAccount]
-
-
+# TODO: Consider removing this API's blueprint altogether. At best, it
+# is useful only for debugging. In reality, it is useful only as a
+# template for implementing other APIs.
 collectors_api = Blueprint(
     "collectors",
     __name__,
@@ -24,6 +20,12 @@ collectors_api = Blueprint(
     description="""**Manage collector accounts.**""",
 )
 collectors_api.before_request(ensure_owner)
+
+
+@dataclass
+class DebtorCollectorsList:
+    debtor_id: int
+    collectors: Sequence[CollectorAccount]
 
 
 @collectors_api.route("collectors/<i64:debtorId>/list", parameters=[DID])
@@ -53,11 +55,8 @@ class ActivateDebtorCollectorsEndpoint(MethodView):
         operationId="activateDebtorCollectors", security=specs.SCOPE_ACTIVATE
     )
     def post(self, activate_collectors_request, debtorId):
-        """Ensure a number of alive collector accounts.
+        """Ensure a number of alive collector accounts for a given debtor.
         """
-
-        if not g.superuser:
-            abort(403)
 
         if debtorId == 0:
             abort(500)

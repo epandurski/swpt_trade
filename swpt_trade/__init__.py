@@ -270,6 +270,7 @@ class Configuration(metaclass=MetaEnvReader):
 
     APP_ENABLE_CORS = False
     APP_VERIFY_SSL_CERTS = True
+    APP_ENABLE_INESSENTIAL_WEBAPIS = False
     APP_TURN_MAX_COMMIT_PERIOD: parse_timedelta = parse_timedelta("30d")
     APP_INTEREST_RATE_HISTORY_PERIOD: parse_timedelta = parse_timedelta("180d")
     APP_MIN_DEMURRAGE_RATE = -50.0
@@ -508,8 +509,10 @@ def create_app(config_dict={}):
     migrate.init_app(app, db)
     publisher.init_app(app)
     api.init_app(app)
-    api.register_blueprint(collectors_api)
     api.register_blueprint(health_api)
+    if app.config["APP_ENABLE_INESSENTIAL_WEBAPIS"]:
+        api.register_blueprint(collectors_api)
+
     app.cli.add_command(swpt_trade)
     _check_config_sanity(app.config)
 

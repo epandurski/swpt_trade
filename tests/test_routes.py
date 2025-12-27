@@ -69,14 +69,6 @@ def test_ensure_collectors(client):
 
     r = client.post(
         "/trade/collectors/666/activate",
-        headers={"X-Swpt-User-Id": "creditors-supervisor"},
-        json=json_request,
-    )
-    assert r.status_code == 403
-    assert len(CollectorAccount.query.all()) == 0
-
-    r = client.post(
-        "/trade/collectors/666/activate",
         headers={"X-Swpt-User-Id": "INVALID"},
         json=json_request,
     )
@@ -97,7 +89,7 @@ def test_ensure_collectors(client):
 
     r = client.post(
         "/trade/collectors/666/activate",
-        headers={"X-Swpt-User-Id": "creditors-superuser"},
+        headers={"X-Swpt-User-Id": "creditors-supervisor"},
         json={},
     )
     assert r.status_code == 204
