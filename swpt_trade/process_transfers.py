@@ -119,6 +119,7 @@ def process_delayed_account_transfers() -> int:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
+                current_ts = datetime.now(tz=timezone.utc)
                 to_replay = [
                     dict(
                         creditor_id=row.creditor_id,
@@ -135,6 +136,7 @@ def process_delayed_account_transfers() -> int:
                         sender=row.sender,
                         recipient=row.recipient,
                         ts=row.ts,
+                        inserted_at=current_ts,
                     )
                     for row in rows
                     if (

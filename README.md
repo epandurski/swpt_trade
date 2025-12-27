@@ -318,17 +318,12 @@ HTTP_FETCH_CONNECTIONS=100
 HTTP_FETCH_TIMEOUT=10.0
 HTTP_FETCH_PERIOD=2.5
 
-# Worker servers should periodically trigger scheduled transfer
-# attempts. The specified number of
-# processes ("$TRIGGER_TRANSFERS_PROCESSES") will be spawned to
-# do this job (default 1). Note that TRIGGER_TRANSFERS_PROCESSES
-# can be set to 0, in which case, the container will not trigger
-# any transfer attempts. The "$TRIGGER_TRANSFERS_PERIOD" value
-# specifies the number of seconds to wait between two sequential
-# database queries to obtain scheduled transfer attempts whose
-# time to be triggered has come (default 5).
+# The number of processes that will periodically trigger scheduled
+# transfer attempts. The default is 1, which normally should be
+# enough. Note however, that TRIGGER_TRANSFERS_PROCESSES can be set to
+# 0, in which case, the container will not trigger any transfer
+# attempts.
 TRIGGER_TRANSFERS_PROCESSES=1
-TRIGGER_TRANSFERS_PERIOD=2.5
 
 # Worker servers should periodically query the solver's database
 # for new ("pristine") collector accounts that need to be
@@ -530,9 +525,9 @@ container allows you to execute the following *documented commands*:
 * `trigger_transfers`
 
   Starts additional worker processes that trigger scheduled transfer
-  attempts. These commands allow you to start processes dedicated to
-  triggering transfer attempts. (See "TRIGGER_TRANSFERS_PROCESSES" and
-  "TRIGGER_TRANSFERS_PERIOD" environment variables.)
+  attempts. This command allow you to start processes dedicated to
+  triggering transfer attempts. (See the "TRIGGER_TRANSFERS_PROCESSES"
+  environment variable.)
 
 * `subscribe`
 

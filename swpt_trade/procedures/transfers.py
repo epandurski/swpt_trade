@@ -119,9 +119,6 @@ TRANSFER_ATTEMPT_LOAD_ONLY_ESSENTIALS = load_only(
     TransferAttempt.backoff_counter,
     TransferAttempt.failure_code,
 )
-TRANSFER_ATTEMPT_LOAD_ONLY_RESCHEDULED_FOR = load_only(
-    TransferAttempt.rescheduled_for,
-)
 
 # Transfer status codes:
 SC_OK = "OK"
@@ -896,31 +893,35 @@ def process_account_id_request_signal(
         debtor_id: int,
         creditor_id: int,
         is_dispatching: bool,
-) -> None:
+) -> bool:
     row = (
-        db.session.execute(
-            select(
-                TradingPolicy.account_id,
-                TradingPolicy.latest_ledger_update_id,
+        (
+            found := db.session.execute(
+                select(
+                    TradingPolicy.account_id,
+                    TradingPolicy.latest_ledger_update_id,
+                )
+                .where(
+                    TradingPolicy.creditor_id == creditor_id,
+                    TradingPolicy.debtor_id == debtor_id,
+                )
             )
-            .where(
-                TradingPolicy.creditor_id == creditor_id,
-                TradingPolicy.debtor_id == debtor_id,
+            .one_or_none()
+        )
+        or (
+            found := db.session.execute(
+                select(
+                    WorkerAccount.account_id,
+                    WorkerAccount.creation_date - DATE0,
+                )
+                .where(
+                    WorkerAccount.creditor_id == creditor_id,
+                    WorkerAccount.debtor_id == debtor_id,
+                    WorkerAccount.account_id != "",
+                )
             )
-        ).one_or_none()
-
-        or db.session.execute(
-            select(
-                WorkerAccount.account_id,
-                WorkerAccount.creation_date - DATE0,
-            )
-            .where(
-                WorkerAccount.creditor_id == creditor_id,
-                WorkerAccount.debtor_id == debtor_id,
-                WorkerAccount.account_id != "",
-            )
-        ).one_or_none()
-
+            .one_or_none()
+        )
         or ("", MIN_INT64)
     )
 
@@ -935,6 +936,7 @@ def process_account_id_request_signal(
             account_id_version=row[1],
         )
     )
+    return bool(found)
 
 
 @atomic
@@ -1430,10 +1432,16 @@ def process_rescheduled_transfers_batch(
         transfer_attempt_pks: list,
         current_ts: datetime,
 ) -> int:
-    count = 0
-    transfer_attempts = (
-        TransferAttempt.query
-        .filter(
+    to_trigger = db.session.execute(
+        select(
+            TransferAttempt.collector_id,
+            TransferAttempt.turn_id,
+            TransferAttempt.debtor_id,
+            TransferAttempt.creditor_id,
+            TransferAttempt.is_dispatching,
+        )
+        .select_from(TransferAttempt)
+        .where(
             TRANSFER_ATTEMPT_PK.in_(transfer_attempt_pks),
 
             # The reason we use this complex expression here (instead
@@ -1444,26 +1452,32 @@ def process_rescheduled_transfers_batch(
             func.least(TransferAttempt.rescheduled_for, T_INFINITY)
             <= current_ts,
         )
-        .options(TRANSFER_ATTEMPT_LOAD_ONLY_RESCHEDULED_FOR)
         .with_for_update(skip_locked=True)
-        .all()
-    )
+    ).all()
 
-    for attempt in transfer_attempts:
-        assert attempt.rescheduled_for <= current_ts
-        db.session.add(
-            TriggerTransferSignal(
-                collector_id=attempt.collector_id,
-                turn_id=attempt.turn_id,
-                debtor_id=attempt.debtor_id,
-                creditor_id=attempt.creditor_id,
-                is_dispatching=attempt.is_dispatching,
-            )
+    if to_trigger:
+        db.session.bulk_insert_mappings(
+            TriggerTransferSignal,
+            [
+                dict(
+                    collector_id=attempt.collector_id,
+                    turn_id=attempt.turn_id,
+                    debtor_id=attempt.debtor_id,
+                    creditor_id=attempt.creditor_id,
+                    is_dispatching=attempt.is_dispatching,
+                    inserted_at=current_ts,
+                )
+                for attempt in to_trigger
+            ]
         )
-        attempt.rescheduled_for = None
-        count += 1
+        db.session.execute(
+            update(TransferAttempt)
+            .execution_options(synchronize_session=False)
+            .where(TRANSFER_ATTEMPT_PK.in_(to_trigger))
+            .values(rescheduled_for=None)
+        )
 
-    return count
+    return len(to_trigger)
 
 
 @atomic
