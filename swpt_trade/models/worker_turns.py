@@ -695,7 +695,7 @@ class TransferAttempt(db.Model):
             "idx_transfer_moving_transfer_kind",
             collector_id,
             debtor_id,
-            postgresql_where=transfer_kind == 2,
+            postgresql_where=transfer_kind == KIND_MOVING,
         ),
         {
             "comment": (
