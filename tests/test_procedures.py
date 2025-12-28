@@ -2646,7 +2646,7 @@ def test_process_account_id_request_signal(db_session, current_ts):
         turn_id=3,
         debtor_id=1,
         creditor_id=666,
-        is_dispatching=True
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
     )
     rss = AccountIdResponseSignal.query.all()
     assert len(rss) == 1
@@ -2654,7 +2654,7 @@ def test_process_account_id_request_signal(db_session, current_ts):
     assert rss[0].turn_id == 3
     assert rss[0].debtor_id == 1
     assert rss[0].creditor_id == 666
-    assert rss[0].is_dispatching is True
+    assert rss[0].transfer_kind == TransferAttempt.KIND_DISPATCHING
     assert rss[0].account_id == "account1"
     assert rss[0].account_id_version == 123
     AccountIdResponseSignal.query.delete()
@@ -2664,7 +2664,7 @@ def test_process_account_id_request_signal(db_session, current_ts):
         turn_id=3,
         debtor_id=1,
         creditor_id=999,
-        is_dispatching=False
+        transfer_kind=TransferAttempt.KIND_SENDING,
     )
     rss = AccountIdResponseSignal.query.all()
     assert len(rss) == 1
@@ -2672,7 +2672,7 @@ def test_process_account_id_request_signal(db_session, current_ts):
     assert rss[0].turn_id == 3
     assert rss[0].debtor_id == 1
     assert rss[0].creditor_id == 999
-    assert rss[0].is_dispatching is False
+    assert rss[0].transfer_kind == TransferAttempt.KIND_SENDING
     assert rss[0].account_id == "account2"
     assert rss[0].account_id_version == 5
     AccountIdResponseSignal.query.delete()
@@ -2682,7 +2682,7 @@ def test_process_account_id_request_signal(db_session, current_ts):
         turn_id=3,
         debtor_id=1,
         creditor_id=555,
-        is_dispatching=False
+        transfer_kind=TransferAttempt.KIND_SENDING,
     )
     rss = AccountIdResponseSignal.query.all()
     assert len(rss) == 1
@@ -2690,9 +2690,9 @@ def test_process_account_id_request_signal(db_session, current_ts):
     assert rss[0].turn_id == 3
     assert rss[0].debtor_id == 1
     assert rss[0].creditor_id == 555
-    assert rss[0].is_dispatching is False
+    assert rss[0].transfer_kind == TransferAttempt.KIND_SENDING
     assert rss[0].account_id == ""
-    assert rss[0].account_id_version == MIN_INT64
+    assert rss[0].account_id_version == MIN_INT64 + 1
 
 
 def test_transfer_attempt_success(db_session, collector_id, current_ts):
@@ -2702,7 +2702,7 @@ def test_transfer_attempt_success(db_session, collector_id, current_ts):
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1e9,
             collection_started_at=current_ts - timedelta(days=30),
         )
@@ -2714,7 +2714,7 @@ def test_transfer_attempt_success(db_session, collector_id, current_ts):
         turn_id=1,
         debtor_id=666,
         creditor_id=123,
-        is_dispatching=True,
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
         account_id="account123",
         account_id_version=1,
         transfers_healthy_max_commit_delay=timedelta(hours=3),
@@ -2857,7 +2857,7 @@ def test_transfer_attempt_failure(
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1e9,
             collection_started_at=current_ts - timedelta(days=30),
             backoff_counter=100,
@@ -2870,7 +2870,7 @@ def test_transfer_attempt_failure(
         turn_id=1,
         debtor_id=666,
         creditor_id=123,
-        is_dispatching=True,
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
         account_id="account123",
         account_id_version=1,
         transfers_healthy_max_commit_delay=timedelta(hours=3),
@@ -2908,7 +2908,7 @@ def test_transfer_attempt_no_collector(db_session, current_ts):
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts - timedelta(hours=3),
             recipient="account123",
@@ -2931,7 +2931,7 @@ def test_transfer_attempt_no_collector(db_session, current_ts):
         turn_id=1,
         debtor_id=666,
         creditor_id=123,
-        is_dispatching=True,
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
         transfers_healthy_max_commit_delay=timedelta(hours=3),
         transfers_amount_cut=1e-8,
     )
@@ -2956,7 +2956,7 @@ def test_transfer_attempt_old_interest_rate(
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts - timedelta(hours=3),
             recipient="account123",
@@ -2979,7 +2979,7 @@ def test_transfer_attempt_old_interest_rate(
         turn_id=1,
         debtor_id=666,
         creditor_id=123,
-        is_dispatching=True,
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
         transfers_healthy_max_commit_delay=timedelta(hours=3),
         transfers_amount_cut=1e-8,
     )
@@ -3004,7 +3004,7 @@ def test_transfer_attempt_unmatched_prepared_transfer(
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts - timedelta(hours=3),
             recipient="account123",
@@ -3078,7 +3078,7 @@ def test_transfer_attempt_rejected_transfer(
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts - timedelta(hours=3),
             recipient="account123",
@@ -3117,7 +3117,7 @@ def test_transfer_attempt_trigger_after_recipient_is_unreachable(
             turn_id=1,
             debtor_id=666,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts - timedelta(hours=3),
             recipient="account123",
@@ -3137,7 +3137,7 @@ def test_transfer_attempt_trigger_after_recipient_is_unreachable(
         turn_id=1,
         debtor_id=666,
         creditor_id=123,
-        is_dispatching=True,
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
         transfers_healthy_max_commit_delay=timedelta(hours=3),
         transfers_amount_cut=1e-8,
     )
@@ -3155,14 +3155,14 @@ def test_transfer_attempt_trigger_after_recipient_is_unreachable(
     assert airs.turn_id == 1
     assert airs.debtor_id == 666
     assert airs.creditor_id == 123
-    assert airs.is_dispatching is True
+    assert airs.transfer_kind == TransferAttempt.KIND_DISPATCHING
 
     p.process_account_id_response_signal(
         collector_id=collector_id,
         turn_id=1,
         debtor_id=666,
         creditor_id=123,
-        is_dispatching=True,
+        transfer_kind=TransferAttempt.KIND_DISPATCHING,
         account_id="account123new",
         account_id_version=2,
         transfers_healthy_max_commit_delay=timedelta(hours=3),
@@ -3199,7 +3199,7 @@ def _assert_attempt_status(ta, status, collector_id):
         assert airs.turn_id == 1
         assert airs.debtor_id == 666
         assert airs.creditor_id == 123
-        assert airs.is_dispatching is True
+        assert airs.transfer_kind == TransferAttempt.KIND_DISPATCHING
     else:
         assert len(AccountIdRequestSignal.query.all()) == 0
 
@@ -3274,7 +3274,7 @@ def test_process_start_sending_signal(db_session, wt_3_10, current_ts):
     assert ta.turn_id == turn_id
     assert ta.debtor_id == 666
     assert ta.creditor_id == 888
-    assert ta.is_dispatching is False
+    assert ta.transfer_kind == TransferAttempt.KIND_SENDING
     assert ta.nominal_amount == 3000.0
     assert ta.collection_started_at == wt_3_10.collection_started_at
     assert ta.recipient == ""
@@ -3288,7 +3288,7 @@ def test_process_start_sending_signal(db_session, wt_3_10, current_ts):
     assert airs.turn_id == turn_id
     assert airs.debtor_id == 666
     assert airs.creditor_id == 888
-    assert airs.is_dispatching is False
+    assert airs.transfer_kind == TransferAttempt.KIND_SENDING
 
 
 def test_process_start_dispatching_signal(db_session, wt_3_10, current_ts):
@@ -3365,7 +3365,7 @@ def test_process_start_dispatching_signal(db_session, wt_3_10, current_ts):
     assert ta.turn_id == turn_id
     assert ta.debtor_id == 666
     assert ta.creditor_id == 123
-    assert ta.is_dispatching is True
+    assert ta.transfer_kind == TransferAttempt.KIND_DISPATCHING
     assert ta.nominal_amount == 11995.0
     assert ta.collection_started_at == wt_3_10.collection_started_at
     assert ta.recipient == ""
@@ -3379,7 +3379,7 @@ def test_process_start_dispatching_signal(db_session, wt_3_10, current_ts):
     assert airs.turn_id == turn_id
     assert airs.debtor_id == 666
     assert airs.creditor_id == 123
-    assert airs.is_dispatching is True
+    assert airs.transfer_kind == TransferAttempt.KIND_DISPATCHING
 
 
 def test_process_calculate_surplus_signal(db_session, current_ts):
@@ -3491,26 +3491,32 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=666,
+        turn_id=1,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=666,
+        turn_id=1,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=777,
+        turn_id=1,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000004,
         debtor_id=888,
+        turn_id=1,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000005,
         debtor_id=666,
+        turn_id=1,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000006,
         debtor_id=666,
+        turn_id=1,
     )
     cscs = CollectorStatusChange.query.all()
     cscs.sort(key=lambda t: (t.collector_id, t.debtor_id))

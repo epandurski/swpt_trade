@@ -274,6 +274,11 @@ def test_parse_transfer_note():
             "Trading session: 0\r\nFrom: Ffffffffffffffff\nTo: 0"
         ) == TransferNote(0, TransferNote.Kind.SENDING, -1, 0)
     )
+    assert (
+        TransferNote.parse(
+            "Trading session: 0\r\nSurplus: Ffffffffffffffff\nTo: 0"
+        ) == TransferNote(0, TransferNote.Kind.MOVING, -1, 0)
+    )
     with pytest.raises(ValueError):
         TransferNote.parse("")
     with pytest.raises(ValueError):
@@ -316,6 +321,8 @@ def test_parse_transfer_note():
         TransferNote.parse("Trading session: 1\nBuyer: 1\nFrom: 2\n")
     with pytest.raises(ValueError):
         TransferNote.parse("Trading session: 1\nBuyer: 1\nBuyer: 2\n")
+    with pytest.raises(ValueError):
+        TransferNote.parse("Trading session: 1\nBuyer: 1\nOwner: 2\n")
 
 
 def test_dispatching_data():

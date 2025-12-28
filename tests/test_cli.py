@@ -192,7 +192,7 @@ def test_trigger_transfers(app, db_session, current_ts):
             turn_id=1,
             debtor_id=222,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts,
             recipient="account123",
@@ -204,7 +204,7 @@ def test_trigger_transfers(app, db_session, current_ts):
             turn_id=1,
             debtor_id=333,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts,
             recipient="account123",
@@ -216,7 +216,7 @@ def test_trigger_transfers(app, db_session, current_ts):
             turn_id=1,
             debtor_id=444,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts,
             recipient="account123",
@@ -253,7 +253,7 @@ def test_trigger_transfers(app, db_session, current_ts):
     assert tts[0].turn_id == 1
     assert tts[0].debtor_id == 222
     assert tts[0].creditor_id == 123
-    assert tts[0].is_dispatching is True
+    assert tts[0].transfer_kind == m.TransferAttempt.KIND_DISPATCHING
 
 
 def test_roll_dispatchings(app, db_session, current_ts):
@@ -1292,7 +1292,7 @@ def test_delete_transfer_attempts(
         turn_id=1,
         debtor_id=1,
         creditor_id=1,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         nominal_amount=1000.0,
         collection_started_at=current_ts
     )
@@ -1301,7 +1301,7 @@ def test_delete_transfer_attempts(
         turn_id=1,
         debtor_id=1,
         creditor_id=1,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         nominal_amount=1000.0,
         collection_started_at=current_ts
     )
@@ -1310,7 +1310,7 @@ def test_delete_transfer_attempts(
         turn_id=1,
         debtor_id=1,
         creditor_id=1,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         nominal_amount=1000.0,
         collection_started_at=current_ts
     )
@@ -1319,7 +1319,7 @@ def test_delete_transfer_attempts(
         turn_id=1,
         debtor_id=1,
         creditor_id=1,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         nominal_amount=1000.0,
         collection_started_at=current_ts - timedelta(days=1000),
     )
@@ -2242,6 +2242,9 @@ def test_run_phase2_subphase0(
     assert acs[0].collector_id == 0x0000010000000000
     assert acs[0].account_id == "TestCollectorAccountId"
     assert acs[0].disabled_at is None
+    whcs = m.WorkerHoardedCurrency.query.all()
+    assert len(whcs) == 1
+    assert whcs[0].debtor_id == 666
 
 
 @pytest.mark.parametrize("has_sell_offers", [True, False])
@@ -3239,6 +3242,7 @@ def test_run_phase3_subphase5(
     assert len(csss) == 1
     assert csss[0].collector_id == 0x0000010000000004
     assert csss[0].debtor_id == 5557
+    assert csss[0].turn_id == wt1.turn_id
 
 
 @pytest.mark.parametrize("realm", ["0.#", "1.#"])

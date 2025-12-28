@@ -25,7 +25,7 @@ def test_process_rescheduled_transfers(app, db_session, current_ts):
             turn_id=1,
             debtor_id=222,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts,
             recipient="account123",
@@ -37,7 +37,7 @@ def test_process_rescheduled_transfers(app, db_session, current_ts):
             turn_id=1,
             debtor_id=333,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts,
             recipient="account123",
@@ -49,7 +49,7 @@ def test_process_rescheduled_transfers(app, db_session, current_ts):
             turn_id=1,
             debtor_id=444,
             creditor_id=123,
-            is_dispatching=True,
+            transfer_kind=TransferAttempt.KIND_DISPATCHING,
             nominal_amount=1000.5,
             collection_started_at=current_ts,
             recipient="account123",
@@ -78,7 +78,7 @@ def test_process_rescheduled_transfers(app, db_session, current_ts):
     assert tts[0].turn_id == 1
     assert tts[0].debtor_id == 222
     assert tts[0].creditor_id == 123
-    assert tts[0].is_dispatching is True
+    assert tts[0].transfer_kind == TransferAttempt.KIND_DISPATCHING
 
 
 def test_signal_dispatching_statuses_ready_to_send(

@@ -379,7 +379,7 @@ class TriggerTransferSignal(Signal):
         turn_id = fields.Integer()
         debtor_id = fields.Integer()
         creditor_id = fields.Integer()
-        is_dispatching = fields.Boolean()
+        transfer_kind = fields.Integer()
         inserted_at = fields.DateTime(data_key="ts")
 
     __marshmallow_schema__ = __marshmallow__()
@@ -389,7 +389,7 @@ class TriggerTransferSignal(Signal):
     turn_id = db.Column(db.Integer, nullable=False)
     debtor_id = db.Column(db.BigInteger, nullable=False)
     creditor_id = db.Column(db.BigInteger, nullable=False)
-    is_dispatching = db.Column(db.BOOLEAN, nullable=False)
+    transfer_kind = db.Column(db.SmallInteger, nullable=False)
 
     @property
     def routing_key(self):  # pragma: no cover
@@ -415,7 +415,7 @@ class AccountIdRequestSignal(Signal):
         turn_id = fields.Integer()
         debtor_id = fields.Integer()
         creditor_id = fields.Integer()
-        is_dispatching = fields.Boolean()
+        transfer_kind = fields.Integer()
         inserted_at = fields.DateTime(data_key="ts")
 
     __marshmallow_schema__ = __marshmallow__()
@@ -425,7 +425,7 @@ class AccountIdRequestSignal(Signal):
     turn_id = db.Column(db.Integer, nullable=False)
     debtor_id = db.Column(db.BigInteger, nullable=False)
     creditor_id = db.Column(db.BigInteger, nullable=False)
-    is_dispatching = db.Column(db.BOOLEAN, nullable=False)
+    transfer_kind = db.Column(db.SmallInteger, nullable=False)
 
     @property
     def routing_key(self):  # pragma: no cover
@@ -447,7 +447,7 @@ class AccountIdResponseSignal(Signal):
         turn_id = fields.Integer()
         debtor_id = fields.Integer()
         creditor_id = fields.Integer()
-        is_dispatching = fields.Boolean()
+        transfer_kind = fields.Integer()
         account_id = fields.String()
         account_id_version = fields.Integer()
         inserted_at = fields.DateTime(data_key="ts")
@@ -459,7 +459,7 @@ class AccountIdResponseSignal(Signal):
     turn_id = db.Column(db.Integer, nullable=False)
     debtor_id = db.Column(db.BigInteger, nullable=False)
     creditor_id = db.Column(db.BigInteger, nullable=False)
-    is_dispatching = db.Column(db.BOOLEAN, nullable=False)
+    transfer_kind = db.Column(db.SmallInteger, nullable=False)
     account_id = db.Column(db.String, nullable=False)
     account_id_version = db.Column(db.BigInteger, nullable=False)
 
@@ -537,6 +537,7 @@ class CalculateSurplusSignal(Signal):
         type = fields.Constant("CalculateSurplus")
         collector_id = fields.Integer()
         debtor_id = fields.Integer()
+        turn_id = fields.Integer()
         inserted_at = fields.DateTime(data_key="ts")
 
     __marshmallow_schema__ = __marshmallow__()
@@ -544,6 +545,7 @@ class CalculateSurplusSignal(Signal):
     signal_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     collector_id = db.Column(db.BigInteger, nullable=False)
     debtor_id = db.Column(db.BigInteger, nullable=False)
+    turn_id = db.Column(db.Integer, nullable=False)
 
     @property
     def routing_key(self):  # pragma: no cover

@@ -59,7 +59,7 @@ def process_rescheduled_transfers() -> int:
                     TransferAttempt.turn_id,
                     TransferAttempt.debtor_id,
                     TransferAttempt.creditor_id,
-                    TransferAttempt.is_dispatching,
+                    TransferAttempt.transfer_kind,
                 )
                 .where(
                     TransferAttempt.rescheduled_for != null(),

@@ -585,7 +585,7 @@ def test_trigger_transfer_message():
     "debtor_id": 666,
     "turn_id": 1,
     "creditor_id": 123,
-    "is_dispatching": true,
+    "transfer_kind": 1,
     "ts": "2022-01-01T00:00:00Z",
     "unknown": "ignored"
     }""")
@@ -599,7 +599,7 @@ def test_trigger_transfer_message():
     assert data['debtor_id'] == 666
     assert type(data['creditor_id']) is int
     assert data['creditor_id'] == 123
-    assert data['is_dispatching'] is True
+    assert data['transfer_kind'] == 1
     assert data['ts'] == datetime.fromisoformat('2022-01-01T00:00:00+00:00')
     assert "unknown" not in data
 
@@ -610,7 +610,7 @@ def test_trigger_transfer_message():
         "debtor_id": 666,
         "turn_id": 1,
         "creditor_id": 123,
-        "is_dispatching": true,
+        "transfer_kind": 1,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 
@@ -621,7 +621,7 @@ def test_trigger_transfer_message():
         "debtor_id": 0,
         "turn_id": 1,
         "creditor_id": 123,
-        "is_dispatching": true,
+        "transfer_kind": 1,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 
@@ -642,7 +642,7 @@ def test_account_id_request_message():
     "debtor_id": 666,
     "turn_id": 1,
     "creditor_id": 123,
-    "is_dispatching": true,
+    "transfer_kind": 1,
     "ts": "2022-01-01T00:00:00Z",
     "unknown": "ignored"
     }""")
@@ -656,7 +656,7 @@ def test_account_id_request_message():
     assert data['debtor_id'] == 666
     assert type(data['creditor_id']) is int
     assert data['creditor_id'] == 123
-    assert data['is_dispatching'] is True
+    assert data['transfer_kind'] == 1
     assert data['ts'] == datetime.fromisoformat('2022-01-01T00:00:00+00:00')
     assert "unknown" not in data
 
@@ -667,7 +667,7 @@ def test_account_id_request_message():
         "debtor_id": 666,
         "turn_id": 1,
         "creditor_id": 123,
-        "is_dispatching": true,
+        "transfer_kind": 1,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 
@@ -678,7 +678,7 @@ def test_account_id_request_message():
         "debtor_id": 0,
         "turn_id": 1,
         "creditor_id": 123,
-        "is_dispatching": true,
+        "transfer_kind": 1,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 
@@ -699,7 +699,7 @@ def test_account_id_response_message():
     "debtor_id": 666,
     "turn_id": 1,
     "creditor_id": 123,
-    "is_dispatching": true,
+    "transfer_kind": 1,
     "account_id": "12345",
     "account_id_version": 789,
     "ts": "2022-01-01T00:00:00Z",
@@ -715,7 +715,7 @@ def test_account_id_response_message():
     assert data['debtor_id'] == 666
     assert type(data['creditor_id']) is int
     assert data['creditor_id'] == 123
-    assert data['is_dispatching'] is True
+    assert data['transfer_kind'] == 1
     assert data['account_id'] == "12345"
     assert type(data['account_id_version']) is int
     assert data['account_id_version'] == 789
@@ -729,7 +729,7 @@ def test_account_id_response_message():
         "debtor_id": 666,
         "turn_id": 1,
         "creditor_id": 123,
-        "is_dispatching": true,
+        "transfer_kind": 1,
         "account_id": "12345",
         "account_id_version": 789,
         "ts": "2022-01-01T00:00:00Z"
@@ -742,7 +742,7 @@ def test_account_id_response_message():
         "debtor_id": 0,
         "turn_id": 1,
         "creditor_id": 123,
-        "is_dispatching": true,
+        "transfer_kind": 1,
         "account_id": "12345",
         "account_id_version": 789,
         "ts": "2022-01-01T00:00:00Z"
@@ -859,6 +859,7 @@ def test_calculate_surplus_message():
     "type": "CalculateSurplus",
     "collector_id": 999,
     "debtor_id": 666,
+    "turn_id": 123,
     "ts": "2022-01-01T00:00:00Z",
     "unknown": "ignored"
     }""")
@@ -868,6 +869,8 @@ def test_calculate_surplus_message():
     assert data['collector_id'] == 999
     assert type(data['debtor_id']) is int
     assert data['debtor_id'] == 666
+    assert type(data['turn_id']) is int
+    assert data['turn_id'] == 123
     assert data['ts'] == datetime.fromisoformat('2022-01-01T00:00:00+00:00')
     assert "unknown" not in data
 
@@ -876,6 +879,7 @@ def test_calculate_surplus_message():
         "type": "WrongType",
         "collector_id": 999,
         "debtor_id": 666,
+        "turn_id": 123,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 
@@ -884,6 +888,7 @@ def test_calculate_surplus_message():
         "type": "CalculateSurplus",
         "collector_id": 999,
         "debtor_id": 0,
+        "turn_id": 123,
         "ts": "2022-01-01T00:00:00Z"
         }""")
 

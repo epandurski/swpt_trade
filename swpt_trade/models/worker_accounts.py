@@ -2,7 +2,7 @@ from __future__ import annotations
 from datetime import timedelta
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
-from .common import get_now_utc, TS0
+from .common import get_now_utc, TS0, MIN_INT32
 
 
 class NeededWorkerAccount(db.Model):
@@ -86,6 +86,11 @@ class WorkerAccount(db.Model):
                 " change, or a trade has been made on behalf of the owner of"
                 " the creditors agent node. This is necessary in order to"
                 " avoid double-spending and double-buying.",
+    )
+    last_surplus_moving_turn_id = db.Column(
+        db.Integer,
+        nullable=False,
+        default=MIN_INT32,
     )
     __table_args__ = (
         db.CheckConstraint(interest_rate >= -100.0),
@@ -254,6 +259,18 @@ class UsableCollector(db.Model):
                 ' records from the solver\'s "collector_account" table.'
                 ' "Worker" servers will use this local copy so as to avoid'
                 ' querying the central database too often.'
+            ),
+        },
+    )
+
+
+class WorkerHoardedCurrency(db.Model):
+    debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
+    __table_args__ = (
+        {
+            "comment": (
+                'Represents the fact that the owner of the creditors agent'
+                ' node wants to buy (hoard) the given currency.'
             ),
         },
     )

@@ -50,6 +50,7 @@ from swpt_trade.models import (
     HoardedCurrency,
     UsableCollector,
     AccountLock,
+    TransferAttempt,
     SellOffer,
     BuyOffer,
     CreditorParticipation,
@@ -66,6 +67,7 @@ from swpt_trade.models import (
     CollectorDispatching,
     CollectorStatusChange,
     InterestRateChange,
+    WorkerHoardedCurrency,
 )
 
 NEEDED_WORKER_ACCOUNT_PK = tuple_(
@@ -458,6 +460,24 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
                 .where(HoardedCurrency.turn_id == turn_id)
             ).all()
         }
+
+    db.session.execute(
+        delete(WorkerHoardedCurrency)
+        .execution_options(synchronize_session=False)
+    )
+    if hoarded_currency_pegs:
+        db.session.execute(
+            insert(WorkerHoardedCurrency).execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            [
+                {
+                    "debtor_id": debtor_id,
+                }
+                for debtor_id in hoarded_currency_pegs
+            ],
+        )
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -1250,7 +1270,7 @@ def run_phase3_subphase5(turn_id: int) -> None:
 
         _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
-        _update_worker_account_surplus_amounts()
+        _update_worker_account_surplus_amounts(turn_id)
         _kill_broken_worker_accounts()
 
 
@@ -1323,6 +1343,23 @@ def _update_needed_worker_account_blocked_amounts() -> None:
         .correlate(NeededWorkerAccount)
     )
 
+    # Pending transfers (moving) of surpluses to other accounts.
+    to_move_subq = (
+        select(
+            func.sum(
+                cast(1.0001 * TransferAttempt.nominal_amount + 1.0, NUMERIC)
+            )
+        )
+        .where(
+            TransferAttempt.collector_id == NeededWorkerAccount.creditor_id,
+            TransferAttempt.debtor_id == NeededWorkerAccount.debtor_id,
+            TransferAttempt.transfer_kind
+            == text(str(TransferAttempt.KIND_MOVING)),
+        )
+        .scalar_subquery()
+        .correlate(NeededWorkerAccount)
+    )
+
     nwa_row_filter = and_(
         # We must calculate the blocked amount only after the
         # collection has been disabled for a week or two. This gives
@@ -1364,6 +1401,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                     NeededWorkerAccount.debtor_id,
                     coalesce(locked_subq, text("0")).label("locked"),
                     coalesce(to_relay_subq, text("0")).label("to_relay"),
+                    coalesce(to_move_subq, text("0")).label("to_move"),
                 )
                 .select_from(NeededWorkerAccount)
                 .where(nwa_row_filter)
@@ -1374,7 +1412,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                         "b_creditor_id": row.creditor_id,
                         "b_debtor_id": row.debtor_id,
                         "b_blocked_amount": contain_principal_overflow(
-                            int(row.locked + row.to_relay)
+                            int(row.locked + row.to_relay + row.to_move)
                         ),
                     }
                     for row in rows
@@ -1382,7 +1420,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                 db.session.execute(nwa_update_statement, dicts_to_update)
 
 
-def _update_worker_account_surplus_amounts() -> None:
+def _update_worker_account_surplus_amounts(turn_id: int) -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
@@ -1405,6 +1443,7 @@ def _update_worker_account_surplus_amounts() -> None:
                             {
                                 "collector_id": row.creditor_id,
                                 "debtor_id": row.debtor_id,
+                                "turn_id": turn_id,
                             }
                         )
                     else:

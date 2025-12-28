@@ -62,7 +62,7 @@ TRANSFER_ATTEMPT_PK = tuple_(
     TransferAttempt.turn_id,
     TransferAttempt.debtor_id,
     TransferAttempt.creditor_id,
-    TransferAttempt.is_dispatching,
+    TransferAttempt.transfer_kind,
 )
 ACCOUNT_LOCK_LOAD_ONLY_PK = load_only(
     AccountLock.creditor_id,
@@ -892,7 +892,7 @@ def process_account_id_request_signal(
         turn_id: int,
         debtor_id: int,
         creditor_id: int,
-        is_dispatching: bool,
+        transfer_kind: int,
 ) -> bool:
     row = (
         (
@@ -922,7 +922,7 @@ def process_account_id_request_signal(
             )
             .one_or_none()
         )
-        or ("", MIN_INT64)
+        or ("", MIN_INT64 + 1)
     )
 
     db.session.add(
@@ -931,7 +931,7 @@ def process_account_id_request_signal(
             turn_id=turn_id,
             debtor_id=debtor_id,
             creditor_id=creditor_id,
-            is_dispatching=is_dispatching,
+            transfer_kind=transfer_kind,
             account_id=row[0],
             account_id_version=row[1],
         )
@@ -945,7 +945,7 @@ def process_account_id_response_signal(
         turn_id: int,
         debtor_id: int,
         creditor_id: int,
-        is_dispatching: bool,
+        transfer_kind: int,
         account_id: str,
         account_id_version: int,
         transfers_healthy_max_commit_delay: timedelta,
@@ -958,7 +958,7 @@ def process_account_id_response_signal(
             turn_id=turn_id,
             debtor_id=debtor_id,
             creditor_id=creditor_id,
-            is_dispatching=is_dispatching,
+            transfer_kind=transfer_kind,
         )
         .with_for_update()
         .one_or_none()
@@ -968,6 +968,18 @@ def process_account_id_response_signal(
             and attempt.unknown_recipient
             and attempt.recipient_version < account_id_version
     ):
+        # When the account ID can not be obtained, we can safely
+        # forget about surplus-moving transfers that have no chance to
+        # succeed. This can happen when, for example, the owner's
+        # account has not been configured correctly.
+        if (
+                account_id == ""
+                and transfer_kind == TransferAttempt.KIND_MOVING
+                and not (attempt.finalized_at and attempt.failure_code is None)
+        ):  # pragma: no cover
+            db.session.delete(attempt)
+            return
+
         attempt.recipient_version = account_id_version
 
         if attempt.recipient != account_id:
@@ -991,7 +1003,7 @@ def process_trigger_transfer_signal(
         turn_id: int,
         debtor_id: int,
         creditor_id: int,
-        is_dispatching: bool,
+        transfer_kind: int,
         transfers_healthy_max_commit_delay: timedelta,
         transfers_amount_cut: float,
 ) -> None:
@@ -1002,7 +1014,7 @@ def process_trigger_transfer_signal(
             turn_id=turn_id,
             debtor_id=debtor_id,
             creditor_id=creditor_id,
-            is_dispatching=is_dispatching,
+            transfer_kind=transfer_kind,
         )
         .with_for_update()
         .one_or_none()
@@ -1081,7 +1093,7 @@ def _trigger_transfer_if_possible(
                 turn_id=attempt.turn_id,
                 debtor_id=attempt.debtor_id,
                 creditor_id=attempt.creditor_id,
-                is_dispatching=attempt.is_dispatching,
+                transfer_kind=attempt.transfer_kind,
             )
         )
         attempt.reschedule_failed_attempt(
@@ -1115,12 +1127,12 @@ def _calc_transfer_params(
     max_commit_delay = attempt.calc_backoff_seconds(
         transfers_healthy_max_commit_delay.total_seconds()
     )
-    if not attempt.is_dispatching:  # pragma: no cover
-        # We do not seize the usual portion of the transfer when
-        # transferring between collector accounts. In this case, we
-        # still reduce the amount imperceptibly, just to be on the
+    if attempt.transfer_kind != TransferAttempt.KIND_DISPATCHING:
+        # We seize the "cut" portion of the transfer only when
+        # dispatching to the buyers' accounts. For all other transfer
+        # kinds, we reduce the amount imperceptibly, just to be on the
         # safe side of the rounding errors.
-        transfers_amount_cut = 1e-10
+        transfers_amount_cut = 1e-10  # pragma: no cover
 
     assert 0 <= max_commit_delay <= MAX_INT32
     past_demmurage_period = current_ts - attempt.collection_started_at
@@ -1312,11 +1324,7 @@ def put_prepared_transfer_through_transfer_attempts(
                     transfer_note=str(
                         TransferNote(
                             attempt.turn_id,
-                            (
-                                TransferNote.Kind.DISPATCHING
-                                if attempt.is_dispatching
-                                else TransferNote.Kind.SENDING
-                            ),
+                            attempt.transfer_note_kind,
                             attempt.collector_id,
                             attempt.creditor_id,
                         )
@@ -1410,7 +1418,7 @@ def _reschedule_failed_attempt(
                 turn_id=attempt.turn_id,
                 debtor_id=attempt.debtor_id,
                 creditor_id=attempt.creditor_id,
-                is_dispatching=attempt.is_dispatching,
+                transfer_kind=attempt.transfer_kind,
             )
         )
         attempt.reschedule_failed_attempt(
@@ -1438,7 +1446,7 @@ def process_rescheduled_transfers_batch(
             TransferAttempt.turn_id,
             TransferAttempt.debtor_id,
             TransferAttempt.creditor_id,
-            TransferAttempt.is_dispatching,
+            TransferAttempt.transfer_kind,
         )
         .select_from(TransferAttempt)
         .where(
@@ -1464,7 +1472,7 @@ def process_rescheduled_transfers_batch(
                     turn_id=attempt.turn_id,
                     debtor_id=attempt.debtor_id,
                     creditor_id=attempt.creditor_id,
-                    is_dispatching=attempt.is_dispatching,
+                    transfer_kind=attempt.transfer_kind,
                     inserted_at=current_ts,
                 )
                 for attempt in to_trigger
@@ -1566,7 +1574,7 @@ def process_start_sending_signal(
                     "debtor_id",
                     "turn_id",
                     "creditor_id",
-                    "is_dispatching",
+                    "transfer_kind",
                     "nominal_amount",
                     "collection_started_at",
                     "inserted_at",
@@ -1579,7 +1587,7 @@ def process_start_sending_signal(
                     WorkerSending.debtor_id,
                     WorkerSending.turn_id,
                     WorkerSending.to_collector_id,
-                    false(),
+                    TransferAttempt.KIND_SENDING,
                     nominal_amount_expression,
                     literal(worker_turn.collection_started_at),
                     literal(current_ts),
@@ -1599,14 +1607,14 @@ def process_start_sending_signal(
                     "debtor_id",
                     "turn_id",
                     "creditor_id",
-                    "is_dispatching",
+                    "transfer_kind",
                 ],
                 select(
                     WorkerSending.from_collector_id,
                     WorkerSending.debtor_id,
                     WorkerSending.turn_id,
                     WorkerSending.to_collector_id,
-                    false(),
+                    TransferAttempt.KIND_SENDING,
                 )
                 .where(worker_sending_predicate)
             )
@@ -1699,7 +1707,7 @@ def process_start_dispatching_signal(
                     "debtor_id",
                     "turn_id",
                     "creditor_id",
-                    "is_dispatching",
+                    "transfer_kind",
                     "nominal_amount",
                     "collection_started_at",
                     "inserted_at",
@@ -1712,7 +1720,7 @@ def process_start_dispatching_signal(
                     WorkerDispatching.debtor_id,
                     WorkerDispatching.turn_id,
                     WorkerDispatching.creditor_id,
-                    true(),
+                    TransferAttempt.KIND_DISPATCHING,
                     nominal_amount_expression,
                     literal(worker_turn.collection_started_at),
                     literal(current_ts),
@@ -1732,14 +1740,14 @@ def process_start_dispatching_signal(
                     "debtor_id",
                     "turn_id",
                     "creditor_id",
-                    "is_dispatching",
+                    "transfer_kind",
                 ],
                 select(
                     WorkerDispatching.collector_id,
                     WorkerDispatching.debtor_id,
                     WorkerDispatching.turn_id,
                     WorkerDispatching.creditor_id,
-                    true(),
+                    TransferAttempt.KIND_DISPATCHING,
                 )
                 .where(worker_dispatching_predicate)
             )

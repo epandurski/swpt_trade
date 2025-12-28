@@ -16,7 +16,7 @@ from swpt_pythonlib.utils import i64_to_u64, u64_to_i64
 RE_PERIOD = re.compile(r"^([\d.eE+-]+)([smhdw]?)\s*$")
 RE_TRANSFER_NOTE = re.compile(
     r'^Trading session: ([0-9A-Fa-f]{1,16})\r?\n'
-    r'(Buyer|From|Seller): ([0-9A-Fa-f]{1,16})\r?\n'
+    r'(Buyer|From|Seller|Surplus): ([0-9A-Fa-f]{1,16})\r?\n'
     r'(Seller|To|Buyer): ([0-9A-Fa-f]{1,16})(?:\r?\n)?$'
 )
 DATETIME0 = datetime(2024, 1, 1, tzinfo=timezone.utc)  # 2024-01-01 is Monday.
@@ -38,6 +38,7 @@ class TransferNote:
         COLLECTING = ("Buyer", "Seller")
         SENDING = ("From", "To")
         DISPATCHING = ("Seller", "Buyer")
+        MOVING = ("Surplus", "To")
 
         @classmethod
         def from_strings(cls, first: str, second: str) -> Self:
@@ -75,6 +76,10 @@ class TransferNote:
                     or acquired_amount > 0 and creditor_id != self.second_id
                 )
                 or note_kind == K.DISPATCHING and (
+                    acquired_amount < 0 and creditor_id != self.first_id
+                    or acquired_amount > 0 and creditor_id != self.second_id
+                )
+                or note_kind == K.MOVING and (
                     acquired_amount < 0 and creditor_id != self.first_id
                     or acquired_amount > 0 and creditor_id != self.second_id
                 )
