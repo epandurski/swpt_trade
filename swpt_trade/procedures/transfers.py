@@ -968,18 +968,14 @@ def process_account_id_response_signal(
             and attempt.unknown_recipient
             and attempt.recipient_version < account_id_version
     ):
+        # When the account ID can not be obtained, we can safely
+        # forget about surplus-moving transfers that have no chance to
+        # succeed. This can happen when, for example, the owner's
+        # account has not been configured correctly.
         if (
-                # When the account ID can not be obtained, we can
-                # safely forget about surplus-moving transfers that
-                # have no chance to succeed. This can happen when, for
-                # example, the owner's account has not been configured
-                # correctly.
                 account_id == ""
                 and transfer_kind == TransferAttempt.KIND_MOVING
-                and not (
-                    TransferAttempt.finalized_at
-                    and TransferAttempt.failure_code is None
-                )
+                and not (attempt.finalized_at and attempt.failure_code is None)
         ):  # pragma: no cover
             db.session.delete(attempt)
             return
