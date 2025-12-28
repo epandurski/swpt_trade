@@ -2,7 +2,7 @@ from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
-from sqlalchemy.sql.expression import tuple_
+from sqlalchemy.sql.expression import tuple_, not_, and_, null
 from swpt_trade.extensions import db
 from swpt_trade.models import TransferAttempt
 
@@ -17,14 +17,14 @@ class TransferAttemptsScanner(TableScanner):
         table.c.turn_id,
         table.c.debtor_id,
         table.c.creditor_id,
-        table.c.is_dispatching,
+        table.c.transfer_kind,
     )
     columns = [
         TransferAttempt.collector_id,
         TransferAttempt.turn_id,
         TransferAttempt.debtor_id,
         TransferAttempt.creditor_id,
-        TransferAttempt.is_dispatching,
+        TransferAttempt.transfer_kind,
         TransferAttempt.collection_started_at,
     ]
 
@@ -32,7 +32,7 @@ class TransferAttemptsScanner(TableScanner):
         super().__init__()
         cfg = current_app.config
         self.sharding_realm = cfg["SHARDING_REALM"]
-        self.retry_period = (
+        self.retaining_period = (
             cfg["APP_TURN_MAX_COMMIT_PERIOD"]
             + max(
                 timedelta(days=cfg["APP_WORKER_SENDING_SLACK_DAYS"]),
@@ -67,7 +67,7 @@ class TransferAttemptsScanner(TableScanner):
         c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
         c_creditor_id = c.creditor_id
-        c_is_dispatching = c.is_dispatching
+        c_transfer_kind = c.transfer_kind
 
         def belongs_to_parent_shard(row) -> bool:
             collector_id = row[c_collector_id]
@@ -82,7 +82,7 @@ class TransferAttemptsScanner(TableScanner):
                 row[c_turn_id],
                 row[c_debtor_id],
                 row[c_creditor_id],
-                row[c_is_dispatching],
+                row[c_transfer_kind],
             )
             for row in rows
             if belongs_to_parent_shard(row)
@@ -105,9 +105,9 @@ class TransferAttemptsScanner(TableScanner):
         c_turn_id = c.turn_id
         c_debtor_id = c.debtor_id
         c_creditor_id = c.creditor_id
-        c_is_dispatching = c.is_dispatching
+        c_transfer_kind = c.transfer_kind
         c_collection_started_at = c.collection_started_at
-        cutoff_ts = current_ts - self.retry_period
+        cutoff_ts = current_ts - self.retaining_period
 
         def is_stale(row) -> bool:
             return row[c_collection_started_at] < cutoff_ts
@@ -118,14 +118,30 @@ class TransferAttemptsScanner(TableScanner):
                 row[c_turn_id],
                 row[c_debtor_id],
                 row[c_creditor_id],
-                row[c_is_dispatching],
+                row[c_transfer_kind],
             )
             for row in rows
             if is_stale(row)
         ]
         if pks_to_delete:
             to_delete = (
-                TransferAttempt.query.filter(self.pk.in_(pks_to_delete))
+                TransferAttempt.query
+                .filter(
+                    self.pk.in_(pks_to_delete),
+                    not_(
+                        # Deleting surplus-moving transfers that have
+                        # a chance to succeed may interfere with the
+                        # correct calculation of surpluses. Here we do
+                        # our best to avoid this.
+                        and_(
+                            TransferAttempt.transfer_kind
+                            == TransferAttempt.KIND_MOVING,
+                            TransferAttempt.finalized_at != null(),
+                            TransferAttempt.failure_code == null(),
+                            TransferAttempt.attempted_at >= cutoff_ts,
+                        )
+                    )
+                )
                 .with_for_update(skip_locked=True)
                 .all()
             )

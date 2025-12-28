@@ -398,7 +398,7 @@ def test_transfer_attempt_properties(current_ts):
         collector_id=666,
         turn_id=1,
         debtor_id=1,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         nominal_amount=1000.0,
         collection_started_at=current_ts,
         recipient="",

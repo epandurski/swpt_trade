@@ -361,7 +361,7 @@ def test_on_trigger_transfer_signal(db_session, actors):
         turn_id=1,
         debtor_id=D_ID,
         creditor_id=C_ID,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         ts=datetime.now(tz=timezone.utc),
     )
 
@@ -372,7 +372,7 @@ def test_on_account_id_request_signal(db_session, actors):
         turn_id=1,
         debtor_id=D_ID,
         creditor_id=C_ID,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         ts=datetime.now(tz=timezone.utc),
     )
 
@@ -383,7 +383,7 @@ def test_on_account_id_response_signal(db_session, actors):
         turn_id=1,
         debtor_id=D_ID,
         creditor_id=C_ID,
-        is_dispatching=True,
+        transfer_kind=m.TransferAttempt.KIND_DISPATCHING,
         account_id=str(C_ID),
         account_id_version=1,
         ts=datetime.now(tz=timezone.utc),
@@ -412,6 +412,7 @@ def test_on_calculate_surplus_signal(db_session, actors):
     actors._on_calculate_surplus_signal(
         collector_id=999,
         debtor_id=D_ID,
+        turn_id=1,
         ts=datetime.now(tz=timezone.utc),
     )
 

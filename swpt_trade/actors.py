@@ -12,6 +12,7 @@ from swpt_trade.models import (
     AGENT_TRANSFER_NOTE_FORMAT,
     CT_AGENT,
     message_belongs_to_this_shard,
+    TransferAttempt,
 )
 
 
@@ -236,8 +237,7 @@ def _on_account_transfer_signal(
                     ts=ts,
                 )
 
-        else:
-            assert note_kind == K.DISPATCHING
+        elif note_kind == K.DISPATCHING:
             if acquired_amount < 0:
                 procedures.delete_worker_dispatching_record(
                     collector_id=creditor_id,
@@ -256,6 +256,8 @@ def _on_account_transfer_signal(
                     account_transfer_number=transfer_number,
                     is_collector_trade=is_the_creditor_a_collector,
                 )
+        else:  # pragma: no cover
+            assert note_kind == K.MOVING
 
 
 def _on_rejected_agent_transfer_signal(
@@ -626,7 +628,7 @@ def _on_trigger_transfer_signal(
     turn_id: int,
     debtor_id: int,
     creditor_id: int,
-    is_dispatching: bool,
+    transfer_kind: int,
     ts: datetime,
     *args,
     **kwargs
@@ -637,7 +639,7 @@ def _on_trigger_transfer_signal(
         turn_id=turn_id,
         debtor_id=debtor_id,
         creditor_id=creditor_id,
-        is_dispatching=is_dispatching,
+        transfer_kind=transfer_kind,
         transfers_healthy_max_commit_delay=(
             cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"]
         ),
@@ -650,28 +652,29 @@ def _on_account_id_request_signal(
     turn_id: int,
     debtor_id: int,
     creditor_id: int,
-    is_dispatching: bool,
+    transfer_kind: int,
     ts: datetime,
     *args,
     **kwargs
 ) -> None:
-    if not procedures.process_account_id_request_signal(
+    found = procedures.process_account_id_request_signal(
         collector_id=collector_id,
         turn_id=turn_id,
         debtor_id=debtor_id,
         creditor_id=creditor_id,
-        is_dispatching=is_dispatching,
-    ):
+        transfer_kind=transfer_kind,
+    )
+    if not found and transfer_kind != TransferAttempt.KIND_MOVING:
         _LOGGER.error(
             'Can not fulfill account ID request:'
             ' collector_id=%d, turn_id=%d,'
             ' debtor_id=%d, creditor_id=%d, '
-            ' is_dispatching=%s.',
+            ' transfer_kind=%d.',
             collector_id,
             turn_id,
             debtor_id,
             creditor_id,
-            is_dispatching,
+            transfer_kind,
         )
 
 
@@ -680,7 +683,7 @@ def _on_account_id_response_signal(
     turn_id: int,
     debtor_id: int,
     creditor_id: int,
-    is_dispatching: bool,
+    transfer_kind: int,
     account_id: str,
     account_id_version: int,
     ts: datetime,
@@ -693,7 +696,7 @@ def _on_account_id_response_signal(
         turn_id=turn_id,
         debtor_id=debtor_id,
         creditor_id=creditor_id,
-        is_dispatching=is_dispatching,
+        transfer_kind=transfer_kind,
         account_id=account_id,
         account_id_version=account_id_version,
         transfers_healthy_max_commit_delay=(
@@ -736,6 +739,7 @@ def _on_start_dispatching_signal(
 def _on_calculate_surplus_signal(
     collector_id: int,
     debtor_id: int,
+    turn_id: int,
     ts: datetime,
     *args,
     **kwargs
@@ -743,6 +747,7 @@ def _on_calculate_surplus_signal(
     procedures.process_calculate_surplus_signal(
         collector_id=collector_id,
         debtor_id=debtor_id,
+        turn_id=turn_id,
     )
 
 

@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from .common import get_now_utc, MAX_INT16, MAX_INT32, MIN_INT64, MAX_INT64
 from sqlalchemy.dialects import postgresql as pg
 from sqlalchemy.sql.expression import null, true, false, or_, and_
+from swpt_trade.utils import TransferNote
 from swpt_trade.extensions import db
 
 
@@ -543,6 +544,14 @@ class TransferAttempt(db.Model):
     NEWER_INTEREST_RATE = 2
     RECIPIENT_IS_UNREACHABLE = 3
     INSUFFICIENT_AVAILABLE_AMOUNT = 4
+    KIND_SENDING = 0
+    KIND_DISPATCHING = 1
+    KIND_MOVING = 2
+    TRANSFER_NOTE_KINDS: dict[int, TransferNote.Kind] = {
+        KIND_SENDING: TransferNote.Kind.SENDING,
+        KIND_DISPATCHING: TransferNote.Kind.DISPATCHING,
+        KIND_MOVING: TransferNote.Kind.MOVING,
+    }
 
     collector_id = db.Column(
         db.BigInteger,
@@ -556,13 +565,14 @@ class TransferAttempt(db.Model):
         primary_key=True,
         comment="This is the creditor ID of the recipient.",
     )
-    is_dispatching = db.Column(
-        db.BOOLEAN,
+    transfer_kind = db.Column(
+        db.SmallInteger,
         primary_key=True,
         comment=(
-            "Will be TRUE when the collector is dispatching some amount to"
-            " a buyer, and FALSE when the collector is sending some amount"
-            " to another collector."
+            "Will be 0 when the collector is sending some amount to"
+            " another collector, 1 when the collector is dispatching"
+            " some amount to a buyer, and 2 when the surplus amount is"
+            " being moved.",
         ),
     )
     nominal_amount = db.Column(db.FLOAT, nullable=False)
@@ -612,6 +622,7 @@ class TransferAttempt(db.Model):
     backoff_counter = db.Column(db.SmallInteger, nullable=False, default=0)
     fatal_error = db.Column(db.String)
     __table_args__ = (
+        db.CheckConstraint(and_(transfer_kind >= 0, transfer_kind <= 2)),
         db.CheckConstraint(nominal_amount >= 1.0),
         db.CheckConstraint(amount > 0),
         db.CheckConstraint(backoff_counter >= 0),
@@ -680,6 +691,12 @@ class TransferAttempt(db.Model):
             rescheduled_for,
             postgresql_where=rescheduled_for != null(),
         ),
+        db.Index(
+            "idx_transfer_moving_transfer_kind",
+            collector_id,
+            debtor_id,
+            postgresql_where=transfer_kind == 2,
+        ),
         {
             "comment": (
                 "Represents a past or future attempt to transfer some amount"
@@ -712,6 +729,10 @@ class TransferAttempt(db.Model):
                 )
             )
         )
+
+    @property
+    def transfer_note_kind(self) -> TransferNote.Kind:
+        return self.TRANSFER_NOTE_KINDS[self.transfer_kind]
 
     def calc_backoff_seconds(self, min_backoff_seconds: float) -> int:
         min_backoff_seconds = max(0, int(min_backoff_seconds))

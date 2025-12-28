@@ -202,7 +202,9 @@ class TriggerTransferMessageSchema(ValidateTypeMixin, Schema):
     creditor_id = fields.Integer(
         required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
     )
-    is_dispatching = fields.Boolean(required=True)
+    transfer_kind = fields.Integer(
+        required=True, validate=validate.Range(min=0, max=3)
+    )
     ts = fields.DateTime(required=True)
 
     @validates("debtor_id")
@@ -230,7 +232,9 @@ class AccountIdRequestMessageSchema(ValidateTypeMixin, Schema):
     creditor_id = fields.Integer(
         required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
     )
-    is_dispatching = fields.Boolean(required=True)
+    transfer_kind = fields.Integer(
+        required=True, validate=validate.Range(min=0, max=3)
+    )
     ts = fields.DateTime(required=True)
 
     @validates("debtor_id")
@@ -258,7 +262,9 @@ class AccountIdResponseMessageSchema(ValidateTypeMixin, Schema):
     creditor_id = fields.Integer(
         required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
     )
-    is_dispatching = fields.Boolean(required=True)
+    transfer_kind = fields.Integer(
+        required=True, validate=validate.Range(min=0, max=3)
+    )
     account_id = fields.String(
         required=True, validate=validate.Length(max=ACCOUNT_ID_MAX_BYTES)
     )
@@ -333,6 +339,9 @@ class CalculateSurplusMessageSchema(ValidateTypeMixin, Schema):
     )
     debtor_id = fields.Integer(
         required=True, validate=validate.Range(min=MIN_INT64, max=MAX_INT64)
+    )
+    turn_id = fields.Integer(
+        required=True, validate=validate.Range(min=MIN_INT32, max=MAX_INT32)
     )
     ts = fields.DateTime(required=True)
 

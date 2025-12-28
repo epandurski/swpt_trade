@@ -38,7 +38,7 @@ def upgrade_():
     sa.Column('turn_id', sa.Integer(), nullable=False),
     sa.Column('debtor_id', sa.BigInteger(), nullable=False),
     sa.Column('creditor_id', sa.BigInteger(), nullable=False),
-    sa.Column('is_dispatching', sa.BOOLEAN(), nullable=False),
+    sa.Column('transfer_kind', sa.SmallInteger(), nullable=False),
     sa.Column('inserted_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('signal_id')
     )
@@ -48,7 +48,7 @@ def upgrade_():
     sa.Column('turn_id', sa.Integer(), nullable=False),
     sa.Column('debtor_id', sa.BigInteger(), nullable=False),
     sa.Column('creditor_id', sa.BigInteger(), nullable=False),
-    sa.Column('is_dispatching', sa.BOOLEAN(), nullable=False),
+    sa.Column('transfer_kind', sa.SmallInteger(), nullable=False),
     sa.Column('account_id', sa.String(), nullable=False),
     sa.Column('account_id_version', sa.BigInteger(), nullable=False),
     sa.Column('inserted_at', sa.TIMESTAMP(timezone=True), nullable=False),
@@ -390,7 +390,7 @@ def upgrade_():
     sa.Column('turn_id', sa.Integer(), nullable=False),
     sa.Column('debtor_id', sa.BigInteger(), nullable=False),
     sa.Column('creditor_id', sa.BigInteger(), nullable=False, comment='This is the creditor ID of the recipient.'),
-    sa.Column('is_dispatching', sa.BOOLEAN(), nullable=False, comment='Will be TRUE when the collector is dispatching some amount to a buyer, and FALSE when the collector is sending some amount to another collector.'),
+    sa.Column('transfer_kind', sa.SmallInteger(), nullable=False, comment="Will be 0 when the collector is sending some amount to another collector, 1 when the collector is dispatching some amount to a buyer, and 2 when the surplus amount is being moved."),
     sa.Column('nominal_amount', sa.FLOAT(), nullable=False),
     sa.Column('collection_started_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.Column('inserted_at', sa.TIMESTAMP(timezone=True), nullable=False),
@@ -407,6 +407,7 @@ def upgrade_():
     sa.Column('backoff_counter', sa.SmallInteger(), nullable=False),
     sa.Column('fatal_error', sa.String(), nullable=True),
     sa.CheckConstraint("attempted_at IS NULL AND coordinator_request_id IS NULL AND final_interest_rate_ts IS NULL AND amount IS NULL OR attempted_at IS NOT NULL AND coordinator_request_id IS NOT NULL AND final_interest_rate_ts IS NOT NULL AND amount IS NOT NULL AND recipient != ''"),
+    sa.CheckConstraint('transfer_kind >= 0 AND transfer_kind <= 2'),
     sa.CheckConstraint('amount > 0'),
     sa.CheckConstraint('backoff_counter >= 0'),
     sa.CheckConstraint('failure_code IS NULL OR attempted_at IS NOT NULL'),
@@ -415,12 +416,13 @@ def upgrade_():
     sa.CheckConstraint('rescheduled_for IS NULL OR attempted_at IS NULL OR failure_code IS NOT NULL'),
     sa.CheckConstraint('transfer_id IS NULL AND finalized_at IS NULL OR transfer_id IS NOT NULL AND finalized_at IS NOT NULL'),
     sa.CheckConstraint('transfer_id IS NULL OR attempted_at IS NOT NULL'),
-    sa.PrimaryKeyConstraint('collector_id', 'turn_id', 'debtor_id', 'creditor_id', 'is_dispatching'),
+    sa.PrimaryKeyConstraint('collector_id', 'turn_id', 'debtor_id', 'creditor_id', 'transfer_kind'),
     comment="Represents a past or future attempt to transfer some amount form a given collector's account to another account, as a part of a given trading turn. More than one attempt may be made if the first attempt has failed."
     )
     with op.batch_alter_table('transfer_attempt', schema=None) as batch_op:
         batch_op.create_index('idx_transfer_coordinator_request_id', ['coordinator_request_id'], unique=True, postgresql_where=sa.text('coordinator_request_id IS NOT NULL'))
         batch_op.create_index('idx_transfer_rescheduled_for', ['rescheduled_for'], unique=False, postgresql_where=sa.text('rescheduled_for IS NOT NULL'))
+        batch_op.create_index('idx_transfer_moving_transfer_kind', ['collector_id', 'debtor_id'], unique=False, postgresql_where=sa.text('transfer_kind = 2'))
 
     op.create_table('trigger_transfer_signal',
     sa.Column('signal_id', sa.BigInteger(), autoincrement=True, nullable=False),
@@ -428,7 +430,7 @@ def upgrade_():
     sa.Column('turn_id', sa.Integer(), nullable=False),
     sa.Column('debtor_id', sa.BigInteger(), nullable=False),
     sa.Column('creditor_id', sa.BigInteger(), nullable=False),
-    sa.Column('is_dispatching', sa.BOOLEAN(), nullable=False),
+    sa.Column('transfer_kind', sa.SmallInteger(), nullable=False),
     sa.Column('inserted_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('signal_id')
     )
@@ -467,6 +469,7 @@ def upgrade_():
     sa.Column('surplus_ts', sa.TIMESTAMP(timezone=True), nullable=False, comment='The moment when the surplus was observed. This is needed so that, for the current moment, we can calculate the maximum possible demurrage that surplus may have suffered.'),
     sa.Column('surplus_spent_amount', sa.BigInteger(), nullable=False, comment='The surplus amount which already has been spent on behalf of the owner of the creditors agent node.'),
     sa.Column('surplus_last_transfer_number', sa.BigInteger(), nullable=False, comment='This number must be incremented each time when `surplus_ts` change, or a trade has been made on behalf of the owner of the creditors agent node. This is necessary in order to avoid double-spending and double-buying.'),
+    sa.Column('last_surplus_moving_turn_id', sa.Integer(), nullable=False),
     sa.CheckConstraint('commit_period >= 0'),
     sa.CheckConstraint('demurrage_rate >= -100.0 AND demurrage_rate <= 0.0'),
     sa.CheckConstraint('interest_rate >= -100.0'),
@@ -601,6 +604,7 @@ def downgrade_():
     op.drop_table('usable_collector')
     op.drop_table('trigger_transfer_signal')
     with op.batch_alter_table('transfer_attempt', schema=None) as batch_op:
+        batch_op.drop_index('idx_transfer_moving_transfer_kind', postgresql_where=sa.text('transfer_kind = 2'))
         batch_op.drop_index('idx_transfer_rescheduled_for', postgresql_where=sa.text('rescheduled_for IS NOT NULL'))
         batch_op.drop_index('idx_transfer_coordinator_request_id', postgresql_where=sa.text('coordinator_request_id IS NOT NULL'))
 

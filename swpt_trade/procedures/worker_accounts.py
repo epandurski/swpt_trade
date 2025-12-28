@@ -323,6 +323,7 @@ def process_calculate_surplus_signal(
         *,
         collector_id: int,
         debtor_id: int,
+        turn_id: int,
 ) -> None:
     query = (
         db.session.query(WorkerAccount, NeededWorkerAccount)

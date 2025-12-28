@@ -33,6 +33,7 @@ def upgrade_():
     sa.Column('signal_id', sa.BigInteger(), autoincrement=True, nullable=False),
     sa.Column('collector_id', sa.BigInteger(), nullable=False),
     sa.Column('debtor_id', sa.BigInteger(), nullable=False),
+    sa.Column('turn_id', sa.Integer(), nullable=False),
     sa.Column('inserted_at', sa.TIMESTAMP(timezone=True), nullable=False),
     sa.PrimaryKeyConstraint('signal_id')
     )
