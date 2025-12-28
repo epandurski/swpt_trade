@@ -1239,9 +1239,10 @@ def put_rejected_transfer_through_transfer_attempts(
         debtor_id: int,
         creditor_id: int,
         transfers_healthy_max_commit_delay: timedelta,
-) -> bool:
+) -> Optional[str]:
     """Return `True` if a corresponding transfer attempt has been found.
     """
+    fatal_error = ""
     attempt = (
         TransferAttempt.query.
         filter_by(
@@ -1254,18 +1255,18 @@ def put_rejected_transfer_through_transfer_attempts(
         .one_or_none()
     )
     if attempt is None:
-        return False
+        return None
 
     if attempt.transfer_id is None and attempt.failure_code is None:
         assert attempt.attempted_at
         assert attempt.rescheduled_for is None
 
-        _reschedule_failed_attempt(
+        fatal_error = _reschedule_failed_attempt(
             attempt, status_code, transfers_healthy_max_commit_delay
         )
         assert attempt.failure_code is not None
 
-    return True
+    return fatal_error
 
 
 @atomic
@@ -1355,7 +1356,8 @@ def put_finalized_transfer_through_transfer_attempts(
         committed_amount: int,
         status_code: str,
         transfers_healthy_max_commit_delay: timedelta,
-) -> None:
+) -> str:
+    fatal_error = ""
     attempt = (
         TransferAttempt.query.
         filter_by(
@@ -1384,19 +1386,23 @@ def put_finalized_transfer_through_transfer_attempts(
             if committed_amount != 0:
                 status_code = "UNEXPECTED_COMMITTED_AMOUNT"  # pragma: no cover
 
-            _reschedule_failed_attempt(
+            fatal_error = _reschedule_failed_attempt(
                 attempt, status_code, transfers_healthy_max_commit_delay
             )
             assert attempt.failure_code is not None
+
+    return fatal_error
 
 
 def _reschedule_failed_attempt(
         attempt: TransferAttempt,
         status_code: str,
         transfers_healthy_max_commit_delay: timedelta,
-) -> None:
+) -> str:
     assert attempt.attempted_at
     assert attempt.rescheduled_for is None
+
+    fatal_error = ""
     current_ts = datetime.now(tz=timezone.utc)
     min_backoff_seconds = transfers_healthy_max_commit_delay.total_seconds()
 
@@ -1433,6 +1439,9 @@ def _reschedule_failed_attempt(
     else:
         attempt.failure_code = attempt.UNSPECIFIED_FAILURE
         attempt.fatal_error = status_code
+        fatal_error = status_code
+
+    return fatal_error
 
 
 @atomic
