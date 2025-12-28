@@ -1242,7 +1242,7 @@ def put_rejected_transfer_through_transfer_attempts(
 ) -> Optional[str]:
     """Return `True` if a corresponding transfer attempt has been found.
     """
-    fatal_error = ""
+    critical_error = ""
     attempt = (
         TransferAttempt.query.
         filter_by(
@@ -1261,12 +1261,12 @@ def put_rejected_transfer_through_transfer_attempts(
         assert attempt.attempted_at
         assert attempt.rescheduled_for is None
 
-        fatal_error = _reschedule_failed_attempt(
+        critical_error = _reschedule_failed_attempt(
             attempt, status_code, transfers_healthy_max_commit_delay
         )
         assert attempt.failure_code is not None
 
-    return fatal_error
+    return critical_error
 
 
 @atomic
@@ -1357,7 +1357,7 @@ def put_finalized_transfer_through_transfer_attempts(
         status_code: str,
         transfers_healthy_max_commit_delay: timedelta,
 ) -> str:
-    fatal_error = ""
+    critical_error = ""
     attempt = (
         TransferAttempt.query.
         filter_by(
@@ -1386,12 +1386,12 @@ def put_finalized_transfer_through_transfer_attempts(
             if committed_amount != 0:
                 status_code = "UNEXPECTED_COMMITTED_AMOUNT"  # pragma: no cover
 
-            fatal_error = _reschedule_failed_attempt(
+            critical_error = _reschedule_failed_attempt(
                 attempt, status_code, transfers_healthy_max_commit_delay
             )
             assert attempt.failure_code is not None
 
-    return fatal_error
+    return critical_error
 
 
 def _reschedule_failed_attempt(
@@ -1402,7 +1402,7 @@ def _reschedule_failed_attempt(
     assert attempt.attempted_at
     assert attempt.rescheduled_for is None
 
-    fatal_error = ""
+    critical_error = ""
     current_ts = datetime.now(tz=timezone.utc)
     min_backoff_seconds = transfers_healthy_max_commit_delay.total_seconds()
 
@@ -1435,13 +1435,14 @@ def _reschedule_failed_attempt(
         attempt.reschedule_failed_attempt(
             attempt.INSUFFICIENT_AVAILABLE_AMOUNT, min_backoff_seconds
         )
+        critical_error = status_code
 
     else:
         attempt.failure_code = attempt.UNSPECIFIED_FAILURE
         attempt.fatal_error = status_code
-        fatal_error = status_code
+        critical_error = status_code
 
-    return fatal_error
+    return critical_error
 
 
 @atomic
