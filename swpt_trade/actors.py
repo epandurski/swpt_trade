@@ -287,6 +287,7 @@ def _on_rejected_agent_transfer_signal(
         raise RuntimeError(
             f'Unexpected coordinator type: "{coordinator_type}"'
         )
+    error = None
 
     procedures.put_rejected_transfer_through_account_locks(
         coordinator_id=coordinator_id,
@@ -294,16 +295,20 @@ def _on_rejected_agent_transfer_signal(
         status_code=status_code,
         debtor_id=debtor_id,
         creditor_id=creditor_id,
-    ) or procedures.put_rejected_transfer_through_transfer_attempts(
-        coordinator_id=coordinator_id,
-        coordinator_request_id=coordinator_request_id,
-        status_code=status_code,
-        debtor_id=debtor_id,
-        creditor_id=creditor_id,
-        transfers_healthy_max_commit_delay=(
-            current_app.config["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"]
-        ),
+    ) or (
+        error := procedures.put_rejected_transfer_through_transfer_attempts(
+            coordinator_id=coordinator_id,
+            coordinator_request_id=coordinator_request_id,
+            status_code=status_code,
+            debtor_id=debtor_id,
+            creditor_id=creditor_id,
+            transfers_healthy_max_commit_delay=(
+                current_app.config["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"]
+            ),
+        )
     )
+    if error:  # pragma: no cover
+        _LOGGER.error('Transfer rejected with %s error.', error)
 
 
 def _on_prepared_agent_transfer_signal(
@@ -405,7 +410,7 @@ def _on_finalized_agent_transfer_signal(
             f'Unexpected coordinator type: "{coordinator_type}"'
         )
 
-    procedures.put_finalized_transfer_through_transfer_attempts(
+    error = procedures.put_finalized_transfer_through_transfer_attempts(
         debtor_id=debtor_id,
         creditor_id=creditor_id,
         transfer_id=transfer_id,
@@ -417,6 +422,8 @@ def _on_finalized_agent_transfer_signal(
             current_app.config["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"]
         ),
     )
+    if error:  # pragma: no cover
+        _LOGGER.error('Transfer finalized with %s error.', error)
 
 
 def _on_updated_ledger_signal(
