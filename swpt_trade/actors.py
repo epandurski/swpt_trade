@@ -308,7 +308,7 @@ def _on_rejected_agent_transfer_signal(
         )
     )
     if error:  # pragma: no cover
-        _LOGGER.error('Transfer rejected with %s error.', error)
+        _LOGGER.warning('Transfer rejected with %s error.', error)
 
 
 def _on_prepared_agent_transfer_signal(
@@ -423,7 +423,7 @@ def _on_finalized_agent_transfer_signal(
         ),
     )
     if error:  # pragma: no cover
-        _LOGGER.error('Transfer finalized with %s error.', error)
+        _LOGGER.warning('Transfer finalized with %s error.', error)
 
 
 def _on_updated_ledger_signal(

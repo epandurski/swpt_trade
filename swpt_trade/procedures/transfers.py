@@ -1430,7 +1430,8 @@ def _reschedule_failed_attempt(
         attempt.reschedule_failed_attempt(
             attempt.RECIPIENT_IS_UNREACHABLE, min_backoff_seconds
         )
-        critical_error = status_code
+        if attempt.transfer_kind != TransferAttempt.KIND_MOVING:
+            critical_error = status_code
 
     elif status_code == SC_INSUFFICIENT_AVAILABLE_AMOUNT:
         attempt.reschedule_failed_attempt(
