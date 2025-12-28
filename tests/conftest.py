@@ -83,6 +83,7 @@ def db_session(app):
         "TRUNCATE TABLE worker_receiving",
         "TRUNCATE TABLE worker_dispatching",
         "TRUNCATE TABLE transfer_attempt",
+        "TRUNCATE TABLE worker_hoarded_currency",
     ]:
         db.session.execute(sqlalchemy.text(cmd))
 

@@ -572,7 +572,7 @@ class TransferAttempt(db.Model):
             "Will be 0 when the collector is sending some amount to"
             " another collector, 1 when the collector is dispatching"
             " some amount to a buyer, and 2 when the surplus amount is"
-            " being moved.",
+            " being moved."
         ),
     )
     nominal_amount = db.Column(db.FLOAT, nullable=False)

@@ -262,3 +262,15 @@ class UsableCollector(db.Model):
             ),
         },
     )
+
+
+class WorkerHoardedCurrency(db.Model):
+    debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
+    __table_args__ = (
+        {
+            "comment": (
+                'Represents the fact that the owner of the creditors agent'
+                ' node wants to buy (hoard) the given currency.'
+            ),
+        },
+    )

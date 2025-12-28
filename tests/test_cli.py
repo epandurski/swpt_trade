@@ -2242,6 +2242,9 @@ def test_run_phase2_subphase0(
     assert acs[0].collector_id == 0x0000010000000000
     assert acs[0].account_id == "TestCollectorAccountId"
     assert acs[0].disabled_at is None
+    whcs = m.WorkerHoardedCurrency.query.all()
+    assert len(whcs) == 1
+    assert whcs[0].debtor_id == 666
 
 
 @pytest.mark.parametrize("has_sell_offers", [True, False])

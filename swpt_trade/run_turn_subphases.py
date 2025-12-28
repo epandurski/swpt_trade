@@ -67,6 +67,7 @@ from swpt_trade.models import (
     CollectorDispatching,
     CollectorStatusChange,
     InterestRateChange,
+    WorkerHoardedCurrency,
 )
 
 NEEDED_WORKER_ACCOUNT_PK = tuple_(
@@ -459,6 +460,24 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
                 .where(HoardedCurrency.turn_id == turn_id)
             ).all()
         }
+
+    db.session.execute(
+        delete(WorkerHoardedCurrency)
+        .execution_options(synchronize_session=False)
+    )
+    if hoarded_currency_pegs:
+        db.session.execute(
+            insert(WorkerHoardedCurrency).execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            [
+                {
+                    "debtor_id": debtor_id,
+                }
+                for debtor_id in hoarded_currency_pegs
+            ],
+        )
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
