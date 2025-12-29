@@ -31,7 +31,7 @@ def _on_rejected_config_signal(
 ) -> None:
     _LOGGER.warning(
         "Received RejectedConfig message"
-        " for WorkerAccount(creditor_id=%d, debtor_id=%d).",
+        " for WorkerAccount(creditor_id=%d, debtor_id=0x%x).",
         creditor_id,
         debtor_id,
     )
@@ -109,7 +109,7 @@ def _on_account_purge_signal(
     if is_needed_account:  # pragma: no cover
         _LOGGER.warning(
             "Received AccountPurge message"
-            " for NeededWorkerAccount(creditor_id=%d, debtor_id=%d).",
+            " for NeededWorkerAccount(creditor_id=%d, debtor_id=0x%x).",
             creditor_id,
             debtor_id,
         )
@@ -135,7 +135,7 @@ def _on_account_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing account transfer signal'
-        ' (debtor_id=%d, creditor_id=%d, transfer_number=%d,'
+        ' (debtor_id=0x%x, creditor_id=%d, transfer_number=%d,'
         ' coordinator_type=%s, sender=%s, recipient=%s, acquired_amount=%d).'
         ' Transfer note:\n%s',
         debtor_id,
@@ -151,7 +151,7 @@ def _on_account_transfer_signal(
         if transfer_note_format != AGENT_TRANSFER_NOTE_FORMAT:
             _LOGGER.warning(
                 'Unexpected transfer note format ("%s") for an agent transfer'
-                ' (debtor_id=%d).',
+                ' (debtor_id=0x%x).',
                 transfer_note_format,
                 debtor_id,
             )
@@ -162,7 +162,7 @@ def _on_account_transfer_signal(
             note.validate(creditor_id, acquired_amount)
         except ValueError:
             _LOGGER.warning(
-                'Invalid "%s" agent transfer note (debtor_id=%d).',
+                'Invalid "%s" agent transfer note (debtor_id=0x%x).',
                 transfer_note_format,
                 debtor_id,
             )
@@ -274,7 +274,7 @@ def _on_rejected_agent_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing rejected transfer signal'
-        ' (debtor_id=%d, creditor_id=%d, coordinator_type=%s,'
+        ' (debtor_id=0x%x, creditor_id=%d, coordinator_type=%s,'
         ' coordinator_id=%d, coordinator_request_id=%d, status_code=%s).',
         debtor_id,
         creditor_id,
@@ -308,7 +308,11 @@ def _on_rejected_agent_transfer_signal(
         )
     )
     if error:  # pragma: no cover
-        _LOGGER.warning('Transfer rejected with %s error.', error)
+        _LOGGER.warning(
+            'Transfer rejected with %s error (debtor_id=0x%x).',
+            error,
+            debtor_id,
+        )
 
 
 def _on_prepared_agent_transfer_signal(
@@ -329,8 +333,9 @@ def _on_prepared_agent_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing prepared transfer signal'
-        ' (debtor_id=%d, creditor_id=%d, transfer_id=%d, coordinator_type=%s,'
-        ' coordinator_id=%d, coordinator_request_id=%d, locked_amount=%d,'
+        ' (debtor_id=0x%x, creditor_id=%d, transfer_id=%d,'
+        ' coordinator_type=%s, coordinator_id=%d,'
+        ' coordinator_request_id=%d, locked_amount=%d,'
         ' recipient=%s).',
         debtor_id,
         creditor_id,
@@ -393,8 +398,9 @@ def _on_finalized_agent_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing finalized transfer signal'
-        ' (debtor_id=%d, creditor_id=%d, transfer_id=%d, coordinator_type=%s,'
-        ' coordinator_id=%d, coordinator_request_id=%d, committed_amount=%d,'
+        ' (debtor_id=0x%x, creditor_id=%d, transfer_id=%d,'
+        ' coordinator_type=%s, coordinator_id=%d,'
+        ' coordinator_request_id=%d, committed_amount=%d,'
         ' status_code=%s).',
         debtor_id,
         creditor_id,
@@ -423,7 +429,11 @@ def _on_finalized_agent_transfer_signal(
         ),
     )
     if error:  # pragma: no cover
-        _LOGGER.warning('Transfer finalized with %s error.', error)
+        _LOGGER.warning(
+            'Transfer finalized with %s error (debtor_id=0x%x).',
+            error,
+            debtor_id,
+        )
 
 
 def _on_updated_ledger_signal(
@@ -675,7 +685,7 @@ def _on_account_id_request_signal(
         _LOGGER.error(
             'Can not fulfill account ID request:'
             ' collector_id=%d, turn_id=%d,'
-            ' debtor_id=%d, creditor_id=%d, '
+            ' debtor_id=0x%x, creditor_id=%d, '
             ' transfer_kind=%d.',
             collector_id,
             turn_id,
