@@ -39,6 +39,56 @@ DELAYED_ACCOUNT_TRANSFER_PK = tuple_(
     DelayedAccountTransfer.turn_id,
     DelayedAccountTransfer.message_id,
 )
+PENDING_COLLECTINGS_EXIST = (
+    (
+        select(1)
+        .select_from(WorkerCollecting)
+        .where(
+            WorkerCollecting.collector_id == DispatchingStatus.collector_id,
+            WorkerCollecting.debtor_id == DispatchingStatus.debtor_id,
+            WorkerCollecting.turn_id == DispatchingStatus.turn_id,
+            WorkerCollecting.collected == false(),
+        )
+    )
+    .exists()
+)
+PENDING_SENDINGS_EXIST = (
+    (
+        select(1)
+        .select_from(WorkerSending)
+        .where(
+            WorkerSending.from_collector_id == DispatchingStatus.collector_id,
+            WorkerSending.debtor_id == DispatchingStatus.debtor_id,
+            WorkerSending.turn_id == DispatchingStatus.turn_id,
+        )
+    )
+    .exists()
+)
+PENDING_RECEIVINGS_EXIST = (
+    (
+        select(1)
+        .select_from(WorkerReceiving)
+        .where(
+            WorkerReceiving.to_collector_id == DispatchingStatus.collector_id,
+            WorkerReceiving.debtor_id == DispatchingStatus.debtor_id,
+            WorkerReceiving.turn_id == DispatchingStatus.turn_id,
+            WorkerReceiving.received_amount == text("0"),
+        )
+    )
+    .exists()
+)
+PENDING_DISPATCHINGS_EXIST = (
+    (
+        select(1)
+        .select_from(WorkerDispatching)
+        .where(
+            WorkerDispatching.collector_id == DispatchingStatus.collector_id,
+            WorkerDispatching.debtor_id == DispatchingStatus.debtor_id,
+            WorkerDispatching.turn_id == DispatchingStatus.turn_id,
+        )
+    )
+    .exists()
+)
 INSERT_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000
 
@@ -177,16 +227,6 @@ def process_delayed_account_transfers() -> int:
 
 def signal_dispatching_statuses_ready_to_send() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
-    pending_collectings_subquery = (
-        select(1)
-        .select_from(WorkerCollecting)
-        .where(
-            WorkerCollecting.collector_id == DispatchingStatus.collector_id,
-            WorkerCollecting.debtor_id == DispatchingStatus.debtor_id,
-            WorkerCollecting.turn_id == DispatchingStatus.turn_id,
-            WorkerCollecting.collected == false(),
-        )
-    ).exists()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -199,7 +239,7 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                 .where(
                     DispatchingStatus.started_sending == false(),
                     DispatchingStatus.awaiting_signal_flag == false(),
-                    not_(pending_collectings_subquery),
+                    not_(PENDING_COLLECTINGS_EXIST),
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
@@ -255,15 +295,6 @@ def signal_dispatching_statuses_ready_to_send() -> None:
 
 def update_dispatching_statuses_with_everything_sent() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
-    pending_sendings_subquery = (
-        select(1)
-        .select_from(WorkerSending)
-        .where(
-            WorkerSending.from_collector_id == DispatchingStatus.collector_id,
-            WorkerSending.debtor_id == DispatchingStatus.debtor_id,
-            WorkerSending.turn_id == DispatchingStatus.turn_id,
-        )
-    ).exists()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -276,7 +307,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                 .where(
                     DispatchingStatus.started_sending == true(),
                     DispatchingStatus.all_sent == false(),
-                    not_(pending_sendings_subquery),
+                    not_(PENDING_SENDINGS_EXIST),
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
@@ -315,16 +346,6 @@ def update_dispatching_statuses_with_everything_sent() -> None:
 
 def signal_dispatching_statuses_ready_to_dispatch() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
-    pending_receivings_subquery = (
-        select(1)
-        .select_from(WorkerReceiving)
-        .where(
-            WorkerReceiving.to_collector_id == DispatchingStatus.collector_id,
-            WorkerReceiving.debtor_id == DispatchingStatus.debtor_id,
-            WorkerReceiving.turn_id == DispatchingStatus.turn_id,
-            WorkerReceiving.received_amount == text("0"),
-        )
-    ).exists()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -338,7 +359,7 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                     DispatchingStatus.all_sent == true(),
                     DispatchingStatus.started_dispatching == false(),
                     DispatchingStatus.awaiting_signal_flag == false(),
-                    not_(pending_receivings_subquery),
+                    not_(PENDING_RECEIVINGS_EXIST),
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
@@ -395,15 +416,6 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
 
 def delete_dispatching_statuses_with_everything_dispatched() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
-    pending_dispatchings_subquery = (
-        select(1)
-        .select_from(WorkerDispatching)
-        .where(
-            WorkerDispatching.collector_id == DispatchingStatus.collector_id,
-            WorkerDispatching.debtor_id == DispatchingStatus.debtor_id,
-            WorkerDispatching.turn_id == DispatchingStatus.turn_id,
-        )
-    ).exists()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -415,7 +427,7 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                 )
                 .where(
                     DispatchingStatus.started_dispatching == true(),
-                    not_(pending_dispatchings_subquery),
+                    not_(PENDING_DISPATCHINGS_EXIST),
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):

@@ -87,9 +87,73 @@ SELECT_BATCH_SIZE = 50000
 BID_COUNTER_THRESHOLD = 100000
 DELETION_FLAG = WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
 NUMERIC = Numeric(36, 0)
-
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
+
+LOCKED_SUBQERY = (
+    # Unreleased locks for surplus amounts which the collector wanted
+    # to sell.
+    select(AccountLock.max_locked_amount)
+    .where(
+        AccountLock.creditor_id == NeededWorkerAccount.creditor_id,
+        AccountLock.debtor_id == NeededWorkerAccount.debtor_id,
+        AccountLock.released_at == null(),
+    )
+    .scalar_subquery()
+    .correlate(NeededWorkerAccount)
+)
+TO_RELAY_SUBQUERY = (
+    # Pending sending to other collector accounts, and dispatching to
+    # buyers.
+    select(
+        func.sum(
+            cast(DispatchingStatus.amount_to_send, NUMERIC)
+            + cast(DispatchingStatus.amount_to_dispatch, NUMERIC)
+        )
+    )
+    .where(
+        DispatchingStatus.collector_id == NeededWorkerAccount.creditor_id,
+        DispatchingStatus.debtor_id == NeededWorkerAccount.debtor_id,
+    )
+    .scalar_subquery()
+    .correlate(NeededWorkerAccount)
+)
+TO_MOVE_SUBQUERY = (
+    # Pending transfers (moving) of surpluses to other accounts.
+    select(
+        func.sum(
+            cast(1.0001 * TransferAttempt.nominal_amount + 1.0, NUMERIC)
+        )
+    )
+    .where(
+        TransferAttempt.collector_id == NeededWorkerAccount.creditor_id,
+        TransferAttempt.debtor_id == NeededWorkerAccount.debtor_id,
+        TransferAttempt.transfer_kind
+        == text(str(TransferAttempt.KIND_MOVING)),
+    )
+    .scalar_subquery()
+    .correlate(NeededWorkerAccount)
+)
+WORKER_ACCOUNT_EXISTS = (
+    # A Worker account record that corresponds to the given needed
+    # worker account.
+    (
+        select(1)
+        .select_from(WorkerAccount)
+        .where(
+            WorkerAccount.creditor_id == NeededWorkerAccount.creditor_id,
+            WorkerAccount.debtor_id == NeededWorkerAccount.debtor_id,
+        )
+    )
+    .exists()
+)
+SURPLUS_AMOUNT_EXPRESSION = case(
+    # Disabled collector accounts (status == 3) must not try to sell
+    # their surplus amounts, because this may interfere with correctly
+    # determining the new surplus amounts.
+    (NeededWorkerAccount.collection_disabled_since != null(), text("0")),
+    else_=WorkerAccount.surplus_amount
+)
 
 
 @atomic
@@ -482,13 +546,6 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
 
-        # NOTE: Disabled collector accounts (status == 3) must not try
-        # to sell their surplus amounts, because this may interfere
-        # with correctly determining the new surplus amounts.
-        surplus_amount_expression = case(
-            (NeededWorkerAccount.collection_disabled_since != null(), 0),
-            else_=WorkerAccount.surplus_amount
-        )
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 # TODO: Consider skipping worker accounts that have
                 # been inactive for a long time. The way to do this
@@ -506,7 +563,7 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
                     WorkerAccount.debtor_id,
                     WorkerAccount.creation_date,
                     WorkerAccount.demurrage_rate,
-                    surplus_amount_expression.label("surplus_amount"),
+                    SURPLUS_AMOUNT_EXPRESSION.label("surplus_amount"),
                     WorkerAccount.surplus_ts,
                     WorkerAccount.surplus_spent_amount,
                     (
@@ -1313,53 +1370,6 @@ def _update_needed_worker_account_blocked_amounts() -> None:
     current_ts = datetime.now(tz=timezone.utc)
     sbd = timedelta(days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
 
-    # Unreleased locks for surplus amounts which the collector wanted
-    # to sell.
-    locked_subq = (
-        select(AccountLock.max_locked_amount)
-        .where(
-            AccountLock.creditor_id == NeededWorkerAccount.creditor_id,
-            AccountLock.debtor_id == NeededWorkerAccount.debtor_id,
-            AccountLock.released_at == null(),
-        )
-        .scalar_subquery()
-        .correlate(NeededWorkerAccount)
-    )
-
-    # Pending sending to other collector accounts, and dispatching
-    # to buyers.
-    to_relay_subq = (
-        select(
-            func.sum(
-                cast(DispatchingStatus.amount_to_send, NUMERIC)
-                + cast(DispatchingStatus.amount_to_dispatch, NUMERIC)
-            )
-        )
-        .where(
-            DispatchingStatus.collector_id == NeededWorkerAccount.creditor_id,
-            DispatchingStatus.debtor_id == NeededWorkerAccount.debtor_id,
-        )
-        .scalar_subquery()
-        .correlate(NeededWorkerAccount)
-    )
-
-    # Pending transfers (moving) of surpluses to other accounts.
-    to_move_subq = (
-        select(
-            func.sum(
-                cast(1.0001 * TransferAttempt.nominal_amount + 1.0, NUMERIC)
-            )
-        )
-        .where(
-            TransferAttempt.collector_id == NeededWorkerAccount.creditor_id,
-            TransferAttempt.debtor_id == NeededWorkerAccount.debtor_id,
-            TransferAttempt.transfer_kind
-            == text(str(TransferAttempt.KIND_MOVING)),
-        )
-        .scalar_subquery()
-        .correlate(NeededWorkerAccount)
-    )
-
     nwa_row_filter = and_(
         # We must calculate the blocked amount only after the
         # collection has been disabled for a week or two. This gives
@@ -1399,9 +1409,9 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                 select(
                     NeededWorkerAccount.creditor_id,
                     NeededWorkerAccount.debtor_id,
-                    coalesce(locked_subq, text("0")).label("locked"),
-                    coalesce(to_relay_subq, text("0")).label("to_relay"),
-                    coalesce(to_move_subq, text("0")).label("to_move"),
+                    coalesce(LOCKED_SUBQERY, text("0")).label("locked"),
+                    coalesce(TO_RELAY_SUBQUERY, text("0")).label("to_relay"),
+                    coalesce(TO_MOVE_SUBQUERY, text("0")).label("to_move"),
                 )
                 .select_from(NeededWorkerAccount)
                 .where(nwa_row_filter)
@@ -1477,14 +1487,6 @@ def _kill_broken_worker_accounts() -> None:
     """
 
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
-    worker_account_subquery = (
-        select(1)
-        .select_from(WorkerAccount)
-        .where(
-            WorkerAccount.creditor_id == NeededWorkerAccount.creditor_id,
-            WorkerAccount.debtor_id == NeededWorkerAccount.debtor_id,
-        )
-    ).exists()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -1497,7 +1499,7 @@ def _kill_broken_worker_accounts() -> None:
                 .where(
                     NeededWorkerAccount.blocked_amount_ts
                     >= NeededWorkerAccount.collection_disabled_since,
-                    not_(worker_account_subquery),
+                    not_(WORKER_ACCOUNT_EXISTS),
                 )
         ) as result:
             for rows in result.partitions(KILL_ACCOUNTS_BATCH_SIZE):

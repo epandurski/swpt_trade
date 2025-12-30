@@ -26,6 +26,25 @@ from swpt_trade.models import (
     OverloadedCurrency,
 )
 
+ACTIVE_COLLECTOR_ACCOUNT_EXISTS = (
+    select(1)
+    .select_from(CollectorAccount)
+    .where(
+        CollectorAccount.debtor_id == ConfirmedDebtor.debtor_id,
+        CollectorAccount.status == text("2"),
+    )
+    .exists()
+)
+ACTIVE_CONFIRMED_DEBTOR_SUBQUERY = (
+    select(
+        ConfirmedDebtor.turn_id,
+        ConfirmedDebtor.debtor_id,
+        ConfirmedDebtor.debtor_info_locator,
+    )
+    .select_from(ConfirmedDebtor)
+    .where(ACTIVE_COLLECTOR_ACCOUNT_EXISTS)
+    .subquery(name="acd")
+)
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
@@ -104,27 +123,6 @@ def try_to_advance_turn_to_phase2(
             SET_FORCE_CUSTOM_PLAN,
             bind_arguments={"bind": db.engines["solver"]},
         )
-        active_collector_account = (
-            select(
-                CollectorAccount.debtor_id,
-                CollectorAccount.collector_id,
-            )
-            .select_from(CollectorAccount)
-            .where(
-                CollectorAccount.debtor_id == ConfirmedDebtor.debtor_id,
-                CollectorAccount.status == 2,
-            )
-        )
-        active_confirmed_debtor = (
-            select(
-                ConfirmedDebtor.turn_id,
-                ConfirmedDebtor.debtor_id,
-                ConfirmedDebtor.debtor_info_locator,
-            )
-            .select_from(ConfirmedDebtor)
-            .where(active_collector_account.exists())
-            .subquery(name="acd")
-        )
         db.session.execute(
             insert(CurrencyInfo)
             .execution_options(synchronize_session=False)
@@ -146,18 +144,18 @@ def try_to_advance_turn_to_phase2(
                     DebtorInfo.peg_debtor_id,
                     DebtorInfo.peg_exchange_rate,
                     (
-                        active_confirmed_debtor.c.debtor_id != null()
+                        ACTIVE_CONFIRMED_DEBTOR_SUBQUERY.c.debtor_id != null()
                     ).label("is_confirmed"),
                 )
                 .select_from(DebtorInfo)
                 .join(
-                    active_confirmed_debtor,
+                    ACTIVE_CONFIRMED_DEBTOR_SUBQUERY,
                     and_(
-                        active_confirmed_debtor.c.turn_id
+                        ACTIVE_CONFIRMED_DEBTOR_SUBQUERY.c.turn_id
                         == DebtorInfo.turn_id,
-                        active_confirmed_debtor.c.debtor_id
+                        ACTIVE_CONFIRMED_DEBTOR_SUBQUERY.c.debtor_id
                         == DebtorInfo.debtor_id,
-                        active_confirmed_debtor.c.debtor_info_locator
+                        ACTIVE_CONFIRMED_DEBTOR_SUBQUERY.c.debtor_info_locator
                         == DebtorInfo.debtor_info_locator,
                     ),
                     isouter=True,
