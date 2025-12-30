@@ -34,6 +34,7 @@ ACTIVE_COLLECTOR_ACCOUNT_EXISTS = (
         CollectorAccount.status == text("2"),
     )
     .exists()
+    .correlate(ConfirmedDebtor)
 )
 ACTIVE_CONFIRMED_DEBTOR_SUBQUERY = (
     select(

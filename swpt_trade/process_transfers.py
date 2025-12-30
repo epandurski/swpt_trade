@@ -51,6 +51,7 @@ PENDING_COLLECTINGS_EXIST = (
         )
     )
     .exists()
+    .correlate(DispatchingStatus)
 )
 PENDING_SENDINGS_EXIST = (
     (
@@ -63,6 +64,7 @@ PENDING_SENDINGS_EXIST = (
         )
     )
     .exists()
+    .correlate(DispatchingStatus)
 )
 PENDING_RECEIVINGS_EXIST = (
     (
@@ -76,6 +78,7 @@ PENDING_RECEIVINGS_EXIST = (
         )
     )
     .exists()
+    .correlate(DispatchingStatus)
 )
 PENDING_DISPATCHINGS_EXIST = (
     (
@@ -88,6 +91,7 @@ PENDING_DISPATCHINGS_EXIST = (
         )
     )
     .exists()
+    .correlate(DispatchingStatus)
 )
 INSERT_BATCH_SIZE = 5000
 SELECT_BATCH_SIZE = 50000

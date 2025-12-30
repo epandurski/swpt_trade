@@ -136,7 +136,7 @@ TO_MOVE_SUBQUERY = (
 )
 WORKER_ACCOUNT_EXISTS = (
     # A Worker account record that corresponds to the given needed
-    # worker account.
+    # worker account record.
     (
         select(1)
         .select_from(WorkerAccount)
@@ -146,6 +146,7 @@ WORKER_ACCOUNT_EXISTS = (
         )
     )
     .exists()
+    .correlate(NeededWorkerAccount)
 )
 SURPLUS_AMOUNT_EXPRESSION = case(
     # Disabled collector accounts (status == 3) must not try to sell
