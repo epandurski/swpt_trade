@@ -31,7 +31,7 @@ def _on_rejected_config_signal(
 ) -> None:
     _LOGGER.warning(
         "Received RejectedConfig message"
-        " for WorkerAccount(creditor_id=%d, debtor_id=0x%x).",
+        " for WorkerAccount(creditor_id=%d, debtor_id=%d).",
         creditor_id,
         debtor_id,
     )
@@ -61,6 +61,35 @@ def _on_account_update_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing account update signal'
+        ' (debtor_id=%d, creditor_id=%d, creation_date=%s,'
+        ' last_change_ts=%s, last_change_seqnum=%d,'
+        ' principal=%d, interest=%g, interest_rate=%g,'
+        ' last_interest_rate_change_ts=%s, demurrage_rate=%g,'
+        ' last_transfer_number=%d, last_transfer_committed_at=%s,'
+        ' commit_period=%d, transfer_note_max_bytes=%d,'
+        ' negligible_amount=%g, config_flags=%d,'
+        ' account_id=%s, debtor_info_iri=%s).',
+        debtor_id,
+        creditor_id,
+        creation_date,
+        last_change_ts,
+        last_change_seqnum,
+        principal,
+        interest,
+        interest_rate,
+        last_interest_rate_change_ts,
+        demurrage_rate,
+        last_transfer_number,
+        last_transfer_committed_at,
+        commit_period,
+        transfer_note_max_bytes,
+        negligible_amount,
+        config_flags,
+        account_id,
+        debtor_info_iri,
+    )
     cfg = current_app.config
     is_legible_for_trade = (
         demurrage_rate >= cfg["APP_MIN_DEMURRAGE_RATE"]
@@ -101,6 +130,13 @@ def _on_account_purge_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing account purge signal'
+        ' (debtor_id=%d, creditor_id=%d, creation_date=%s).',
+        debtor_id,
+        creditor_id,
+        creation_date,
+    )
     is_needed_account = procedures.process_account_purge_signal(
         debtor_id=debtor_id,
         creditor_id=creditor_id,
@@ -109,7 +145,7 @@ def _on_account_purge_signal(
     if is_needed_account:  # pragma: no cover
         _LOGGER.warning(
             "Received AccountPurge message"
-            " for NeededWorkerAccount(creditor_id=%d, debtor_id=0x%x).",
+            " for NeededWorkerAccount(creditor_id=%d, debtor_id=%d).",
             creditor_id,
             debtor_id,
         )
@@ -135,7 +171,7 @@ def _on_account_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing account transfer signal'
-        ' (debtor_id=0x%x, creditor_id=%d, transfer_number=%d,'
+        ' (debtor_id=%d, creditor_id=%d, transfer_number=%d,'
         ' coordinator_type=%s, sender=%s, recipient=%s, acquired_amount=%d).'
         ' Transfer note:\n%s',
         debtor_id,
@@ -151,7 +187,7 @@ def _on_account_transfer_signal(
         if transfer_note_format != AGENT_TRANSFER_NOTE_FORMAT:
             _LOGGER.warning(
                 'Unexpected transfer note format ("%s") for an agent transfer'
-                ' (debtor_id=0x%x).',
+                ' (debtor_id=%d).',
                 transfer_note_format,
                 debtor_id,
             )
@@ -162,7 +198,7 @@ def _on_account_transfer_signal(
             note.validate(creditor_id, acquired_amount)
         except ValueError:
             _LOGGER.warning(
-                'Invalid "%s" agent transfer note (debtor_id=0x%x).',
+                'Invalid "%s" agent transfer note (debtor_id=%d).',
                 transfer_note_format,
                 debtor_id,
             )
@@ -274,7 +310,7 @@ def _on_rejected_agent_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing rejected transfer signal'
-        ' (debtor_id=0x%x, creditor_id=%d, coordinator_type=%s,'
+        ' (debtor_id=%d, creditor_id=%d, coordinator_type=%s,'
         ' coordinator_id=%d, coordinator_request_id=%d, status_code=%s).',
         debtor_id,
         creditor_id,
@@ -309,7 +345,7 @@ def _on_rejected_agent_transfer_signal(
     )
     if error:  # pragma: no cover
         _LOGGER.warning(
-            'Transfer rejected with %s error (debtor_id=0x%x).',
+            'Transfer rejected with %s error (debtor_id=%d).',
             error,
             debtor_id,
         )
@@ -333,7 +369,7 @@ def _on_prepared_agent_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing prepared transfer signal'
-        ' (debtor_id=0x%x, creditor_id=%d, transfer_id=%d,'
+        ' (debtor_id=%d, creditor_id=%d, transfer_id=%d,'
         ' coordinator_type=%s, coordinator_id=%d,'
         ' coordinator_request_id=%d, locked_amount=%d,'
         ' recipient=%s).',
@@ -398,7 +434,7 @@ def _on_finalized_agent_transfer_signal(
 ) -> None:
     _LOGGER.debug(
         'Processing finalized transfer signal'
-        ' (debtor_id=0x%x, creditor_id=%d, transfer_id=%d,'
+        ' (debtor_id=%d, creditor_id=%d, transfer_id=%d,'
         ' coordinator_type=%s, coordinator_id=%d,'
         ' coordinator_request_id=%d, committed_amount=%d,'
         ' status_code=%s).',
@@ -430,7 +466,7 @@ def _on_finalized_agent_transfer_signal(
     )
     if error:  # pragma: no cover
         _LOGGER.warning(
-            'Transfer finalized with %s error (debtor_id=0x%x).',
+            'Transfer finalized with %s error (debtor_id=%d).',
             error,
             debtor_id,
         )
@@ -448,6 +484,19 @@ def _on_updated_ledger_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing updated ledger signal'
+        ' (creditor_id=%d, debtor_id=%d, update_id=%d,'
+        ' account_id=%s, creation_date=%s, principal=%d,'
+        ' last_transfer_number=%d).',
+        creditor_id,
+        debtor_id,
+        update_id,
+        account_id,
+        creation_date,
+        principal,
+        last_transfer_number,
+    )
     procedures.process_updated_ledger_signal(
         creditor_id=creditor_id,
         debtor_id=debtor_id,
@@ -473,6 +522,20 @@ def _on_updated_policy_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing updated policy signal'
+        ' (creditor_id=%d, debtor_id=%d, update_id=%d,'
+        ' policy_name=%s, min_principal=%d, max_principal=%d,'
+        ' peg_exchange_rate=%s, peg_debtor_id=%s).',
+        creditor_id,
+        debtor_id,
+        update_id,
+        policy_name,
+        min_principal,
+        max_principal,
+        peg_exchange_rate,
+        peg_debtor_id,
+    )
     procedures.process_updated_policy_signal(
         creditor_id=creditor_id,
         debtor_id=debtor_id,
@@ -495,6 +558,15 @@ def _on_updated_flags_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing updated flags signal'
+        ' (creditor_id=%d, debtor_id=%d, update_id=%d,'
+        ' config_flags=%d).',
+        creditor_id,
+        debtor_id,
+        update_id,
+        config_flags,
+    )
     procedures.process_updated_flags_signal(
         creditor_id=creditor_id,
         debtor_id=debtor_id,
@@ -685,7 +757,7 @@ def _on_account_id_request_signal(
         _LOGGER.error(
             'Can not fulfill account ID request:'
             ' collector_id=%d, turn_id=%d,'
-            ' debtor_id=0x%x, creditor_id=%d, '
+            ' debtor_id=%d, creditor_id=%d, '
             ' transfer_kind=%d.',
             collector_id,
             turn_id,
@@ -761,6 +833,13 @@ def _on_calculate_surplus_signal(
     *args,
     **kwargs
 ) -> None:
+    _LOGGER.debug(
+        'Processing calculate surplus signal'
+        ' (collector_id=%d, debtor_id=%d, turn_id=%d).',
+        collector_id,
+        debtor_id,
+        turn_id,
+    )
     procedures.process_calculate_surplus_signal(
         collector_id=collector_id,
         debtor_id=debtor_id,
