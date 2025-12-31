@@ -487,8 +487,8 @@ def _on_updated_ledger_signal(
         ' (creditor_id=%d, debtor_id=%d, update_id=%d,'
         ' account_id=%s, creation_date=%s, principal=%d,'
         ' last_transfer_number=%d).',
-        debtor_id,
         creditor_id,
+        debtor_id,
         update_id,
         account_id,
         creation_date,
@@ -524,9 +524,9 @@ def _on_updated_policy_signal(
         'Processing updated policy signal'
         ' (creditor_id=%d, debtor_id=%d, update_id=%d,'
         ' policy_name=%s, min_principal=%d, max_principal=%d,'
-        ' peg_exchange_rate=%d, peg_debtor_id=%s).',
-        debtor_id,
+        ' peg_exchange_rate=%s, peg_debtor_id=%s).',
         creditor_id,
+        debtor_id,
         update_id,
         policy_name,
         min_principal,
@@ -560,8 +560,8 @@ def _on_updated_flags_signal(
         'Processing updated flags signal'
         ' (creditor_id=%d, debtor_id=%d, update_id=%d,'
         ' config_flags=%d).',
-        debtor_id,
         creditor_id,
+        debtor_id,
         update_id,
         config_flags,
     )
