@@ -695,59 +695,17 @@ def delete_worker_sending_record(
         turn_id: int,
         debtor_id: int,
         to_collector_id: int,
-        acquired_amount: int,
-        transfer_number: int,
-        creation_date: date,
-        coordinator_type: str,
-        sender: str,
-        recipient: str,
-        transfer_note_format: str,
-        transfer_note: str,
-        committed_at: datetime,
-        principal: int,
-        previous_transfer_number: int,
-        ts: datetime,
 ) -> None:
-    wt = (
-        WorkerTurn.query
-        .filter_by(turn_id=turn_id)
-        .options(WORKER_TURN_LOAD_ONLY_ESSENTIALS)
-        .one_or_none()
+    db.session.execute(
+        delete(WorkerSending)
+        .execution_options(synchronize_session=False)
+        .where(
+            WorkerSending.from_collector_id == from_collector_id,
+            WorkerSending.debtor_id == debtor_id,
+            WorkerSending.turn_id == turn_id,
+            WorkerSending.to_collector_id == to_collector_id,
+        )
     )
-    if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
-        db.session.execute(
-            delete(WorkerSending)
-            .execution_options(synchronize_session=False)
-            .where(
-                WorkerSending.from_collector_id == from_collector_id,
-                WorkerSending.debtor_id == debtor_id,
-                WorkerSending.turn_id == turn_id,
-                WorkerSending.to_collector_id == to_collector_id,
-            )
-        )
-    else:
-        # NOTE: This probably must not happen under normal
-        # circumstances, but if for some reason it happens, we will be
-        # saving the message, just to be on the safe side.
-        db.session.add(
-            DelayedAccountTransfer(
-                turn_id=turn_id,
-                debtor_id=debtor_id,
-                creditor_id=from_collector_id,
-                transfer_number=transfer_number,
-                creation_date=creation_date,
-                coordinator_type=coordinator_type,
-                sender=sender,
-                recipient=recipient,
-                acquired_amount=acquired_amount,
-                transfer_note_format=transfer_note_format,
-                transfer_note=transfer_note,
-                committed_at=committed_at,
-                principal=principal,
-                previous_transfer_number=previous_transfer_number,
-                ts=ts,
-            )
-        )
 
 
 @atomic
@@ -820,59 +778,17 @@ def delete_worker_dispatching_record(
         turn_id: int,
         debtor_id: int,
         creditor_id: int,
-        acquired_amount: int,
-        transfer_number: int,
-        creation_date: date,
-        coordinator_type: str,
-        sender: str,
-        recipient: str,
-        transfer_note_format: str,
-        transfer_note: str,
-        committed_at: datetime,
-        principal: int,
-        previous_transfer_number: int,
-        ts: datetime,
 ) -> None:
-    wt = (
-        WorkerTurn.query
-        .filter_by(turn_id=turn_id)
-        .options(WORKER_TURN_LOAD_ONLY_ESSENTIALS)
-        .one_or_none()
+    db.session.execute(
+        delete(WorkerDispatching)
+        .execution_options(synchronize_session=False)
+        .where(
+            WorkerDispatching.collector_id == collector_id,
+            WorkerDispatching.debtor_id == debtor_id,
+            WorkerDispatching.turn_id == turn_id,
+            WorkerDispatching.creditor_id == creditor_id,
+        )
     )
-    if wt and (wt.phase > 3 or wt.phase == 3 and wt.worker_turn_subphase >= 5):
-        db.session.execute(
-            delete(WorkerDispatching)
-            .execution_options(synchronize_session=False)
-            .where(
-                WorkerDispatching.collector_id == collector_id,
-                WorkerDispatching.debtor_id == debtor_id,
-                WorkerDispatching.turn_id == turn_id,
-                WorkerDispatching.creditor_id == creditor_id,
-            )
-        )
-    else:
-        # NOTE: This probably must not happen under normal
-        # circumstances, but if for some reason it happens, we will be
-        # saving the message, just to be on the safe side.
-        db.session.add(
-            DelayedAccountTransfer(
-                turn_id=turn_id,
-                debtor_id=debtor_id,
-                creditor_id=collector_id,
-                transfer_number=transfer_number,
-                creation_date=creation_date,
-                coordinator_type=coordinator_type,
-                sender=sender,
-                recipient=recipient,
-                acquired_amount=acquired_amount,
-                transfer_note_format=transfer_note_format,
-                transfer_note=transfer_note,
-                committed_at=committed_at,
-                principal=principal,
-                previous_transfer_number=previous_transfer_number,
-                ts=ts,
-            )
-        )
 
 
 @atomic
