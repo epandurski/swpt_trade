@@ -116,7 +116,8 @@ case $1 in
         | scan_creditor_participations | scan_dispatching_statuses \
         | scan_worker_collectings | scan_worker_sendings \
         | scan_worker_receivings | scan_worker_dispatchings \
-        | scan_transfer_attempts | roll_turns | roll_worker_turns \
+        | scan_transfer_attempts | scan_delayed_account_transfers \
+        | roll_turns | roll_worker_turns \
         | roll_dispatchings | roll_delayed_account_transfers \
         | fetch_debtor_infos | trigger_transfers)
         exec flask swpt_trade "$@"

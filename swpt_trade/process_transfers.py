@@ -163,13 +163,8 @@ def process_delayed_account_transfers() -> int:
                     WorkerTurn.turn_id == DelayedAccountTransfer.turn_id,
                 )
                 .where(
-                    or_(
-                        WorkerTurn.phase > 3,
-                        and_(
-                            WorkerTurn.phase == 3,
-                            WorkerTurn.worker_turn_subphase >= 5,
-                        )
-                    )
+                    WorkerTurn.phase == 3,
+                    WorkerTurn.worker_turn_subphase >= 5,
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
