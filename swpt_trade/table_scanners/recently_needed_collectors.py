@@ -2,6 +2,7 @@ from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import RecentlyNeededCollector
 
@@ -64,6 +65,7 @@ class RecentlyNeededCollectorsScanner(TableScanner):
                 RecentlyNeededCollector.query
                 .filter(self.pk.in_(pks_to_delete))
                 .with_for_update(skip_locked=True)
+                .options(load_only(RecentlyNeededCollector.debtor_id))
                 .all()
             )
 
@@ -87,9 +89,12 @@ class RecentlyNeededCollectorsScanner(TableScanner):
         if pks_to_delete:
             to_delete = (
                 RecentlyNeededCollector.query
-                .filter(self.pk.in_(pks_to_delete))
-                .filter(RecentlyNeededCollector.needed_at < cutoff_ts)
+                .filter(
+                    self.pk.in_(pks_to_delete),
+                    RecentlyNeededCollector.needed_at < cutoff_ts,
+                )
                 .with_for_update(skip_locked=True)
+                .options(load_only(RecentlyNeededCollector.debtor_id))
                 .all()
             )
 
