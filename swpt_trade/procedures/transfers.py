@@ -726,8 +726,9 @@ def delete_worker_sending_record(
             )
         )
     else:
-        # NOTE: This probably can not happen, but if for some reason
-        # it happens, we will be saving the message.
+        # NOTE: This probably must not happen under normal
+        # circumstances, but if for some reason it happens, we will be
+        # saving the message, just to be on the safe side.
         db.session.add(
             DelayedAccountTransfer(
                 turn_id=turn_id,
@@ -850,8 +851,9 @@ def delete_worker_dispatching_record(
             )
         )
     else:
-        # NOTE: This probably can not happen, but if for some reason
-        # it happens, we will be saving the message.
+        # NOTE: This probably must not happen under normal
+        # circumstances, but if for some reason it happens, we will be
+        # saving the message, just to be on the safe side.
         db.session.add(
             DelayedAccountTransfer(
                 turn_id=turn_id,
