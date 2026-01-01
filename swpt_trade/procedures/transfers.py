@@ -726,6 +726,8 @@ def delete_worker_sending_record(
             )
         )
     else:
+        # NOTE: This probably can not happen, but if for some reason
+        # it happens, we will be saving the message.
         db.session.add(
             DelayedAccountTransfer(
                 turn_id=turn_id,
@@ -848,6 +850,8 @@ def delete_worker_dispatching_record(
             )
         )
     else:
+        # NOTE: This probably can not happen, but if for some reason
+        # it happens, we will be saving the message.
         db.session.add(
             DelayedAccountTransfer(
                 turn_id=turn_id,
