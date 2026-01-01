@@ -282,6 +282,7 @@ class Configuration(metaclass=MetaEnvReader):
     APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 50000
     APP_LOCATOR_CLAIM_EXPIRY_DAYS = 45.0
     APP_DEBTOR_INFO_EXPIRY_DAYS = 7.0
+    APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS = 30.0
     APP_EXTREME_MESSAGE_DELAY_DAYS = 7.0
     APP_MAX_HEARTBEAT_DELAY_DAYS = 365.0
     APP_WORKER_COLLECTING_SLACK_DAYS = 60.0
@@ -332,6 +333,9 @@ class Configuration(metaclass=MetaEnvReader):
     APP_TRANSFER_ATTEMPTS_SCAN_DAYS = 7.0
     APP_TRANSFER_ATTEMPTS_SCAN_BLOCKS_PER_QUERY = 40
     APP_TRANSFER_ATTEMPTS_SCAN_BEAT_MILLISECS = 100
+    APP_DELAYED_ACCOUNT_TRANSFERS_SCAN_DAYS = 14.0
+    APP_DELAYED_ACCOUNT_TRANSFERS_SCAN_BLOCKS_PER_QUERY = 40
+    APP_DELAYED_ACCOUNT_TRANSFERS_SCAN_BEAT_MILLISECS = 100
     APP_FLUSH_CONFIGURE_ACCOUNTS_BURST_COUNT = 7000
     APP_FLUSH_PREPARE_TRANSFERS_BURST_COUNT = 10000
     APP_FLUSH_FINALIZE_TRANSFERS_BURST_COUNT = 10000
@@ -405,6 +409,13 @@ def _check_config_sanity(c):  # pragma: nocover
     if c["APP_DEBTOR_INFO_EXPIRY_DAYS"] < 1.0:
         raise RuntimeError(
             "The configured value for APP_DEBTOR_INFO_EXPIRY_DAYS is too"
+            " small. Choose a more appropriate value."
+        )
+
+    if c["APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS"] < 14.0:
+        raise RuntimeError(
+            "The configured value for"
+            " APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS is too"
             " small. Choose a more appropriate value."
         )
 

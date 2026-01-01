@@ -2,6 +2,7 @@ from typing import TypeVar, Callable
 from datetime import datetime, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import WorkerReceiving
@@ -80,8 +81,10 @@ class WorkerReceivingsScanner(TableScanner):
         ]
         if pks_to_delete:
             to_delete = (
-                WorkerReceiving.query.filter(self.pk.in_(pks_to_delete))
+                WorkerReceiving.query
+                .filter(self.pk.in_(pks_to_delete))
                 .with_for_update(skip_locked=True)
+                .options(load_only(WorkerReceiving.to_collector_id))
                 .all()
             )
 
@@ -118,9 +121,12 @@ class WorkerReceivingsScanner(TableScanner):
         if pks_to_delete:
             to_delete = (
                 WorkerReceiving.query
-                .filter(self.pk.in_(pks_to_delete))
-                .filter(WorkerReceiving.received_amount == 0)
+                .filter(
+                    self.pk.in_(pks_to_delete),
+                    WorkerReceiving.received_amount == 0,
+                )
                 .with_for_update(skip_locked=True)
+                .options(load_only(WorkerReceiving.to_collector_id))
                 .all()
             )
 

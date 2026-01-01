@@ -794,7 +794,7 @@ def update_worker_receiving_record(
             DelayedAccountTransfer(
                 turn_id=turn_id,
                 debtor_id=debtor_id,
-                creditor_id=creditor_id,
+                creditor_id=to_collector_id,
                 transfer_number=transfer_number,
                 creation_date=creation_date,
                 coordinator_type=coordinator_type,

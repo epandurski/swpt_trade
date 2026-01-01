@@ -1349,6 +1349,69 @@ def test_delete_transfer_attempts(
     assert tas[0].collector_id == 888
 
 
+def test_delete_delayed_account_transfers(
+        app,
+        db_session,
+        current_ts,
+):
+    dat1 = m.DelayedAccountTransfer(
+        turn_id=1,
+        creditor_id=666,
+        debtor_id=123,
+        creation_date=date(2021, 6, 18),
+        transfer_number=2345,
+        coordinator_type="agent",
+        committed_at=current_ts - timedelta(days=1000),
+        acquired_amount=1000,
+        transfer_note_format="",
+        transfer_note="test note",
+        principal=10000,
+        previous_transfer_number=2344,
+        sender="667",
+        recipient="666",
+        ts=current_ts - timedelta(days=1000),
+    )
+    dat2 = m.DelayedAccountTransfer(
+        turn_id=2,
+        creditor_id=666,
+        debtor_id=123,
+        creation_date=date(2021, 6, 18),
+        transfer_number=2346,
+        coordinator_type="agent",
+        committed_at=current_ts,
+        acquired_amount=2000,
+        transfer_note_format="",
+        transfer_note="test note",
+        principal=20000,
+        previous_transfer_number=2345,
+        sender="667",
+        recipient="666",
+        ts=current_ts,
+    )
+    db.session.add(dat1)
+    db.session.add(dat2)
+    db.session.commit()
+
+    with db.engine.connect() as conn:
+        conn.execute(sqlalchemy.text("ANALYZE delayed_account_transfer"))
+
+    assert len(m.DelayedAccountTransfer.query.all()) == 2
+    runner = app.test_cli_runner()
+    result = runner.invoke(
+        args=[
+            "swpt_trade",
+            "scan_delayed_account_transfers",
+            "--days",
+            "0.000001",
+            "--quit-early",
+        ]
+    )
+    assert result.exit_code == 0
+    dats = m.DelayedAccountTransfer.query.all()
+    assert len(dats) == 1
+    assert dats[0].turn_id == 2
+
+
 def test_handle_pristine_collectors(
         app,
         db_session,

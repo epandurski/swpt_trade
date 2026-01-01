@@ -325,6 +325,32 @@ def scan_transfer_attempts(days, quit_early):
     scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
 
 
+@click.option("-d", "--days", type=float, help="The number of days.")
+@click.option(
+    "--quit-early",
+    is_flag=True,
+    default=False,
+    help="Exit after some time (mainly useful during testing).",
+)
+def scan_delayed_account_transfers(days, quit_early):
+    """Start a process that garbage collects delayed account transfers.
+
+    The specified number of days determines the intended duration of a
+    single pass through the transfer attempt table. If the number of
+    days is not specified, the default is 14 days.
+    """
+    from swpt_trade.table_scanners import DelayedAccountTransfersScanner
+
+    logger = logging.getLogger(__name__)
+    logger.info("Started delayed account transfers scanner.")
+    days = (
+        days or current_app.config["APP_DELAYED_ACCOUNT_TRANSFERS_SCAN_DAYS"]
+    )
+    assert days > 0.0
+    scanner = DelayedAccountTransfersScanner()
+    scanner.run(db.engine, timedelta(days=days), quit_early=quit_early)
+
+
 _all_scans = [
     scan_debtor_info_documents,
     scan_debtor_locator_claims,
@@ -339,6 +365,7 @@ _all_scans = [
     scan_worker_receivings,
     scan_worker_dispatchings,
     scan_transfer_attempts,
+    scan_delayed_account_transfers,
 ]
 for scan in _all_scans:
     swpt_trade.command(scan.__name__)(scan)

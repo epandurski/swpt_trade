@@ -1,7 +1,7 @@
-import time
 from typing import TypeVar, Callable
 from datetime import datetime, timezone
 from flask import current_app
+from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import CreditorParticipation
@@ -61,8 +61,10 @@ class CreditorParticipationsScanner(ParentRecordsCleaner):
         ]
         if pks_to_delete:
             to_delete = (
-                CreditorParticipation.query.filter(self.pk.in_(pks_to_delete))
+                CreditorParticipation.query
+                .filter(self.pk.in_(pks_to_delete))
                 .with_for_update(skip_locked=True)
+                .options(load_only(CreditorParticipation.creditor_id))
                 .all()
             )
 

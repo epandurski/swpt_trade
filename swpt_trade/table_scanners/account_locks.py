@@ -2,6 +2,7 @@ from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_, and_, or_, null
 from swpt_trade.extensions import db
 from swpt_trade.models import AccountLock
@@ -102,8 +103,8 @@ class AccountLocksScanner(TableScanner):
         if pks_to_delete:
             to_delete = (
                 AccountLock.query
-                .filter(self.pk.in_(pks_to_delete))
                 .filter(
+                    self.pk.in_(pks_to_delete),
                     or_(
                         AccountLock.initiated_at < cutoff_ts,
                         and_(
@@ -113,6 +114,7 @@ class AccountLocksScanner(TableScanner):
                     )
                 )
                 .with_for_update(skip_locked=True)
+                .options(load_only(AccountLock.creditor_id))
                 .all()
             )
 
