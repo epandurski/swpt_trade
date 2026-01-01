@@ -250,18 +250,6 @@ def _on_account_transfer_signal(
                     turn_id=note.turn_id,
                     debtor_id=debtor_id,
                     to_collector_id=note.second_id,
-                    acquired_amount=acquired_amount,
-                    transfer_number=transfer_number,
-                    creation_date=creation_date,
-                    coordinator_type=coordinator_type,
-                    sender=sender,
-                    recipient=recipient,
-                    transfer_note_format=transfer_note_format,
-                    transfer_note=transfer_note,
-                    committed_at=committed_at,
-                    principal=principal,
-                    previous_transfer_number=previous_transfer_number,
-                    ts=ts,
                 )
             else:
                 assert acquired_amount > 0
@@ -292,18 +280,6 @@ def _on_account_transfer_signal(
                     turn_id=note.turn_id,
                     debtor_id=debtor_id,
                     creditor_id=note.second_id,
-                    acquired_amount=acquired_amount,
-                    transfer_number=transfer_number,
-                    creation_date=creation_date,
-                    coordinator_type=coordinator_type,
-                    sender=sender,
-                    recipient=recipient,
-                    transfer_note_format=transfer_note_format,
-                    transfer_note=transfer_note,
-                    committed_at=committed_at,
-                    principal=principal,
-                    previous_transfer_number=previous_transfer_number,
-                    ts=ts,
                 )
             else:
                 assert acquired_amount > 0
