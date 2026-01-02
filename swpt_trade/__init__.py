@@ -283,7 +283,7 @@ class Configuration(metaclass=MetaEnvReader):
     APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 50000
     APP_LOCATOR_CLAIM_EXPIRY_DAYS = 45.0
     APP_DEBTOR_INFO_EXPIRY_DAYS = 7.0
-    APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS = 45.0
+    APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS = 30.0
     APP_EXTREME_MESSAGE_DELAY_DAYS = 7.0
     APP_MAX_HEARTBEAT_DELAY_DAYS = 365.0
     APP_WORKER_COLLECTING_SLACK_DAYS = 60.0
@@ -413,10 +413,7 @@ def _check_config_sanity(c):  # pragma: nocover
             " small. Choose a more appropriate value."
         )
 
-    if (
-            timedelta(days=c["APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS"])
-            < c["APP_TURN_MAX_COMMIT_PERIOD"]
-    ):
+    if c["APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS"] < 14.0:
         raise RuntimeError(
             "The configured value for"
             " APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS is too"
