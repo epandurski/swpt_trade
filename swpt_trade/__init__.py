@@ -6,6 +6,7 @@ import sys
 import os
 import os.path
 import re
+from datetime import timedelta
 from json import dumps
 from typing import List
 from flask_cors import CORS
@@ -282,7 +283,7 @@ class Configuration(metaclass=MetaEnvReader):
     APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 50000
     APP_LOCATOR_CLAIM_EXPIRY_DAYS = 45.0
     APP_DEBTOR_INFO_EXPIRY_DAYS = 7.0
-    APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS = 30.0
+    APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS = 45.0
     APP_EXTREME_MESSAGE_DELAY_DAYS = 7.0
     APP_MAX_HEARTBEAT_DELAY_DAYS = 365.0
     APP_WORKER_COLLECTING_SLACK_DAYS = 60.0
@@ -412,7 +413,10 @@ def _check_config_sanity(c):  # pragma: nocover
             " small. Choose a more appropriate value."
         )
 
-    if c["APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS"] < 14.0:
+    if (
+            timedelta(days=c["APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS"])
+            < c["APP_TURN_MAX_COMMIT_PERIOD"]
+    ):
         raise RuntimeError(
             "The configured value for"
             " APP_DELAYED_ACCOUNT_TRANSFERS_EXPIRY_DAYS is too"
@@ -422,8 +426,8 @@ def _check_config_sanity(c):  # pragma: nocover
     if (
             c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
             < c["APP_EXTREME_MESSAGE_DELAY_DAYS"]
-            or c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
-            < (3 * parse_timedelta(c["TURN_PERIOD"])).days
+            or timedelta(days=c["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
+            < 3 * parse_timedelta(c["TURN_PERIOD"])
     ):
         raise RuntimeError(
             "The configured value for APP_SURPLUS_BLOCKING_DELAY_DAYS is too"
