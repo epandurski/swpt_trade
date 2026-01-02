@@ -684,7 +684,7 @@ def update_worker_collecting_record(
                 committed_at=committed_at,
                 principal=principal,
                 previous_transfer_number=previous_transfer_number,
-                ts=ts,
+                ts=min(ts, datetime.now(tz=timezone.utc)),
             )
         )
 
@@ -767,7 +767,7 @@ def update_worker_receiving_record(
                 committed_at=committed_at,
                 principal=principal,
                 previous_transfer_number=previous_transfer_number,
-                ts=ts,
+                ts=min(ts, datetime.now(tz=timezone.utc)),
             )
         )
 
