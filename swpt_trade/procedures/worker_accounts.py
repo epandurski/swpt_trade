@@ -19,12 +19,16 @@ from swpt_trade.models import (
     DiscoverDebtorSignal,
     CollectorStatusChange,
     NeededCollectorAccount,
+    WorkerHoardedCurrency,
+    TransferAttempt,
+    AccountIdRequestSignal,
 )
 from swpt_trade.utils import (
     generate_collector_account_pkeys,
     contain_principal_overflow,
     calc_demurrage,
     calc_balance_at,
+    get_primary_collector_id,
 )
 
 
@@ -47,6 +51,7 @@ WORKER_ACCOUNT_LOAD_ONLY_CALCULATE_SURPLUS_DATA = load_only(
     WorkerAccount.surplus_ts,
     WorkerAccount.surplus_spent_amount,
     WorkerAccount.surplus_last_transfer_number,
+    WorkerAccount.last_surplus_moving_turn_id,
 )
 WORKER_ACCOUNT_LOAD_ONLY_ACCOUNT_UPDATE_DATA = load_only(
     WorkerAccount.creation_date,
@@ -324,6 +329,9 @@ def process_calculate_surplus_signal(
         collector_id: int,
         debtor_id: int,
         turn_id: int,
+        min_collector_id: int,
+        max_collector_id: int,
+        owner_creditor_id: int,
 ) -> None:
     query = (
         db.session.query(WorkerAccount, NeededWorkerAccount)
@@ -361,7 +369,8 @@ def process_calculate_surplus_signal(
         # problem.
         safe_interest_rate = min(worker_account.interest_rate, 0.0)
 
-        worker_account.surplus_amount = max(
+        surplus_ts = worker_account.last_heartbeat_ts
+        surplus_amount = max(
             0,
             contain_principal_overflow(
                 math.floor(
@@ -370,14 +379,38 @@ def process_calculate_surplus_signal(
                         interest=worker_account.interest,
                         interest_rate=safe_interest_rate,
                         last_change_ts=worker_account.last_change_ts,
-                        at=worker_account.last_heartbeat_ts,
+                        at=surplus_ts,
                     ) * safety_cushion
                 )
                 - 1
                 - needed_worker_account.blocked_amount
             ),
         )
-        worker_account.surplus_ts = worker_account.last_heartbeat_ts
+        if surplus_amount > 1:
+            primary_collector_id = get_primary_collector_id(
+                debtor_id=debtor_id,
+                min_collector_id=min_collector_id,
+                max_collector_id=max_collector_id,
+            )
+            if collector_id != primary_collector_id:
+                surplus_amount = _try_initiating_surplus_moving_transfer(
+                    worker_account=worker_account,
+                    turn_id=turn_id,
+                    surplus_amount=surplus_amount,
+                    surplus_ts=surplus_ts,
+                    recipient_creditor_id=primary_collector_id,
+                )
+            elif _is_hoarded_currency(debtor_id):
+                surplus_amount = _try_initiating_surplus_moving_transfer(
+                    worker_account=worker_account,
+                    turn_id=turn_id,
+                    surplus_amount=surplus_amount,
+                    surplus_ts=surplus_ts,
+                    recipient_creditor_id=owner_creditor_id,
+                )
+
+        worker_account.surplus_amount = surplus_amount
+        worker_account.surplus_ts = surplus_ts
         worker_account.surplus_spent_amount = 0
         worker_account.surplus_last_transfer_number += 1
 
@@ -518,10 +551,10 @@ def register_needed_colector(
 
 
 def _discard_unneeded_account(
-    creditor_id: int,
-    debtor_id: int,
-    config_flags: int,
-    negligible_amount: float,
+        creditor_id: int,
+        debtor_id: int,
+        config_flags: int,
+        negligible_amount: float,
 ) -> None:
     scheduled_for_deletion_flag = (
         WorkerAccount.CONFIG_SCHEDULED_FOR_DELETION_FLAG
@@ -544,3 +577,53 @@ def _discard_unneeded_account(
                 | scheduled_for_deletion_flag,
             )
         )
+
+
+def _try_initiating_surplus_moving_transfer(
+        *,
+        worker_account: WorkerAccount,
+        turn_id: int,
+        surplus_amount: int,
+        surplus_ts: datetime,
+        recipient_creditor_id: int,
+) -> int:
+    if worker_account.last_surplus_moving_turn_id < turn_id:
+        collector_id = worker_account.creditor_id
+        debtor_id = worker_account.debtor_id
+        transfer_kind = TransferAttempt.KIND_MOVING
+
+        db.session.add(
+            TransferAttempt(
+                collector_id=collector_id,
+                turn_id=turn_id,
+                debtor_id=debtor_id,
+                creditor_id=recipient_creditor_id,
+                transfer_kind=transfer_kind,
+                nominal_amount=float(surplus_amount),
+                collection_started_at=surplus_ts,
+            )
+        )
+        db.session.add(
+            AccountIdRequestSignal(
+                collector_id=collector_id,
+                turn_id=turn_id,
+                debtor_id=debtor_id,
+                creditor_id=recipient_creditor_id,
+                transfer_kind=transfer_kind,
+            )
+        )
+        worker_account.last_surplus_moving_turn_id = turn_id
+        surplus_amount = 0
+
+    return surplus_amount
+
+
+def _is_hoarded_currency(debtor_id: int) -> bool:
+    return (
+        db.session.query(
+            WorkerHoardedCurrency.query
+            .filter_by(debtor_id=debtor_id)
+            .exists()
+        )
+        .scalar()
+    )
