@@ -833,10 +833,14 @@ def _on_calculate_surplus_signal(
     *args,
     **kwargs
 ) -> None:
+    cfg = current_app.config
     procedures.process_calculate_surplus_signal(
         collector_id=collector_id,
         debtor_id=debtor_id,
         turn_id=turn_id,
+        min_collector_id=cfg["MIN_COLLECTOR_ID"],
+        max_collector_id=cfg["MAX_COLLECTOR_ID"],
+        owner_creditor_id=cfg["OWNER_CREDITOR_ID"],
     )
 
 

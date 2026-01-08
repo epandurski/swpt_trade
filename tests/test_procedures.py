@@ -34,6 +34,7 @@ from swpt_trade.models import (
     WorkerDispatching,
     TransferAttempt,
     CollectorStatusChange,
+    WorkerHoardedCurrency,
     TS0,
     DATE0,
     MAX_INT32,
@@ -3382,7 +3383,14 @@ def test_process_start_dispatching_signal(db_session, wt_3_10, current_ts):
     assert airs.transfer_kind == TransferAttempt.KIND_DISPATCHING
 
 
-def test_process_calculate_surplus_signal(db_session, current_ts):
+@pytest.mark.parametrize("is_hoarded", [True, False])
+@pytest.mark.parametrize("is_primary", [True, False])
+def test_process_calculate_surplus_signal(
+        db_session,
+        current_ts,
+        is_hoarded,
+        is_primary,
+):
     params = {
         "creation_date": DATE0,
         "last_change_ts": current_ts - timedelta(days=368),
@@ -3403,10 +3411,26 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
         "surplus_last_transfer_number": 123,
     }
 
+    min_collector_id = 0x0000010000000000
+    max_collector_id = 0x00000100000003ff
+    primary_collector_id = utils.get_primary_collector_id(
+        debtor_id=666,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+    )
+    if is_primary:
+        collector_id = primary_collector_id
+    else:
+        collector_id = 0x0000010000000004
+        assert collector_id != primary_collector_id
+
+    if is_hoarded:
+        db_session.add(WorkerHoardedCurrency(debtor_id=666))
+
     # The surplus account can be successfully calculated.
     db_session.add(
         NeededWorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=collector_id,
             debtor_id=666,
             collection_disabled_since=current_ts - timedelta(days=20),
             blocked_amount=1000,
@@ -3415,7 +3439,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     )
     db_session.add(
         WorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=collector_id,
             debtor_id=666,
             account_id="666",
             last_heartbeat_ts=current_ts - timedelta(days=3),
@@ -3426,7 +3450,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     # `blocked_amount_ts` is not recent enough.
     db_session.add(
         NeededWorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=collector_id,
             debtor_id=777,
             collection_disabled_since=current_ts - timedelta(days=20),
             blocked_amount=1000,
@@ -3435,7 +3459,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     )
     db_session.add(
         WorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=collector_id,
             debtor_id=777,
             account_id="777",
             last_heartbeat_ts=current_ts - timedelta(days=3),
@@ -3446,7 +3470,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     # `last_heartbeat_ts` is not recent enough.
     db_session.add(
         NeededWorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=collector_id,
             debtor_id=888,
             collection_disabled_since=current_ts - timedelta(days=20),
             blocked_amount=1000,
@@ -3455,7 +3479,7 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     )
     db_session.add(
         WorkerAccount(
-            creditor_id=0x0000010000000004,
+            creditor_id=collector_id,
             debtor_id=888,
             account_id="888",
             last_heartbeat_ts=current_ts - timedelta(days=4.5),
@@ -3489,62 +3513,143 @@ def test_process_calculate_surplus_signal(db_session, current_ts):
     assert len(CollectorStatusChange.query.all()) == 0
 
     p.process_calculate_surplus_signal(
-        collector_id=0x0000010000000004,
+        collector_id=collector_id,
         debtor_id=666,
         turn_id=1,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        owner_creditor_id=12345,
     )
     p.process_calculate_surplus_signal(
-        collector_id=0x0000010000000004,
+        collector_id=collector_id,
         debtor_id=666,
         turn_id=1,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        owner_creditor_id=12345,
     )
     p.process_calculate_surplus_signal(
-        collector_id=0x0000010000000004,
+        collector_id=collector_id,
         debtor_id=777,
         turn_id=1,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        owner_creditor_id=12345,
     )
     p.process_calculate_surplus_signal(
-        collector_id=0x0000010000000004,
+        collector_id=collector_id,
         debtor_id=888,
         turn_id=1,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        owner_creditor_id=12345,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000005,
         debtor_id=666,
         turn_id=1,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        owner_creditor_id=12345,
     )
     p.process_calculate_surplus_signal(
         collector_id=0x0000010000000006,
         debtor_id=666,
         turn_id=1,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        owner_creditor_id=12345,
     )
     cscs = CollectorStatusChange.query.all()
-    cscs.sort(key=lambda t: (t.collector_id, t.debtor_id))
+    cscs.sort(key=lambda t: (
+        abs(collector_id - t.collector_id), t.debtor_id
+    ))
     assert len(cscs) == 1
-    assert cscs[0].collector_id == 0x0000010000000004
+    assert cscs[0].collector_id == collector_id
     assert cscs[0].debtor_id == 666
     assert cscs[0].from_status == 3
     assert cscs[0].to_status == 2
     assert cscs[0].account_id is None
 
     was = WorkerAccount.query.all()
-    was.sort(key=lambda t: (t.creditor_id, t.debtor_id))
+    was.sort(key=lambda t: (
+        abs(collector_id - t.creditor_id), t.debtor_id
+    ))
     assert len(was) == 4
-    assert was[0].creditor_id == 0x0000010000000004
+    assert was[0].creditor_id == collector_id
     assert was[0].debtor_id == 666
     assert was[0].surplus_ts == current_ts - timedelta(days=3)
-    assert 8950 < was[0].surplus_amount < 9050
+    if is_hoarded:
+        if is_primary:
+            was[0].surplus_amount == 0
+            tas = TransferAttempt.query.all()
+            assert len(tas) == 1
+            assert tas[0].collector_id == collector_id
+            assert tas[0].turn_id == 1
+            assert tas[0].debtor_id == 666
+            assert tas[0].creditor_id == 12345
+            assert tas[0].transfer_kind == TransferAttempt.KIND_MOVING
+            assert 8950 < tas[0].nominal_amount < 9050
+            assert tas[0].collection_started_at == was[0].surplus_ts
+            airss = AccountIdRequestSignal.query.all()
+            assert len(airss) == 1
+            assert airss[0].collector_id == collector_id
+            assert airss[0].turn_id == 1
+            assert airss[0].debtor_id == 666
+            assert airss[0].creditor_id == 12345
+            assert airss[0].transfer_kind == TransferAttempt.KIND_MOVING
+        else:
+            was[0].surplus_amount == 0
+            tas = TransferAttempt.query.all()
+            assert len(tas) == 1
+            assert tas[0].collector_id == collector_id
+            assert tas[0].turn_id == 1
+            assert tas[0].debtor_id == 666
+            assert tas[0].creditor_id == primary_collector_id
+            assert tas[0].transfer_kind == TransferAttempt.KIND_MOVING
+            assert 8950 < tas[0].nominal_amount < 9050
+            assert tas[0].collection_started_at == was[0].surplus_ts
+            airss = AccountIdRequestSignal.query.all()
+            assert len(airss) == 1
+            assert airss[0].collector_id == collector_id
+            assert airss[0].turn_id == 1
+            assert airss[0].debtor_id == 666
+            assert airss[0].creditor_id == primary_collector_id
+            assert airss[0].transfer_kind == TransferAttempt.KIND_MOVING
+    else:
+        if is_primary:
+            assert 8950 < was[0].surplus_amount < 9050
+            assert len(TransferAttempt.query.all()) == 0
+            assert len(AccountIdRequestSignal.query.all()) == 0
+        else:
+            was[0].surplus_amount == 0
+            tas = TransferAttempt.query.all()
+            assert len(tas) == 1
+            assert tas[0].collector_id == collector_id
+            assert tas[0].turn_id == 1
+            assert tas[0].debtor_id == 666
+            assert tas[0].creditor_id == primary_collector_id
+            assert tas[0].transfer_kind == TransferAttempt.KIND_MOVING
+            assert 8950 < tas[0].nominal_amount < 9050
+            assert tas[0].collection_started_at == was[0].surplus_ts
+            airss = AccountIdRequestSignal.query.all()
+            assert len(airss) == 1
+            assert airss[0].collector_id == collector_id
+            assert airss[0].turn_id == 1
+            assert airss[0].debtor_id == 666
+            assert airss[0].creditor_id == primary_collector_id
+            assert airss[0].transfer_kind == TransferAttempt.KIND_MOVING
     assert was[0].surplus_spent_amount == 0
     assert was[0].surplus_last_transfer_number > 123
 
-    assert was[1].creditor_id == 0x0000010000000004
+    assert was[1].creditor_id == collector_id
     assert was[1].debtor_id == 777
     assert was[1].surplus_ts == TS0
     assert was[1].surplus_amount == 400
     assert was[1].surplus_spent_amount == 300
     assert was[1].surplus_last_transfer_number == 123
 
-    assert was[2].creditor_id == 0x0000010000000004
+    assert was[2].creditor_id == collector_id
     assert was[2].debtor_id == 888
     assert was[2].surplus_ts == TS0
     assert was[2].surplus_amount == 400
