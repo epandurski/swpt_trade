@@ -220,6 +220,7 @@ cdef class Solver:
     cdef readonly i64 base_debtor_id
     cdef readonly distance max_distance_to_base
     cdef readonly i64 min_trade_amount
+    cdef readonly i64 debtor_ids_mask
     cdef BidProcessor bid_processor
     cdef Digraph graph
     cdef unordered_set[i64] debtor_ids

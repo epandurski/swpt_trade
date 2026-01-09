@@ -1,5 +1,6 @@
 # distutils: language = c++
 import cython
+import random
 from cython.operator cimport dereference as deref, postincrement
 from libcpp.utility cimport pair as Pair
 from libcpp.unordered_set cimport unordered_set
@@ -132,6 +133,7 @@ cdef class Solver:
         self.base_debtor_id = base_debtor_id
         self.max_distance_to_base = max_distance_to_base
         self.min_trade_amount = min_trade_amount
+        self.debtor_ids_mask = random.getrandbits(63)
         self.bid_processor = BidProcessor(
             base_debtor_info_locator,
             base_debtor_id,
@@ -182,7 +184,11 @@ cdef class Solver:
             peg_debtor_id,
             peg_exchange_rate,
         )
-        self.debtor_ids.insert(debtor_id)
+
+        # NOTE: Here we XOR `debtor_id` with a random mask, so as to
+        # randomize the order in which `self.debtor_ids` will be
+        # iterated. The goal is not to favor some ID over others.
+        self.debtor_ids.insert(debtor_id ^ self.debtor_ids_mask)
 
     def register_collector_account(self, i64 creditor_id, i64 debtor_id):
         """Registers a collector account.
@@ -226,7 +232,8 @@ cdef class Solver:
             self.bid_processor.analyze_bids()
             min_trade_amount = float(self.min_trade_amount)
 
-            for debtor_id in self.debtor_ids:
+            for masked_debtor_id in self.debtor_ids:
+                debtor_id = masked_debtor_id ^ self.debtor_ids_mask
                 price = self.bid_processor.get_currency_price(debtor_id)
                 if price > 0.0:
                     self.graph.add_currency(
