@@ -106,6 +106,7 @@ def create_needed_collector_accounts():
                 ]
                 if to_insert:
                     procedures.insert_collector_accounts(to_insert)
+                    db.session.commit()
 
                 db.session.execute(
                     delete(NeededCollectorAccount)

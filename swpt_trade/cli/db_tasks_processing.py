@@ -69,6 +69,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
     hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
     hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
+    logger = logging.getLogger(__name__)
 
     def iter_args_collections():
         return sync_collectors.iter_pristine_collectors(
@@ -80,11 +81,19 @@ def handle_pristine_collectors(threads, wait, quit_early):
     def handle_pristine_collector(debtor_id, collector_id):
         try:
             assert sharding_realm.match(collector_id)
-            procedures.configure_worker_account(
+            if error_ts := procedures.configure_worker_account(
                 debtor_id=debtor_id,
                 collector_id=collector_id,
                 max_postponement=max_postponement,
-            )
+            ):
+                logger.warning(
+                    "Failed to create a worker account for a pristine"
+                    " collector (debtor_id=%d, collector_id=%d,"
+                    " attempted_at=%s). Tying again.",
+                    debtor_id,
+                    collector_id,
+                    error_ts,
+                )
         finally:
             db.session.close()
 
