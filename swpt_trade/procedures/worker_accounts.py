@@ -69,7 +69,7 @@ def configure_worker_account(
         collector_id: int,
         debtor_id: int,
         max_postponement: timedelta,
-) -> None:
+) -> Optional[datetime]:
     def has_worker_account():
         return (
             db.session.query(
@@ -80,6 +80,7 @@ def configure_worker_account(
             .scalar()
         )
 
+    error_ts = None
     current_ts = datetime.now(tz=timezone.utc)
     needed_worker_account = (
         NeededWorkerAccount.query
@@ -105,6 +106,7 @@ def configure_worker_account(
         # account created. The only reasonable thing that we can do in
         # this case, is to send another `ConfigureAccount` message for
         # the account, hoping that this will fix the problem.
+        error_ts = needed_worker_account.configured_at
         needed_worker_account.configured_at = current_ts
         must_configure_account = True
     else:
@@ -129,6 +131,8 @@ def configure_worker_account(
                 to_status=1,
             )
         )
+
+    return error_ts
 
 
 @atomic
