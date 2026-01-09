@@ -244,7 +244,7 @@ class Configuration(metaclass=MetaEnvReader):
     FLUSH_PERIOD = 2.0
 
     HTTP_FETCH_PROCESSES = 1
-    HTTP_FETCH_PERIOD = 5.0
+    HTTP_FETCH_PERIOD = 15.0
     HTTP_FETCH_CONNECTIONS = 100
     HTTP_FETCH_TIMEOUT = 10.0
 
