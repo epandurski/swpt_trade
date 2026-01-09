@@ -10,6 +10,7 @@ from marshmallow import ValidationError
 from flask import current_app
 from sqlalchemy import select
 from sqlalchemy.sql.expression import tuple_, and_, null, func
+from sqlalchemy.orm.attributes import flag_modified
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_pythonlib.swpt_uris import parse_debtor_uri
 from swpt_trade.extensions import db
@@ -255,6 +256,8 @@ def _retry_fetch(
         fetch.latest_attempt_at = current_ts
         fetch.latest_attempt_errorcode = errorcode
         fetch.next_attempt_at = current_ts + timedelta(seconds=wait_seconds)
+        flag_modified(fetch, "attempts_count")
+        flag_modified(fetch, "latest_attempt_errorcode")
     else:
         db.session.delete(fetch)
 
