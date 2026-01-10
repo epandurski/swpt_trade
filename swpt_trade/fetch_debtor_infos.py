@@ -35,7 +35,6 @@ DEBTOR_INFO_FETCH_PK = tuple_(
     DebtorInfoFetch.iri,
     DebtorInfoFetch.debtor_id,
 )
-RETRY_MIN_WAIT_SECONDS = 60.0  # 1 minute
 coininfo_schema = CoinInfoDocumentSchema()
 
 
@@ -55,7 +54,9 @@ class InvalidDebtorInfoDocument(Exception):
 def process_debtor_info_fetches(max_connections: int, timeout: float) -> int:
     count = 0
     current_ts = datetime.now(tz=timezone.utc)
-    batch_size = current_app.config["APP_DEBTOR_INFO_FETCH_BURST_COUNT"]
+    cfg = current_app.config
+    batch_size = cfg["APP_DEBTOR_INFO_FETCH_BURST_COUNT"]
+    retry_min_seconds = cfg["APP_DEBTOR_INFO_FETCH_RETRY_MIN_SECONDS"]
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -68,7 +69,11 @@ def process_debtor_info_fetches(max_connections: int, timeout: float) -> int:
         ) as result:
             for rows in result.partitions():
                 count += _process_debtor_info_fetches_batch(
-                    rows, current_ts, max_connections, timeout
+                    rows,
+                    current_ts,
+                    max_connections,
+                    timeout,
+                    retry_min_seconds,
                 )
 
     return count
@@ -80,6 +85,7 @@ def _process_debtor_info_fetches_batch(
         current_ts: datetime,
         max_connections: int,
         timeout: float,
+        retry_min_seconds: float,
 ) -> int:
     cfg = current_app.config
     expiry_period = timedelta(days=cfg["APP_DEBTOR_INFO_EXPIRY_DAYS"])
@@ -152,7 +158,7 @@ def _process_debtor_info_fetches_batch(
                     )
 
         if retry:
-            _retry_fetch(fetch, errorcode, expiry_period)
+            _retry_fetch(fetch, errorcode, expiry_period, retry_min_seconds)
         else:
             db.session.delete(fetch)
 
@@ -238,13 +244,14 @@ def _retry_fetch(
         fetch: DebtorInfoFetch,
         errorcode: Optional[int],
         expiry_period: timedelta,
+        retry_min_seconds: float,
 ) -> None:
     """Try to re-schedule a new fetch attempt with randomized
     exponential backoff. Give up if this would take more time than the
     passed `expiry_period`.
     """
     n = min(fetch.attempts_count, 100)  # We must avoid float overflows!
-    wait_seconds = RETRY_MIN_WAIT_SECONDS * (2.0 ** n)
+    wait_seconds = retry_min_seconds * (2.0 ** n)
 
     if wait_seconds < expiry_period.total_seconds():
         current_ts = datetime.now(tz=timezone.utc)

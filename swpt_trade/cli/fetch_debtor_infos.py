@@ -57,7 +57,7 @@ from .common import swpt_trade
     help=(
         "Poll the database for scheduled requests every FLOAT seconds."
         " If not specified, the value of the HTTP_FETCH_PERIOD environment"
-        " variable will be used, defaulting to 5 seconds if empty."
+        " variable will be used, defaulting to 15 seconds if empty."
     ),
 )
 @click.option(

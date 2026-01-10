@@ -312,7 +312,7 @@ FLUSH_PERIOD=1.5
 # The "$HTTP_FETCH_PERIOD" value specifies the number of seconds
 # to wait between two sequential database queries to obtain
 # scheduled HTTP fetches whose time to be performed has
-# come (default 5).
+# come (default 15).
 HTTP_FETCH_PROCESSES=1
 HTTP_FETCH_CONNECTIONS=100
 HTTP_FETCH_TIMEOUT=10.0
