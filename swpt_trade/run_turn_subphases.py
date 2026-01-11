@@ -1573,5 +1573,6 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     for batch in batched(interest_rate_changes_to_delete, DELETE_BATCH_SIZE):
         db.session.execute(
             delete(InterestRateChange)
+            .execution_options(synchronize_session=False)
             .where(INTEREST_RATE_CHANGE_PK.in_(batch))
         )
