@@ -214,7 +214,7 @@ def try_to_advance_turn_to_phase4(turn_id: int) -> bool:
                 db.session.execute(
                     select(1)
                     .select_from(table)
-                    .filter_by(turn_id=turn_id)
+                    .where(table.turn_id == turn_id)
                     .limit(1)
                 ).one_or_none()
             )
