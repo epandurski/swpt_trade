@@ -13,7 +13,7 @@ from swpt_trade.models import (
 )
 from swpt_trade import procedures
 
-SELECT_BATCH_SIZE = 50000
+SELECT_BATCH_SIZE = 20000
 UPDATE_BATCH_SIZE = 5000
 INSERT_BATCH_SIZE = 5000
 

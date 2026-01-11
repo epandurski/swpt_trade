@@ -94,7 +94,7 @@ PENDING_DISPATCHINGS_EXIST = (
     .correlate(DispatchingStatus)
 )
 INSERT_BATCH_SIZE = 5000
-SELECT_BATCH_SIZE = 50000
+SELECT_BATCH_SIZE = 20000
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
