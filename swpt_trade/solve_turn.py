@@ -29,7 +29,7 @@ from swpt_trade.utils import batched, calc_hash, get_primary_collector_id
 
 INSERT_BATCH_SIZE = 5000
 DELETE_BATCH_SIZE = 5000
-SELECT_BATCH_SIZE = 50000
+SELECT_BATCH_SIZE = 20000
 
 COLLECTOR_ACCOUNT_PK = tuple_(
     CollectorAccount.debtor_id,
