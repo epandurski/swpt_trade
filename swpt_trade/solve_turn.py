@@ -149,6 +149,16 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         turn.collection_started_at = datetime.now(tz=timezone.utc)
         db.session.flush()
 
+        # TODO: Writing the "takings" and "givings" here may amount to
+        # a huge amount of rows that need to be inserted in the
+        # database. Currently, we do this in a single thread that
+        # simply pushes inserts to the database (although we send many
+        # inserts per round-trip to the database). Consider instead,
+        # writing the data to local file(s) first, and then run
+        # several threads that read those files, and push the rows to
+        # the database. This may allow us to send more rows per second
+        # to the database. However, the benefit from this complication
+        # is far from obvious.
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
