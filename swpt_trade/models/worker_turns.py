@@ -418,6 +418,7 @@ class WorkerCollecting(db.Model):
             turn_id,
             creditor_id,
             postgresql_where=collected == false(),
+            unique=True,
         ),
         {
             "comment": (
@@ -496,6 +497,7 @@ class WorkerReceiving(db.Model):
             turn_id,
             from_collector_id,
             postgresql_where=received_amount == 0,
+            unique=True,
         ),
         {
             "comment": (

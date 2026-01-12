@@ -42,6 +42,7 @@ class CollectorAccount(db.Model):
             "idx_collector_account_creation_request",
             status,
             postgresql_where=status == 0,
+            postgresql_include=["collector_hash"],
         ),
         {
             "comment": (
