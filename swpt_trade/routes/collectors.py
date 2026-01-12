@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Sequence
-from flask import current_app, g
+from flask import current_app
 from flask.views import MethodView
 from flask_smorest import abort
 from swpt_trade import procedures
