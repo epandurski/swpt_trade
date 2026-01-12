@@ -498,7 +498,7 @@ def upgrade_():
     op.execute('ALTER TABLE worker_collecting ADD CONSTRAINT worker_collecting_pkey PRIMARY KEY USING INDEX idx_worker_collecting_pk')
 
     with op.batch_alter_table('worker_collecting', schema=None) as batch_op:
-        batch_op.create_index('idx_worker_collecting_not_collected', ['collector_id', 'debtor_id', 'turn_id', 'creditor_id'], unique=False, postgresql_where=sa.text('collected = false'))
+        batch_op.create_index('idx_worker_collecting_not_collected', ['collector_id', 'debtor_id', 'turn_id', 'creditor_id'], unique=True, postgresql_where=sa.text('collected = false'))
 
     op.create_table('worker_dispatching',
     sa.Column('collector_id', sa.BigInteger(), nullable=False),
@@ -533,7 +533,7 @@ def upgrade_():
     op.execute('ALTER TABLE worker_receiving ADD CONSTRAINT worker_receiving_pkey PRIMARY KEY USING INDEX idx_worker_receiving_pk')
 
     with op.batch_alter_table('worker_receiving', schema=None) as batch_op:
-        batch_op.create_index('idx_worker_receiving_not_received', ['to_collector_id', 'debtor_id', 'turn_id', 'from_collector_id'], unique=False, postgresql_where=sa.text('received_amount = 0'))
+        batch_op.create_index('idx_worker_receiving_not_received', ['to_collector_id', 'debtor_id', 'turn_id', 'from_collector_id'], unique=True, postgresql_where=sa.text('received_amount = 0'))
 
     op.create_table('worker_sending',
     sa.Column('from_collector_id', sa.BigInteger(), nullable=False),
