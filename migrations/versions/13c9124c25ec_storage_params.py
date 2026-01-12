@@ -656,9 +656,11 @@ def upgrade_solver():
     )
     set_storage_params(
         'collector_account',
-        fillfactor=85,
-        autovacuum_vacuum_scale_factor=0.06,
-        autovacuum_vacuum_insert_scale_factor=0.06,
+        fillfactor=100,
+        autovacuum_vacuum_threshold=10000,
+        autovacuum_vacuum_scale_factor=0.001,
+        autovacuum_vacuum_insert_threshold=10000,
+        autovacuum_vacuum_insert_scale_factor=0.001,
     )
 
 
@@ -676,7 +678,9 @@ def downgrade_solver():
         'collector_account',
         [
             'fillfactor',
+            'autovacuum_vacuum_threshold',
             'autovacuum_vacuum_scale_factor',
+            'autovacuum_vacuum_insert_threshold'
             'autovacuum_vacuum_insert_scale_factor',
         ]
     )
