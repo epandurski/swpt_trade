@@ -363,9 +363,6 @@ def run_phase2_subphase0(turn_id: int) -> bool:
                 turn_id,
                 worker_turn.collection_deadline,
             )
-            db.session.flush()
-            db.session.execute(SET_SEQSCAN_ON)
-            db.session.execute(SET_FORCE_CUSTOM_PLAN)
             _copy_usable_collectors(bp)
             _insert_needed_collector_signals(bp)
 
@@ -651,10 +648,13 @@ def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
 
 
 def _copy_usable_collectors(bp: BidProcessor) -> None:
+    db.session.flush()
+    db.session.execute(SET_SEQSCAN_ON)
     db.session.execute(
         delete(UsableCollector)
         .execution_options(synchronize_session=False)
     )
+    db.session.execute(SET_SEQSCAN_OFF)
 
     with db.engines["solver"].connect() as s_conn:
         s_conn.execute(SET_SEQSCAN_ON)
