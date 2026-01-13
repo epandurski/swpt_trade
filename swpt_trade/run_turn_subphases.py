@@ -32,7 +32,9 @@ from swpt_trade.models import (
     KNOWN_SURPLUS_AMOUNT_PREDICATE,
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     SET_SEQSCAN_ON,
+    SET_SEQSCAN_OFF,
     SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
     DebtorInfoDocument,
     DebtorLocatorClaim,
     DebtorInfo,
@@ -1322,10 +1324,6 @@ def run_phase3_subphase5(turn_id: int) -> None:
 
         worker_turn.worker_turn_subphase = 10
 
-        db.session.flush()
-        db.session.execute(SET_SEQSCAN_ON)
-        db.session.execute(SET_FORCE_CUSTOM_PLAN)
-
         _update_needed_worker_account_disabled_since()
         _update_needed_worker_account_blocked_amounts()
         _update_worker_account_surplus_amounts(turn_id)
@@ -1341,6 +1339,9 @@ def _update_needed_worker_account_disabled_since() -> None:
     for that collector (worker) account.
     """
 
+    db.session.flush()
+    db.session.execute(SET_SEQSCAN_ON)
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
     db.session.execute(
         update(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
@@ -1353,6 +1354,8 @@ def _update_needed_worker_account_disabled_since() -> None:
         )
         .values(collection_disabled_since=UsableCollector.disabled_at)
     )
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
+    db.session.execute(SET_SEQSCAN_OFF)
 
 
 def _update_needed_worker_account_blocked_amounts() -> None:

@@ -28,7 +28,9 @@ DEFAULT_CONFIG_FLAGS = 0
 ACCOUNT_ID_MAX_BYTES = 100
 CT_AGENT = "agent"
 SET_SEQSCAN_ON = text("SET LOCAL enable_seqscan = on")
+SET_SEQSCAN_OFF = text("SET LOCAL enable_seqscan = off")
 SET_FORCE_CUSTOM_PLAN = text("SET LOCAL plan_cache_mode = force_custom_plan")
+SET_DEFAULT_PLAN_CACHE_MODE = text("SET LOCAL plan_cache_mode = DEFAULT")
 
 SMP_MESSAGE_TYPES = set([
     "ConfigureAccount",
