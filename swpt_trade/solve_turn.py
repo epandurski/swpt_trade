@@ -150,15 +150,19 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         db.session.flush()
 
         # TODO: Writing the "takings" and "givings" here may amount to
-        # a huge amount of rows that need to be inserted in the
+        # a huge number of rows that need to be inserted in the
         # database. Currently, we do this in a single thread that
         # simply pushes inserts to the database (although we send many
-        # inserts per round-trip to the database). Consider instead,
-        # writing the data to local file(s) first, and then run
-        # several threads that read those files, and push the rows to
-        # the database. This may allow us to send more rows per second
-        # to the database. However, the benefit from this complication
-        # is far from obvious.
+        # inserts per one round-trip to the database). Consider
+        # instead, writing the data to local file(s) first, and then
+        # running several threads that read those files, and push rows
+        # to the database. This may allow us to send more rows per
+        # second. However, the benefits from these complications are
+        # far from obvious. Another possible, but quite ugly way to
+        # try to improve the rate of inserts would be to remove the
+        # primary key indexes from the relevant tables (those are:
+        # `creditor_taking`, `creditor_giving`, `collector_collecting`,
+        # `collector_dispatching`).
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
