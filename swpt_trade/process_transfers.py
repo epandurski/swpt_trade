@@ -11,6 +11,7 @@ from sqlalchemy.sql.expression import (
     false,
     text,
     null,
+    func,
 )
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.extensions import db
@@ -133,97 +134,111 @@ def process_delayed_account_transfers() -> int:
     count = 0
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
-
-        # NOTE: Each row in this cursor contains a lot of data.
-        # Therefore, we use `INSERT_BATCH_SIZE` here, because using
-        # the bigger `SELECT_BATCH_SIZE` may consume too much memory.
-        with w_conn.execution_options(yield_per=INSERT_BATCH_SIZE).execute(
-                select(
-                    DelayedAccountTransfer.turn_id,
-                    DelayedAccountTransfer.message_id,
-                    DelayedAccountTransfer.creditor_id,
-                    DelayedAccountTransfer.debtor_id,
-                    DelayedAccountTransfer.creation_date,
-                    DelayedAccountTransfer.transfer_number,
-                    DelayedAccountTransfer.coordinator_type,
-                    DelayedAccountTransfer.committed_at,
-                    DelayedAccountTransfer.acquired_amount,
-                    DelayedAccountTransfer.transfer_note_format,
-                    DelayedAccountTransfer.transfer_note,
-                    DelayedAccountTransfer.principal,
-                    DelayedAccountTransfer.previous_transfer_number,
-                    DelayedAccountTransfer.sender,
-                    DelayedAccountTransfer.recipient,
-                    DelayedAccountTransfer.ts,
-                )
+        min_turn_id = (
+            w_conn.execute(
+                select(func.min(DelayedAccountTransfer.turn_id))
                 .select_from(DelayedAccountTransfer)
-                .join(
-                    WorkerTurn,
-                    WorkerTurn.turn_id == DelayedAccountTransfer.turn_id,
-                )
-                .where(
-                    or_(
-                        WorkerTurn.phase > 3,
-                        and_(
-                            WorkerTurn.phase == 3,
-                            WorkerTurn.worker_turn_subphase >= 5,
-                        )
+            )
+            .scalar_one()
+        )
+        if min_turn_id is not None:
+            w_conn.execute(SET_SEQSCAN_ON)
+
+            # NOTE: Each row in this cursor contains a lot of data.
+            # Therefore, we use `INSERT_BATCH_SIZE` here, because using
+            # the bigger `SELECT_BATCH_SIZE` may consume too much memory.
+            with w_conn.execution_options(yield_per=INSERT_BATCH_SIZE).execute(
+                    select(
+                        DelayedAccountTransfer.turn_id,
+                        DelayedAccountTransfer.message_id,
+                        DelayedAccountTransfer.creditor_id,
+                        DelayedAccountTransfer.debtor_id,
+                        DelayedAccountTransfer.creation_date,
+                        DelayedAccountTransfer.transfer_number,
+                        DelayedAccountTransfer.coordinator_type,
+                        DelayedAccountTransfer.committed_at,
+                        DelayedAccountTransfer.acquired_amount,
+                        DelayedAccountTransfer.transfer_note_format,
+                        DelayedAccountTransfer.transfer_note,
+                        DelayedAccountTransfer.principal,
+                        DelayedAccountTransfer.previous_transfer_number,
+                        DelayedAccountTransfer.sender,
+                        DelayedAccountTransfer.recipient,
+                        DelayedAccountTransfer.ts,
                     )
-                )
-        ) as result:
-            for rows in result.partitions(INSERT_BATCH_SIZE):
-                current_ts = datetime.now(tz=timezone.utc)
-                to_replay = [
-                    dict(
-                        creditor_id=row.creditor_id,
-                        debtor_id=row.debtor_id,
-                        creation_date=row.creation_date,
-                        transfer_number=row.transfer_number,
-                        coordinator_type=row.coordinator_type,
-                        committed_at=row.committed_at,
-                        acquired_amount=row.acquired_amount,
-                        transfer_note_format=row.transfer_note_format,
-                        transfer_note=row.transfer_note,
-                        principal=row.principal,
-                        previous_transfer_number=row.previous_transfer_number,
-                        sender=row.sender,
-                        recipient=row.recipient,
-                        ts=row.ts,
-                        inserted_at=current_ts,
+                    .select_from(DelayedAccountTransfer)
+                    .join(
+                        WorkerTurn,
+                        WorkerTurn.turn_id == DelayedAccountTransfer.turn_id,
                     )
-                    for row in rows
-                    if (
-                            sharding_realm.match(row.creditor_id)
-                            or not (
-                                # Replying the message more than once
-                                # is safe, and therefore we do not shy
-                                # from doing it unless we are certain
-                                # that the other shard is the one
-                                # responsible for this particular
-                                # message.
-                                delete_parent_records
-                                and sharding_realm.match(
-                                    row.creditor_id, match_parent=True
-                                )
-                            )
-                    )
-                ]
-                if to_replay:
-                    db.session.bulk_insert_mappings(
-                        ReplayedAccountTransferSignal, to_replay
-                    )
-                db.session.execute(
-                    delete(DelayedAccountTransfer)
-                    .execution_options(synchronize_session=False)
                     .where(
-                        DELAYED_ACCOUNT_TRANSFER_PK.in_(
-                            (row.turn_id, row.message_id) for row in rows
+                        WorkerTurn.turn_id >= min_turn_id,
+                        or_(
+                            WorkerTurn.phase > 3,
+                            and_(
+                                WorkerTurn.phase == 3,
+                                WorkerTurn.worker_turn_subphase >= 5,
+                            )
                         )
                     )
-                )
-                db.session.commit()
-                count += len(rows)
+            ) as result:
+                for rows in result.partitions(INSERT_BATCH_SIZE):
+                    current_ts = datetime.now(tz=timezone.utc)
+                    to_replay = [
+                        dict(
+                            creditor_id=row.creditor_id,
+                            debtor_id=row.debtor_id,
+                            creation_date=row.creation_date,
+                            transfer_number=row.transfer_number,
+                            coordinator_type=row.coordinator_type,
+                            committed_at=row.committed_at,
+                            acquired_amount=row.acquired_amount,
+                            transfer_note_format=row.transfer_note_format,
+                            transfer_note=row.transfer_note,
+                            principal=row.principal,
+                            previous_transfer_number=row.previous_transfer_number,
+                            sender=row.sender,
+                            recipient=row.recipient,
+                            ts=row.ts,
+                            inserted_at=current_ts,
+                        )
+                        for row in rows
+                        if (
+                                sharding_realm.match(row.creditor_id)
+                                or not (
+                                    # Replying the message more than once
+                                    # is safe, and therefore we do not shy
+                                    # from doing it unless we are certain
+                                    # that the other shard is the one
+                                    # responsible for this particular
+                                    # message.
+                                    delete_parent_records
+                                    and sharding_realm.match(
+                                        row.creditor_id, match_parent=True
+                                    )
+                                )
+                        )
+                    ]
+                    if to_replay:
+                        db.session.execute(
+                            insert(ReplayedAccountTransferSignal)
+                            .execution_options(
+                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                                synchronize_session=False,
+                            ),
+                            to_replay,
+                        )
+                    db.session.execute(
+                        delete(DelayedAccountTransfer)
+                        .execution_options(synchronize_session=False)
+                        .where(
+                            DELAYED_ACCOUNT_TRANSFER_PK.in_(
+                                (row.turn_id, row.message_id) for row in rows
+                            )
+                        )
+                    )
+                    db.session.commit()
+                    count += len(rows)
 
     db.session.close()
     return count

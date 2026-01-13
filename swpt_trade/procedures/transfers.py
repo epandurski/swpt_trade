@@ -54,6 +54,8 @@ from swpt_trade.models import (
 
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
+
+INSERT_BATCH_SIZE = 5000
 TD_TOLERABLE_ROUNDING_ERROR = timedelta(seconds=2)
 TD_CLOCK_PRECISION_SAFETY_MARGIN = timedelta(minutes=10)
 
@@ -1476,8 +1478,12 @@ def process_rescheduled_transfers_batch(
     ).all()
 
     if to_trigger:
-        db.session.bulk_insert_mappings(
-            TriggerTransferSignal,
+        db.session.execute(
+            insert(TriggerTransferSignal)
+            .execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
             [
                 dict(
                     collector_id=attempt.collector_id,
@@ -1488,7 +1494,7 @@ def process_rescheduled_transfers_batch(
                     inserted_at=current_ts,
                 )
                 for attempt in to_trigger
-            ]
+            ],
         )
         db.session.execute(
             update(TransferAttempt)
