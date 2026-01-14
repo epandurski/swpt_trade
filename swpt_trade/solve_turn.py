@@ -149,20 +149,23 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         turn.collection_started_at = datetime.now(tz=timezone.utc)
         db.session.flush()
 
-        # TODO: Writing the "takings" and "givings" here may amount to
-        # a huge number of rows that need to be inserted in the
-        # database. Currently, we do this in a single thread that
-        # simply pushes inserts to the database (although we send many
-        # inserts per one round-trip to the database). Consider
-        # instead, writing the data to local file(s) first, and then
-        # running several threads that read those files, and push rows
-        # to the database. This may allow us to send more rows per
+        # TODO: Executing "_write_takings()",
+        # "_write_collector_transfers()", and "_write_givings()" here
+        # may amount to a huge number of rows that need to be inserted
+        # in the `creditor_taking`, `collector_collecting`,
+        # `collector_sending`, `collector_receiving`,
+        # `collector_dispatching`, and `creditor_giving` tables as
+        # quickly as possible. Currently, we do this in a single
+        # thread that simply pushes inserts to the database (even
+        # though, we send many inserts per one round-trip to the
+        # database). Consider instead, writing the data to local
+        # file(s) first, and then running several threads or processes
+        # that read those files, and push rows to the database in
+        # parallel. This may allow us to send much more rows per
         # second. However, the benefits from these complications are
-        # far from obvious. Another possible, but quite ugly way to
-        # try to improve the rate of inserts would be to remove the
-        # primary key indexes from the relevant tables (those are:
-        # `creditor_taking`, `creditor_giving`, `collector_collecting`,
-        # `collector_dispatching`).
+        # not obvious. Another possible, but quite ugly and not very
+        # promising way to improve the rate of inserts would be to
+        # remove the primary key indexes from the relevant tables.
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
