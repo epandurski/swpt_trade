@@ -40,9 +40,8 @@ class CollectorAccount(db.Model):
         db.CheckConstraint(and_(status >= 0, status <= 3)),
         db.Index(
             "idx_collector_account_creation_request",
-            status,
+            collector_hash,
             postgresql_where=status == 0,
-            postgresql_include=["collector_hash"],
         ),
         {
             "comment": (

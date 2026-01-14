@@ -674,7 +674,7 @@ def upgrade_solver():
     op.execute('ALTER TABLE collector_account ADD CONSTRAINT collector_account_pkey PRIMARY KEY USING INDEX idx_collector_account_pk')
 
     with op.batch_alter_table('collector_account', schema=None) as batch_op:
-        batch_op.create_index('idx_collector_account_creation_request', ['status'], unique=False, postgresql_where=sa.text('status = 0'), postgresql_include=['collector_hash'])
+        batch_op.create_index('idx_collector_account_creation_request', ['collector_hash'], unique=False, postgresql_where=sa.text('status = 0'))
 
     op.create_table('collector_collecting',
     sa.Column('turn_id', sa.Integer(), nullable=False),
@@ -854,7 +854,7 @@ def downgrade_solver():
     op.drop_table('collector_dispatching')
     op.drop_table('collector_collecting')
     with op.batch_alter_table('collector_account', schema=None) as batch_op:
-        batch_op.drop_index('idx_collector_account_creation_request', postgresql_where=sa.text('status = 0'), postgresql_include=['collector_hash'])
+        batch_op.drop_index('idx_collector_account_creation_request', postgresql_where=sa.text('status = 0'))
 
     op.drop_table('collector_account')
     op.drop_table('buy_offer')
