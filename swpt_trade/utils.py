@@ -2,6 +2,7 @@ from __future__ import annotations
 import re
 import math
 import array
+import struct
 import functools
 from random import Random
 from typing import TypeVar, Self, Iterable, Callable, Optional
@@ -104,38 +105,41 @@ class DispatchingData:
     def _create_empty_value(self):
         return array.array("q", self._empty_value_tuple)
 
-    def _get_value(self, *args):
-        return self._data[*args]
+    def _get_value(self, collector_id, debtor_id):
+        key = struct.pack('qq', collector_id, debtor_id)
+        return self._data[key]
 
     def register_collecting(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
-        value = self._get_value(collector_id, turn_id, debtor_id)
+        value = self._get_value(collector_id, debtor_id)
         value[0] = contain_principal_overflow(value[0] + amount)
 
     def register_sending(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
-        value = self._get_value(collector_id, turn_id, debtor_id)
+        value = self._get_value(collector_id, debtor_id)
         value[1] = contain_principal_overflow(value[1] + amount)
 
     def register_receiving(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
-        value = self._get_value(collector_id, turn_id, debtor_id)
+        value = self._get_value(collector_id, debtor_id)
         value[2] = contain_principal_overflow(value[2] + amount)
         value[3] += 1
 
     def register_dispatching(self, collector_id, debtor_id, turn_id, amount):
         assert turn_id == self._turn_id
-        value = self._get_value(collector_id, turn_id, debtor_id)
+        value = self._get_value(collector_id, debtor_id)
         value[4] = contain_principal_overflow(value[4] + amount)
 
     def statuses_iter(self):
         current_ts = datetime.now(tz=timezone.utc)
+        turn_id = self._turn_id
 
         for key, value in self._data.items():
+            collector_id, debtor_id = struct.unpack('qq', key)
             yield {
-                "collector_id": key[0],
-                "turn_id": key[1],
-                "debtor_id": key[2],
+                "collector_id": collector_id,
+                "debtor_id": debtor_id,
+                "turn_id": turn_id,
                 "inserted_at": current_ts,
                 "amount_to_collect": value[0],
                 "total_collected_amount": None,
