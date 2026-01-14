@@ -1,6 +1,6 @@
 from typing import TypeVar, Callable, Sequence, List, Iterable
 from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, insert, delete, text
+from sqlalchemy import select, insert, delete, text, func
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
 from swpt_trade.utils import (
@@ -173,25 +173,32 @@ def try_to_advance_turn_to_phase2(
         # such obsolete records will be deleted eventually, here we
         # delete all records for which the turn phase 2 has been
         # reached.
-        db.session.execute(
-            delete(DebtorInfo)
-            .execution_options(synchronize_session=False)
-            .where(
-                Turn.turn_id == DebtorInfo.turn_id,
-                Turn.phase >= 2,
-            )
-        )
-        db.session.execute(
-            delete(ConfirmedDebtor)
-            .execution_options(synchronize_session=False)
-            .where(
-                Turn.turn_id == ConfirmedDebtor.turn_id,
-                Turn.phase >= 2,
-            )
-        )
+        _delete_phase2_turn_records_from_table(DebtorInfo)
+        _delete_phase2_turn_records_from_table(ConfirmedDebtor)
+
         return True
 
     return False
+
+
+def _delete_phase2_turn_records_from_table(table) -> None:
+    min_turn_id = (
+        db.session.execute(
+            select(func.min(table.turn_id))
+            .select_from(table)
+        )
+        .scalar_one()
+    )
+    if min_turn_id is not None:
+        db.session.execute(
+            delete(table)
+            .execution_options(synchronize_session=False)
+            .where(
+                Turn.turn_id == table.turn_id,
+                Turn.turn_id >= min_turn_id,
+                Turn.phase >= 2,
+            )
+        )
 
 
 @atomic

@@ -189,41 +189,34 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         # Therefore, in order to ensure that such obsolete records
         # will be deleted eventually, here we delete all records for
         # which the turn phase 3 has been reached.
-        db.session.execute(
-            delete(CurrencyInfo)
-            .execution_options(synchronize_session=False)
-            .where(
-                Turn.turn_id == CurrencyInfo.turn_id,
-                Turn.phase >= 3,
-            )
-        )
-        db.session.execute(
-            delete(SellOffer)
-            .execution_options(synchronize_session=False)
-            .where(
-                Turn.turn_id == SellOffer.turn_id,
-                Turn.phase >= 3,
-            )
-        )
-        db.session.execute(
-            delete(BuyOffer)
-            .execution_options(synchronize_session=False)
-            .where(
-                Turn.turn_id == BuyOffer.turn_id,
-                Turn.phase >= 3,
-            )
-        )
-        db.session.execute(
-            delete(HoardedCurrency)
-            .execution_options(synchronize_session=False)
-            .where(
-                Turn.turn_id == HoardedCurrency.turn_id,
-                Turn.phase >= 3,
-            )
-        )
+        _delete_phase3_turn_records_from_table(CurrencyInfo)
+        _delete_phase3_turn_records_from_table(SellOffer)
+        _delete_phase3_turn_records_from_table(BuyOffer)
+        _delete_phase3_turn_records_from_table(HoardedCurrency)
+
         return True
 
     return False
+
+
+def _delete_phase3_turn_records_from_table(table) -> None:
+    min_turn_id = (
+        db.session.execute(
+            select(func.min(table.turn_id))
+            .select_from(table)
+        )
+        .scalar_one()
+    )
+    if min_turn_id is not None:
+        db.session.execute(
+            delete(table)
+            .execution_options(synchronize_session=False)
+            .where(
+                Turn.turn_id == table.turn_id,
+                Turn.turn_id >= min_turn_id,
+                Turn.phase >= 3,
+            )
+        )
 
 
 def _write_takings(solver: Solver, turn_id: int) -> None:
