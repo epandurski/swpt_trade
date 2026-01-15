@@ -1,9 +1,12 @@
-from typing import Iterable
-from datetime import datetime, timezone
+import logging
+from typing import Iterable, Optional
+from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sqlalchemy import select, update, delete, bindparam
 from sqlalchemy.sql.expression import func, text, tuple_
 from swpt_pythonlib.utils import ShardingRealm
+from swpt_pythonlib.multiproc_utils import ThreadPoolProcessor
+from swpt_trade.utils import u16_to_i16
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
@@ -139,3 +142,56 @@ def iter_pristine_collectors(
         ) as result:
             for rows in result.partitions():
                 yield rows
+
+
+def handle_pristine_collectors(
+        threads: Optional[int] = None,
+        wait: Optional[float] = None,
+        quit_early: bool = True,
+) -> None:
+    cfg = current_app.config
+    threads = threads or cfg["HANDLE_PRISTINE_COLLECTORS_THREADS"]
+    wait = (
+        wait
+        if wait is not None
+        else cfg["APP_HANDLE_PRISTINE_COLLECTORS_WAIT"]
+    )
+    max_count = cfg["APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT"]
+    max_postponement = timedelta(days=cfg["APP_EXTREME_MESSAGE_DELAY_DAYS"])
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
+    hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
+    logger = logging.getLogger(__name__)
+
+    def iter_args_collections():
+        return iter_pristine_collectors(
+            hash_mask=hash_mask,
+            hash_prefix=hash_prefix,
+            yield_per=max_count,
+        )
+
+    def handle_pristine_collector(debtor_id, collector_id):
+        try:
+            assert sharding_realm.match(collector_id)
+            if error_ts := procedures.configure_worker_account(
+                debtor_id=debtor_id,
+                collector_id=collector_id,
+                max_postponement=max_postponement,
+            ):
+                logger.warning(
+                    "Failed to create a worker account for a pristine"
+                    " collector (debtor_id=%d, collector_id=%d,"
+                    " attempted_at=%s). Tying again.",
+                    debtor_id,
+                    collector_id,
+                    error_ts,
+                )
+        finally:
+            db.session.close()
+
+    ThreadPoolProcessor(
+        threads,
+        iter_args_collections=iter_args_collections,
+        process_func=handle_pristine_collector,
+        wait_seconds=wait,
+    ).run(quit_early=quit_early)
