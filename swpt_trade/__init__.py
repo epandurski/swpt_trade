@@ -248,7 +248,6 @@ class Configuration(metaclass=MetaEnvReader):
     TRIGGER_TRANSFERS_PROCESSES = 1
 
     HANDLE_PRISTINE_COLLECTORS_THREADS = 1
-    HANDLE_PRISTINE_COLLECTORS_PERIOD = 60.0
 
     DELETE_PARENT_SHARD_RECORDS = False
 
@@ -278,6 +277,7 @@ class Configuration(metaclass=MetaEnvReader):
     APP_ACCOUNT_LOCK_MAX_DAYS = 365.0
     APP_RELEASED_ACCOUNT_LOCK_MAX_DAYS = 30.0
     APP_COLLECTOR_ACTIVITY_MIN_DAYS = 28.0
+    APP_HANDLE_PRISTINE_COLLECTORS_WAIT = 600.0
     APP_ROLL_TURNS_WAIT = 60.0
     APP_ROLL_WORKER_TURNS_WAIT = 60.0
     APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 50000
@@ -402,6 +402,20 @@ def _check_config_sanity(c):  # pragma: nocover
             " value."
         )
 
+    if 0 < parse_timedelta(c["TURN_PHASE1_DURATION"]).total_seconds() < 120:
+        # Duration 0 is allowed for testing purposes.
+        raise RuntimeError(
+            "The configured value for TURN_PHASE1_DURATION is"
+            " to small. Choose a more appropriate value."
+        )
+
+    if 0 < parse_timedelta(c["TURN_PHASE2_DURATION"]).total_seconds() < 120:
+        # Duration 0 is allowed for testing purposes.
+        raise RuntimeError(
+            "The configured value for TURN_PHASE2_DURATION is"
+            " to small. Choose a more appropriate value."
+        )
+
     if c["APP_LOCATOR_CLAIM_EXPIRY_DAYS"] < 30.0:
         raise RuntimeError(
             "The configured value for APP_LOCATOR_CLAIM_EXPIRY_DAYS is"
@@ -458,29 +472,6 @@ def _check_config_sanity(c):  # pragma: nocover
             " smaller than the configured value for"
             " APP_TURN_MAX_COMMIT_PERIOD. Choose more appropriate"
             " configuration values."
-        )
-
-    if 0 < parse_timedelta(c["TURN_PHASE1_DURATION"]).total_seconds() < 120:
-        # Duration 0 is allowed for testing purposes.
-        raise RuntimeError(
-            "The configured value for TURN_PHASE1_DURATION is"
-            " to small. Choose a more appropriate value."
-        )
-
-    if 0 < parse_timedelta(c["TURN_PHASE2_DURATION"]).total_seconds() < 120:
-        # Duration 0 is allowed for testing purposes.
-        raise RuntimeError(
-            "The configured value for TURN_PHASE2_DURATION is"
-            " to small. Choose a more appropriate value."
-        )
-
-    if (
-            2 * c["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
-            > parse_timedelta(c["TURN_PERIOD"]).total_seconds()
-    ):
-        raise RuntimeError(
-            "The configured value for HANDLE_PRISTINE_COLLECTORS_PERIOD is"
-            " to big. Choose a more appropriate value."
         )
 
 

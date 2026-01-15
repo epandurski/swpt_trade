@@ -49,24 +49,19 @@ def handle_pristine_collectors(threads, wait, quit_early):
     variable HANDLE_PRISTINE_COLLECTORS_THREADS is taken. If it is
     not set, the default number of threads is 1.
 
-    If --wait is not specified, the value of the configuration
-    variable HANDLE_PRISTINE_COLLECTORS_PERIOD is taken. If it is
-    not set, the default number of seconds is 60.
+    If --wait is not specified, the default is 600 seconds.
     """
 
-    threads = threads or current_app.config[
-        "HANDLE_PRISTINE_COLLECTORS_THREADS"
-    ]
+    cfg = current_app.config
+    threads = threads or cfg["HANDLE_PRISTINE_COLLECTORS_THREADS"]
     wait = (
         wait
         if wait is not None
-        else current_app.config["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
+        else cfg["APP_HANDLE_PRISTINE_COLLECTORS_WAIT"]
     )
-    max_count = current_app.config["APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT"]
-    max_postponement = timedelta(
-        days=current_app.config["APP_EXTREME_MESSAGE_DELAY_DAYS"]
-    )
-    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+    max_count = cfg["APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT"]
+    max_postponement = timedelta(days=cfg["APP_EXTREME_MESSAGE_DELAY_DAYS"])
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
     hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
     hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
     logger = logging.getLogger(__name__)
@@ -225,15 +220,13 @@ def trigger_transfers(
 def apply_collector_changes(wait, quit_early):
     """Run a process which applies pending collector changes.
 
-    If --wait is not specified, 1/4th of the value of the configuration
-    variable HANDLE_PRISTINE_COLLECTORS_PERIOD is taken. If it is
-    not set, the default number of seconds is 15.
+    If --wait is not specified, the default is 150 seconds.
     """
 
     wait = (
         wait
         if wait is not None
-        else current_app.config["HANDLE_PRISTINE_COLLECTORS_PERIOD"] / 4
+        else current_app.config["APP_HANDLE_PRISTINE_COLLECTORS_WAIT"] / 4
     )
     logger = logging.getLogger(__name__)
     logger.info("Started collector changes processor.")

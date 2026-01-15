@@ -310,16 +310,11 @@ HTTP_FETCH_TIMEOUT=10.0
 # attempts.
 TRIGGER_TRANSFERS_PROCESSES=1
 
-# Worker servers should periodically query the solver's database
-# for new ("pristine") collector accounts that need to be
-# created. The "$HANDLE_PRISTINE_COLLECTORS_PERIOD" value
-# specifies the number of seconds to wait between two sequential
-# database queries to obtain new collector accounts from the
-# solver's database (default 60). The specified number of
-# threads ("$HANDLE_PRISTINE_COLLECTORS_THREADS") will be spawned
-# to actually create the needed collector accounts (default 1).
+# Worker servers periodically query the solver's database for new
+# ("pristine") collector accounts that need to be created.
+# "$HANDLE_PRISTINE_COLLECTORS_THREADS" number of threads will be
+# spawned to create the needed collector accounts (default 1).
 HANDLE_PRISTINE_COLLECTORS_THREADS=1
-HANDLE_PRISTINE_COLLECTORS_PERIOD=60.0
 
 # Set this to "true" after splitting a parent database shard into
 # two children shards. You may set this back to "false", once all
