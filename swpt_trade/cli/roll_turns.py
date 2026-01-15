@@ -1,7 +1,7 @@
 import logging
 import time
 import click
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from flask import current_app
 from flask.cli import with_appcontext
 from swpt_trade import procedures
@@ -42,10 +42,10 @@ from .common import swpt_trade
     help=(
         "The process will wake up every TEXT seconds to check whether"
         " a new turn has to be started, or an already started turn"
-        " has to be advanced. If not specified, the value of the"
-        " TURN_CHECK_INTERVAL environment variable will be used,"
-        " defaulting to 1 minute if empty. A unit can also be included"
-        " in the value. For example, 2m would be equivalent to 120 seconds."
+        " has to be advanced. If not specified, the smaller among"
+        " 1 minute, and 1/10th of TURN_PHASE1_DURATION will be used."
+        " A unit can also be included in the value. For example, 2m"
+        " would be equivalent to 120 seconds."
     ),
 )
 @click.option(
@@ -74,13 +74,15 @@ def roll_turns(period, period_offset, check_interval, quit_early):
     c = current_app.config
     period = parse_timedelta(period or c["TURN_PERIOD"])
     period_offset = parse_timedelta(period_offset or c["TURN_PERIOD_OFFSET"])
-    check_interval = parse_timedelta(
-        check_interval or c["TURN_CHECK_INTERVAL"]
-    )
     phase1_duration = parse_timedelta(c["TURN_PHASE1_DURATION"])
     phase2_duration = parse_timedelta(c["TURN_PHASE2_DURATION"])
     max_commit_period = c["APP_TURN_MAX_COMMIT_PERIOD"]
-
+    default_check_interval = timedelta(seconds=c["APP_ROLL_TURNS_WAIT"])
+    check_interval = (
+        parse_timedelta(check_interval)
+        if check_interval
+        else min(default_check_interval, phase1_duration / 10)
+    )
     logger = logging.getLogger(__name__)
     logger.info("Started rolling turns.")
 

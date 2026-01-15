@@ -693,7 +693,7 @@ def _on_needed_collector_signal(
         needed_at=ts,
         min_collector_id=cfg["MIN_COLLECTOR_ID"],
         max_collector_id=cfg["MAX_COLLECTOR_ID"],
-        number_of_accounts=cfg["DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
+        number_of_accounts=cfg["APP_DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS"],
     )
 
 
