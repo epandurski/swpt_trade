@@ -4,7 +4,8 @@ import click
 from datetime import datetime, timezone
 from flask import current_app
 from flask.cli import with_appcontext
-from swpt_trade import procedures
+from swpt_trade.extensions import db
+from swpt_trade import procedures, sync_collectors
 from .common import swpt_trade
 
 
@@ -37,13 +38,15 @@ def roll_worker_turns(wait, quit_early):
         run_phase3_subphase5,
     )
 
+    cfg = current_app.config
     wait_seconds = (
         wait
         if wait is not None
-        else current_app.config["APP_ROLL_WORKER_TURNS_WAIT"]
+        else cfg["APP_ROLL_WORKER_TURNS_WAIT"]
     )
     logger = logging.getLogger(__name__)
     logger.info("Started rolling worker turns.")
+    iteration_counter = 0
 
     while True:
         unfinished_turn_ids = set()
@@ -68,6 +71,11 @@ def roll_worker_turns(wait, quit_early):
         for finished_turn in procedures.get_turns_by_ids(overlooked_turn_ids):
             assert finished_turn.phase == 4
             procedures.update_or_create_worker_turn(finished_turn)
+
+        # Here we make sure that the connection to the solver's
+        # database is returned to the connection pull. This is aimed
+        # at reducing the load on the solver's database.
+        db.session.close()
 
         for worker_turn in procedures.get_pending_worker_turns():
             current_ts = datetime.now(tz=timezone.utc)
@@ -108,7 +116,7 @@ def roll_worker_turns(wait, quit_early):
             elif phase == 2 and subphase == 5:
                 phase_deadline = worker_turn.phase_deadline
                 offers_pouring_duration = (
-                    current_app.config["OFFERS_POURING_DURATION"]
+                    cfg["OFFERS_POURING_DURATION"]
                     or 0.1 * (phase_deadline - worker_turn.started_at)
                 )
                 if current_ts >= phase_deadline - offers_pouring_duration:
@@ -130,6 +138,19 @@ def roll_worker_turns(wait, quit_early):
                 raise RuntimeError(
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."
                 )
+
+            if iteration_counter % 2 == 1:
+                # This does the same as the `apply_collector_changes`
+                # CLI command. Run it every 2nd iteration:
+                sync_collectors.process_collector_status_changes()
+                sync_collectors.create_needed_collector_accounts()
+
+            if iteration_counter % 10 == 1:
+                # This does the same as the `handle_pristine_collectors`
+                # CLI command. Run it every 10th iteration:
+                sync_collectors.handle_pristine_collectors()
+
+            iteration_counter += 1
 
         if quit_early:
             break
