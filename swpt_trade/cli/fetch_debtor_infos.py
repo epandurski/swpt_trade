@@ -56,8 +56,7 @@ from .common import swpt_trade
     type=float,
     help=(
         "Poll the database for scheduled requests every FLOAT seconds."
-        " If not specified, the value of the HTTP_FETCH_PERIOD environment"
-        " variable will be used, defaulting to 15 seconds if empty."
+        " If not specified, the default is 15 seconds."
     ),
 )
 @click.option(
@@ -77,6 +76,7 @@ def fetch_debtor_infos(
     debtor info documents.
 
     """
+    cfg = current_app.config
     logger = logging.getLogger(__name__)
     logger.info("Started fetching debtor info documents.")
 
@@ -125,23 +125,23 @@ def fetch_debtor_infos(
         processes=(
             processes
             if processes is not None
-            else current_app.config["HTTP_FETCH_PROCESSES"]
+            else cfg["HTTP_FETCH_PROCESSES"]
         ),
         target=_fetch,
         connections=(
             connections
             if connections is not None
-            else current_app.config["HTTP_FETCH_CONNECTIONS"]
+            else cfg["HTTP_FETCH_CONNECTIONS"]
         ),
         timeout=(
             timeout
             if timeout is not None
-            else current_app.config["HTTP_FETCH_TIMEOUT"]
+            else cfg["HTTP_FETCH_TIMEOUT"]
         ),
         wait=(
             wait
             if wait is not None
-            else current_app.config["HTTP_FETCH_PERIOD"]
+            else cfg["APP_HTTP_FETCH_PERIOD"].total_seconds()
         ),
     )
     sys.exit(1)

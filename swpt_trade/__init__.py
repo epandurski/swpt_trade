@@ -198,13 +198,11 @@ class Configuration(metaclass=MetaEnvReader):
     OWNER_CREDITOR_ID: _parse_creditor_id = (
         _parse_creditor_id("0x00000100ffffffff")
     )
-    DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 2
     OAUTH2_SUPERUSER_USERNAME = "creditors-superuser"
     OAUTH2_SUPERVISOR_USERNAME = "creditors-supervisor"
 
     TURN_PERIOD = "1d"
     TURN_PERIOD_OFFSET = "2h"
-    TURN_CHECK_INTERVAL = "60s"
     TURN_PHASE1_DURATION = "10m"
     TURN_PHASE2_DURATION = "1h"
 
@@ -244,14 +242,12 @@ class Configuration(metaclass=MetaEnvReader):
     FLUSH_PERIOD = 2.0
 
     HTTP_FETCH_PROCESSES = 1
-    HTTP_FETCH_PERIOD = 15.0
     HTTP_FETCH_CONNECTIONS = 100
     HTTP_FETCH_TIMEOUT = 10.0
 
     TRIGGER_TRANSFERS_PROCESSES = 1
 
     HANDLE_PRISTINE_COLLECTORS_THREADS = 1
-    HANDLE_PRISTINE_COLLECTORS_PERIOD = 60.0
 
     DELETE_PARENT_SHARD_RECORDS = False
 
@@ -272,6 +268,8 @@ class Configuration(metaclass=MetaEnvReader):
     APP_VERIFY_SSL_CERTS = True
     APP_ENABLE_INESSENTIAL_WEBAPIS = False
     APP_TURN_MAX_COMMIT_PERIOD: parse_timedelta = parse_timedelta("30d")
+    APP_HTTP_FETCH_PERIOD: parse_timedelta = parse_timedelta("15s")
+    APP_DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 2
     APP_INTEREST_RATE_HISTORY_PERIOD: parse_timedelta = parse_timedelta("180d")
     APP_MIN_DEMURRAGE_RATE = -50.0
     APP_MIN_TRANSFER_NOTE_MAX_BYTES = 80
@@ -279,6 +277,8 @@ class Configuration(metaclass=MetaEnvReader):
     APP_ACCOUNT_LOCK_MAX_DAYS = 365.0
     APP_RELEASED_ACCOUNT_LOCK_MAX_DAYS = 30.0
     APP_COLLECTOR_ACTIVITY_MIN_DAYS = 28.0
+    APP_HANDLE_PRISTINE_COLLECTORS_WAIT = 600.0
+    APP_ROLL_TURNS_WAIT = 60.0
     APP_ROLL_WORKER_TURNS_WAIT = 60.0
     APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT = 50000
     APP_LOCATOR_CLAIM_EXPIRY_DAYS = 45.0
@@ -402,6 +402,20 @@ def _check_config_sanity(c):  # pragma: nocover
             " value."
         )
 
+    if 0 < parse_timedelta(c["TURN_PHASE1_DURATION"]).total_seconds() < 120:
+        # Duration 0 is allowed for testing purposes.
+        raise RuntimeError(
+            "The configured value for TURN_PHASE1_DURATION is"
+            " to small. Choose a more appropriate value."
+        )
+
+    if 0 < parse_timedelta(c["TURN_PHASE2_DURATION"]).total_seconds() < 120:
+        # Duration 0 is allowed for testing purposes.
+        raise RuntimeError(
+            "The configured value for TURN_PHASE2_DURATION is"
+            " to small. Choose a more appropriate value."
+        )
+
     if c["APP_LOCATOR_CLAIM_EXPIRY_DAYS"] < 30.0:
         raise RuntimeError(
             "The configured value for APP_LOCATOR_CLAIM_EXPIRY_DAYS is"
@@ -458,15 +472,6 @@ def _check_config_sanity(c):  # pragma: nocover
             " smaller than the configured value for"
             " APP_TURN_MAX_COMMIT_PERIOD. Choose more appropriate"
             " configuration values."
-        )
-
-    if (
-            2 * c["HANDLE_PRISTINE_COLLECTORS_PERIOD"]
-            > parse_timedelta(c["TURN_PERIOD"]).total_seconds()
-    ):
-        raise RuntimeError(
-            "The configured value for HANDLE_PRISTINE_COLLECTORS_PERIOD is"
-            " to big. Choose a more appropriate value."
         )
 
 
