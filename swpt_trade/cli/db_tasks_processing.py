@@ -45,7 +45,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
     sync_collectors.handle_pristine_collectors(threads, wait, quit_early)
 
 
-@swpt_trade.command("update_dispatchings")
+@swpt_trade.command("process_dispatchings")
 @with_appcontext
 @click.option(
     "-w",
@@ -65,9 +65,10 @@ def handle_pristine_collectors(threads, wait, quit_early):
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def update_dispatchings(wait, quit_early):
+def process_dispatchings(wait, quit_early):
     """Run a process which polls the worker's database for collector
-    accounts that are ready to initiate transfers.
+    accounts that are ready to initiate transfers. This process is
+    also responsible for replaying delayed account transfers.
     """
     from swpt_trade import process_transfers as pt
 
@@ -91,14 +92,14 @@ def update_dispatchings(wait, quit_early):
         pt.signal_dispatching_statuses_ready_to_dispatch()
         pt.delete_dispatching_statuses_with_everything_dispatched()
 
-        # NOTE: Sometimes `AccountTransfer` SMP messages (triggered by
-        # the actions of other workers) will be received before the
-        # worker is ready to process them. Such messages will be saved
-        # in a database table, in order to be "replayed" once the
-        # worker is ready to process them.
-        n = pt.process_delayed_account_transfers()
-        if n > 0:
-            logger.info("Replayed %d account transfer messages.", n)
+        logger.info(
+            "Looking for delayed account transfers ready to be replayed."
+        )
+        number_replayed = pt.process_delayed_account_transfers()
+        if number_replayed > 0:
+            logger.info(
+                "Replayed %d account transfer messages.", number_replayed
+            )
 
         if quit_early:
             break
