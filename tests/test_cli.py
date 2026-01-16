@@ -366,7 +366,7 @@ def test_replay_delayed_account_transfers(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "replay_delayed_account_transfers",
+            "update_dispatchings",
             "--quit-early",
         ]
     )
