@@ -139,6 +139,12 @@ def roll_worker_turns(wait, quit_early):
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."
                 )
 
+        # NOTE: Running the next commands here has the same effect as
+        # running the corresponding CLI commands. The reason we run
+        # them here, is to reuse the open connections that we already
+        # have in the connection pool. The ultimate goal is to open
+        # only one connection to the solver's database per worker.
+
         if iteration_counter % 2 == 1:  # pragma: no cover
             # This does the same as the `apply_collector_changes`
             # CLI command. Run it every 2nd iteration:
