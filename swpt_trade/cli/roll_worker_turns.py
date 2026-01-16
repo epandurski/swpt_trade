@@ -73,8 +73,7 @@ def roll_worker_turns(wait, quit_early):
             procedures.update_or_create_worker_turn(finished_turn)
 
         # Here we make sure that the connection to the solver's
-        # database is returned to the connection pull. This is aimed
-        # at reducing the load on the solver's database.
+        # database is returned to the connection pull.
         db.session.close()
 
         for worker_turn in procedures.get_pending_worker_turns():
