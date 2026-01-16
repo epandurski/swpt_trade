@@ -312,9 +312,9 @@ TRIGGER_TRANSFERS_PROCESSES=1
 
 # Worker servers periodically query the solver's database for new
 # ("pristine") collector accounts that need to be created.
-# "$HANDLE_PRISTINE_COLLECTORS_THREADS" number of threads will be
+# "$PROCESS_PRISTINE_COLLECTORS_THREADS" number of threads will be
 # spawned to create the needed collector accounts (default 1).
-HANDLE_PRISTINE_COLLECTORS_THREADS=1
+PROCESS_PRISTINE_COLLECTORS_THREADS=1
 
 # Set this to "true" after splitting a parent database shard into
 # two children shards. You may set this back to "false", once all
