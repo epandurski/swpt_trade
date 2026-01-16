@@ -818,13 +818,35 @@ def test_ensure_collector_accounts(db_session):
     assert cas[-1].status == 3
     assert len(CollectorAccount.query.filter_by(debtor_id=777).all()) == 1
 
-    with pytest.raises(RuntimeError):
-        p.ensure_collector_accounts(
-            debtor_id=666,
-            min_collector_id=1,
-            max_collector_id=2,
-            number_of_accounts=40,
-        )
+    # The `number_of_accounts` is too big.
+    p.ensure_collector_accounts(
+        debtor_id=777,
+        min_collector_id=1,
+        max_collector_id=2,
+        number_of_accounts=40,
+    )
+    assert all(
+        ca.collector_id in [1, 2]
+        for ca in CollectorAccount.query.filter_by(debtor_id=777).all()
+    )
+
+    # The `number_of_accounts` is zero.
+    p.ensure_collector_accounts(
+        debtor_id=888,
+        min_collector_id=1000,
+        max_collector_id=2000,
+        number_of_accounts=0,
+    )
+    assert len(CollectorAccount.query.filter_by(debtor_id=888).all()) == 0
+
+    # The `number_of_accounts` is negative.
+    p.ensure_collector_accounts(
+        debtor_id=888,
+        min_collector_id=1000,
+        max_collector_id=2000,
+        number_of_accounts=-1000,
+    )
+    assert len(CollectorAccount.query.filter_by(debtor_id=888).all()) == 0
 
 
 def test_process_account_purge_signal(db_session, current_ts):
