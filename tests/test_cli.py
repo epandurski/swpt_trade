@@ -1412,7 +1412,7 @@ def test_delete_delayed_account_transfers(
     assert dats[0].turn_id == 2
 
 
-def test_handle_pristine_collectors(
+def test_process_pristine_collectors(
         app,
         db_session,
         restore_sharding_realm,
@@ -1470,7 +1470,7 @@ def test_handle_pristine_collectors(
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "handle_pristine_collectors",
+            "process_pristine_collectors",
             "--wait",
             "0.000001",
             "--quit-early",

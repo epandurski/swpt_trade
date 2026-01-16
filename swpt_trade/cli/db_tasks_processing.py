@@ -9,7 +9,7 @@ from swpt_trade import sync_collectors
 from .common import swpt_trade
 
 
-@swpt_trade.command("handle_pristine_collectors")
+@swpt_trade.command("process_pristine_collectors")
 @with_appcontext
 @click.option(
     "-t", "--threads", type=int, help="The number of worker threads."
@@ -29,11 +29,11 @@ from .common import swpt_trade
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def handle_pristine_collectors(threads, wait, quit_early):
-    """Run a process which handles pristine collector accounts.
+def process_pristine_collectors(threads, wait, quit_early):
+    """Run a process which deals with pristine collector accounts.
 
     If --threads is not specified, the value of the configuration
-    variable HANDLE_PRISTINE_COLLECTORS_THREADS is taken. If it is
+    variable PROCESS_PRISTINE_COLLECTORS_THREADS is taken. If it is
     not set, the default number of threads is 1.
 
     If --wait is not specified, the default is 600 seconds.
@@ -42,7 +42,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
     logger = logging.getLogger(__name__)
     logger.info("Started pristine collector accounts processor.")
     time.sleep(wait * random.random())
-    sync_collectors.handle_pristine_collectors(threads, wait, quit_early)
+    sync_collectors.process_pristine_collectors(threads, wait, quit_early)
 
 
 @swpt_trade.command("process_dispatchings")
@@ -133,7 +133,7 @@ def apply_collector_changes(wait, quit_early):
     wait = (
         wait
         if wait is not None
-        else current_app.config["APP_HANDLE_PRISTINE_COLLECTORS_WAIT"] / 5
+        else current_app.config["APP_PROCESS_PRISTINE_COLLECTORS_WAIT"] / 5
     )
     logger = logging.getLogger(__name__)
     logger.info("Started collector changes processor.")

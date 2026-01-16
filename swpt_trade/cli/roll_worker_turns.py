@@ -151,9 +151,9 @@ def roll_worker_turns(wait, quit_early):
             sync_collectors.create_needed_collector_accounts()
 
         if iteration_counter % 10 == 0:
-            # This does the same as the `handle_pristine_collectors`
+            # This does the same as the `process_pristine_collectors`
             # CLI command. Run it every 10th iteration:
-            sync_collectors.handle_pristine_collectors()
+            sync_collectors.process_pristine_collectors()
 
         iteration_counter += 1
         if quit_early:

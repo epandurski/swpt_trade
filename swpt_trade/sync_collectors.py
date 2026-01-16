@@ -144,19 +144,19 @@ def iter_pristine_collectors(
                 yield rows
 
 
-def handle_pristine_collectors(
+def process_pristine_collectors(
         threads: Optional[int] = None,
         wait: Optional[float] = None,
         quit_early: bool = True,
 ) -> None:
     cfg = current_app.config
-    threads = threads or cfg["HANDLE_PRISTINE_COLLECTORS_THREADS"]
+    threads = threads or cfg["PROCESS_PRISTINE_COLLECTORS_THREADS"]
     wait = (
         wait
         if wait is not None
-        else cfg["APP_HANDLE_PRISTINE_COLLECTORS_WAIT"]
+        else cfg["APP_PROCESS_PRISTINE_COLLECTORS_WAIT"]
     )
-    max_count = cfg["APP_HANDLE_PRISTINE_COLLECTORS_MAX_COUNT"]
+    max_count = cfg["APP_PROCESS_PRISTINE_COLLECTORS_MAX_COUNT"]
     max_postponement = timedelta(days=cfg["APP_EXTREME_MESSAGE_DELAY_DAYS"])
     sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
     hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
@@ -170,7 +170,7 @@ def handle_pristine_collectors(
             yield_per=max_count,
         )
 
-    def handle_pristine_collector(debtor_id, collector_id):
+    def configure_worker_account(debtor_id, collector_id):
         try:
             assert sharding_realm.match(collector_id)
             if error_ts := procedures.configure_worker_account(
@@ -192,6 +192,6 @@ def handle_pristine_collectors(
     ThreadPoolProcessor(
         threads,
         iter_args_collections=iter_args_collections,
-        process_func=handle_pristine_collector,
+        process_func=configure_worker_account,
         wait_seconds=wait,
     ).run(quit_early=quit_early)
