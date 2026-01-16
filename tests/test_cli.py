@@ -256,7 +256,7 @@ def test_trigger_transfers(app, db_session, current_ts):
     assert tts[0].transfer_kind == m.TransferAttempt.KIND_DISPATCHING
 
 
-def test_update_dispatchings(app, db_session, current_ts):
+def test_process_dispatchings(app, db_session, current_ts):
     db.session.add(
         m.DispatchingStatus(
             collector_id=999,
@@ -283,7 +283,7 @@ def test_update_dispatchings(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "update_dispatchings",
+            "process_dispatchings",
             "--quit-early",
         ]
     )
@@ -366,7 +366,7 @@ def test_replay_delayed_account_transfers(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "replay_delayed_account_transfers",
+            "process_dispatchings",
             "--quit-early",
         ]
     )

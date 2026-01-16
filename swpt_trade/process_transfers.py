@@ -128,6 +128,9 @@ def process_rescheduled_transfers() -> int:
 
 
 def process_delayed_account_transfers() -> int:
+    """Replay delayed account transfers if the worker is ready to
+    process them.
+    """
     cfg = current_app.config
     sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
     delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]

@@ -45,7 +45,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
     sync_collectors.handle_pristine_collectors(threads, wait, quit_early)
 
 
-@swpt_trade.command("update_dispatchings")
+@swpt_trade.command("process_dispatchings")
 @with_appcontext
 @click.option(
     "-w",
@@ -65,9 +65,10 @@ def handle_pristine_collectors(threads, wait, quit_early):
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def update_dispatchings(wait, quit_early):
+def process_dispatchings(wait, quit_early):
     """Run a process which polls the worker's database for collector
-    accounts that are ready to initiate transfers.
+    accounts that are ready to initiate transfers. This process is
+    also responsible for replaying delayed account transfers.
     """
     from swpt_trade import process_transfers as pt
 
@@ -91,55 +92,14 @@ def update_dispatchings(wait, quit_early):
         pt.signal_dispatching_statuses_ready_to_dispatch()
         pt.delete_dispatching_statuses_with_everything_dispatched()
 
-        if quit_early:
-            break
-        if wait_seconds > 0.0:  # pragma: no cover
-            time.sleep(max(0.0, wait_seconds + started_at - time.time()))
-
-
-@swpt_trade.command("replay_delayed_account_transfers")
-@with_appcontext
-@click.option(
-    "-w",
-    "--wait",
-    type=float,
-    help=(
-        "Poll the worker's database every FLOAT seconds for delayed"
-        " account transfers ready to be processed. If not specified,"
-        " 1/12th of the value of the TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"
-        " environment variable will be used, defaulting to 10 minutes if it"
-        " is empty."
-    ),
-)
-@click.option(
-    "--quit-early",
-    is_flag=True,
-    default=False,
-    help="Exit after some time (mainly useful during testing).",
-)
-def replay_delayed_account_transfers(wait, quit_early):
-    """Run a process which polls the worker's database for delayed
-    account transfers ready to be processed.
-    """
-    from swpt_trade.process_transfers import process_delayed_account_transfers
-
-    cfg = current_app.config
-    wait_interval: timedelta = cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"] / 12
-    wait_seconds = (
-        wait
-        if wait is not None
-        else wait_interval.total_seconds()
-    )
-    logger = logging.getLogger(__name__)
-    logger.info("Started replaying delayed account transfers.")
-
-    while True:
         logger.info(
-            "Looking for delayed account transfers ready to be processed."
+            "Looking for delayed account transfers ready to be replayed."
         )
-        started_at = time.time()
-        n = process_delayed_account_transfers()
-        logger.info("Replayed %d account transfer messages.", n)
+        number_replayed = pt.process_delayed_account_transfers()
+        if number_replayed > 0:
+            logger.info(
+                "Replayed %d account transfer messages.", number_replayed
+            )
 
         if quit_early:
             break
