@@ -313,16 +313,15 @@ def ensure_collector_accounts(
     number_of_alive_accounts = len(accounts) - number_of_dead_accounts
     number_of_missing_accounts = number_of_accounts - number_of_alive_accounts
 
-    if number_of_missing_accounts > 0:
-        insert_collector_accounts(
-            generate_collector_account_pkeys(
-                number_of_collector_account_pkeys=number_of_missing_accounts,
-                debtor_id=debtor_id,
-                min_collector_id=min_collector_id,
-                max_collector_id=max_collector_id,
-                existing_collector_ids=set(x.collector_id for x in accounts),
-            )
-        )
+    collector_account_pkeys = generate_collector_account_pkeys(
+        number_of_collector_account_pkeys=number_of_missing_accounts,
+        debtor_id=debtor_id,
+        min_collector_id=min_collector_id,
+        max_collector_id=max_collector_id,
+        existing_collector_ids=set(x.collector_id for x in accounts),
+    )
+    if collector_account_pkeys:
+        insert_collector_accounts(collector_account_pkeys)
 
 
 @atomic

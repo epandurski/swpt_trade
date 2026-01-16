@@ -61,14 +61,11 @@ class ActivateDebtorCollectorsEndpoint(MethodView):
         if debtorId == 0:
             abort(500)
 
-        try:
-            procedures.ensure_collector_accounts(
-                debtor_id=debtorId,
-                min_collector_id=current_app.config["MIN_COLLECTOR_ID"],
-                max_collector_id=current_app.config["MAX_COLLECTOR_ID"],
-                number_of_accounts=(
-                    activate_collectors_request["number_of_accounts"]
-                ),
-            )
-        except RuntimeError:
-            abort(500)
+        procedures.ensure_collector_accounts(
+            debtor_id=debtorId,
+            min_collector_id=current_app.config["MIN_COLLECTOR_ID"],
+            max_collector_id=current_app.config["MAX_COLLECTOR_ID"],
+            number_of_accounts=(
+                activate_collectors_request["number_of_accounts"]
+            ),
+        )

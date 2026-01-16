@@ -532,26 +532,28 @@ def register_needed_colector(
                     needed_at=needed_at,
                 )
             )
-        db.session.execute(
-            postgresql.insert(NeededCollectorAccount)
-            .execution_options(synchronize_session=False)
-            .on_conflict_do_nothing(
-                index_elements=[
-                    NeededCollectorAccount.debtor_id,
-                    NeededCollectorAccount.collector_id,
-                ]
-            ),
-            [
-                {"debtor_id": x, "collector_id": y}
-                for x, y in generate_collector_account_pkeys(
-                        number_of_collector_account_pkeys=number_of_accounts,
-                        debtor_id=debtor_id,
-                        min_collector_id=min_collector_id,
-                        max_collector_id=max_collector_id,
-                        existing_collector_ids=set(),
-                )
-            ]
+        collector_account_pkeys = generate_collector_account_pkeys(
+            number_of_collector_account_pkeys=number_of_accounts,
+            debtor_id=debtor_id,
+            min_collector_id=min_collector_id,
+            max_collector_id=max_collector_id,
+            existing_collector_ids=set(),
         )
+        if collector_account_pkeys:
+            db.session.execute(
+                postgresql.insert(NeededCollectorAccount)
+                .execution_options(synchronize_session=False)
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        NeededCollectorAccount.debtor_id,
+                        NeededCollectorAccount.collector_id,
+                    ]
+                ),
+                [
+                    {"debtor_id": x, "collector_id": y}
+                    for x, y in collector_account_pkeys
+                ]
+            )
 
 
 def _discard_unneeded_account(

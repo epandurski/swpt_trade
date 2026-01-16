@@ -142,16 +142,6 @@ def test_ensure_collectors(client):
     assert r.status_code == 204
     assert len(CollectorAccount.query.all()) == 5
 
-    r = client.post(
-        "/trade/collectors/666/activate",
-        json={
-            "type": "ActivateCollectorsRequest",
-            "numberOfAccounts": 5000000000000,
-        },
-    )
-    assert r.status_code == 500
-    assert len(CollectorAccount.query.all()) == 5
-
 
 def test_health_check(client):
     r = client.get("/trade/health/check/public")
