@@ -139,19 +139,18 @@ def roll_worker_turns(wait, quit_early):
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."
                 )
 
-            if iteration_counter % 2 == 1:
-                # This does the same as the `apply_collector_changes`
-                # CLI command. Run it every 2nd iteration:
-                sync_collectors.process_collector_status_changes()
-                sync_collectors.create_needed_collector_accounts()
+        if iteration_counter % 2 == 1:  # pragma: no cover
+            # This does the same as the `apply_collector_changes`
+            # CLI command. Run it every 2nd iteration:
+            sync_collectors.process_collector_status_changes()
+            sync_collectors.create_needed_collector_accounts()
 
-            if iteration_counter % 10 == 1:
-                # This does the same as the `handle_pristine_collectors`
-                # CLI command. Run it every 10th iteration:
-                sync_collectors.handle_pristine_collectors()
+        if iteration_counter % 10 == 0:
+            # This does the same as the `handle_pristine_collectors`
+            # CLI command. Run it every 10th iteration:
+            sync_collectors.handle_pristine_collectors()
 
-            iteration_counter += 1
-
+        iteration_counter += 1
         if quit_early:
             break
         if wait_seconds > 0.0:  # pragma: no cover
