@@ -53,7 +53,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
     sync_collectors.handle_pristine_collectors(threads, wait, quit_early)
 
 
-@swpt_trade.command("roll_delayed_account_transfers")
+@swpt_trade.command("replay_delayed_account_transfers")
 @with_appcontext
 @click.option(
     "-w",
@@ -73,7 +73,7 @@ def handle_pristine_collectors(threads, wait, quit_early):
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def roll_delayed_account_transfers(wait, quit_early):
+def replay_delayed_account_transfers(wait, quit_early):
     """Run a process which polls the worker's database for delayed
     account transfers ready to be processed.
     """
@@ -87,7 +87,7 @@ def roll_delayed_account_transfers(wait, quit_early):
         else wait_interval.total_seconds()
     )
     logger = logging.getLogger(__name__)
-    logger.info("Started rolling delayed account transfers.")
+    logger.info("Started replaying delayed account transfers.")
 
     while True:
         logger.info(

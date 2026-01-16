@@ -7,7 +7,7 @@ from flask.cli import with_appcontext
 from .common import swpt_trade
 
 
-@swpt_trade.command("roll_dispatchings")
+@swpt_trade.command("update_dispatchings")
 @with_appcontext
 @click.option(
     "-w",
@@ -27,7 +27,7 @@ from .common import swpt_trade
     default=False,
     help="Exit after some time (mainly useful during testing).",
 )
-def roll_dispatchings(wait, quit_early):
+def update_dispatchings(wait, quit_early):
     """Run a process which polls the worker's database for collector
     accounts that are ready to initiate transfers.
     """
@@ -41,7 +41,7 @@ def roll_dispatchings(wait, quit_early):
         else wait_interval.total_seconds()
     )
     logger = logging.getLogger(__name__)
-    logger.info("Started rolling transfers.")
+    logger.info("Started updating dispatchings.")
 
     while True:
         logger.info(

@@ -256,7 +256,7 @@ def test_trigger_transfers(app, db_session, current_ts):
     assert tts[0].transfer_kind == m.TransferAttempt.KIND_DISPATCHING
 
 
-def test_roll_dispatchings(app, db_session, current_ts):
+def test_update_dispatchings(app, db_session, current_ts):
     db.session.add(
         m.DispatchingStatus(
             collector_id=999,
@@ -283,7 +283,7 @@ def test_roll_dispatchings(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "roll_dispatchings",
+            "update_dispatchings",
             "--quit-early",
         ]
     )
@@ -291,7 +291,7 @@ def test_roll_dispatchings(app, db_session, current_ts):
     assert len(m.DispatchingStatus.query.all()) == 0
 
 
-def test_roll_delayed_account_transfers(app, db_session, current_ts):
+def test_replay_delayed_account_transfers(app, db_session, current_ts):
     wt1 = m.WorkerTurn(
         turn_id=1,
         started_at=current_ts,
@@ -366,7 +366,7 @@ def test_roll_delayed_account_transfers(app, db_session, current_ts):
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "roll_delayed_account_transfers",
+            "replay_delayed_account_transfers",
             "--quit-early",
         ]
     )
