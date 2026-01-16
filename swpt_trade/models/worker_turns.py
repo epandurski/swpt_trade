@@ -186,14 +186,14 @@ class CreditorParticipation(db.Model):
             " the creditor. A negative number indicates that this amount"
             " should be taken from the creditor."
         ),
+    )
+    collector_id = db.Column(db.BigInteger, nullable=False)
+    __table_args__ = (
         # NOTE: When the amount is `1`, after applying the possibly
         # negative interest rate, and rounding down, the transferred
         # amount would have to be zero, which is impossible to be
         # transferred. Therefore, we can try to give only amounts
         # greater than `1`.
-    )
-    collector_id = db.Column(db.BigInteger, nullable=False)
-    __table_args__ = (
         db.CheckConstraint(or_(amount < 0, amount > 1)),
         {
             "comment": (

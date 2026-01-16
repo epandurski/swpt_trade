@@ -73,8 +73,7 @@ def roll_worker_turns(wait, quit_early):
             procedures.update_or_create_worker_turn(finished_turn)
 
         # Here we make sure that the connection to the solver's
-        # database is returned to the connection pull. This is aimed
-        # at reducing the load on the solver's database.
+        # database is returned to the connection pull.
         db.session.close()
 
         for worker_turn in procedures.get_pending_worker_turns():
@@ -138,6 +137,12 @@ def roll_worker_turns(wait, quit_early):
                 raise RuntimeError(
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."
                 )
+
+        # NOTE: Running the next commands here has the same effect as
+        # running the corresponding CLI commands. The reason we run
+        # them here, is to reuse the open connections that we already
+        # have in the connection pool. The ultimate goal is to open
+        # only one connection to the solver's database per worker.
 
         if iteration_counter % 2 == 1:  # pragma: no cover
             # This does the same as the `apply_collector_changes`
