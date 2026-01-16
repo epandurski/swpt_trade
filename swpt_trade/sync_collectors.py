@@ -150,13 +150,17 @@ def process_pristine_collectors(
         quit_early: bool = True,
 ) -> None:
     cfg = current_app.config
-    threads = threads or cfg["PROCESS_PRISTINE_COLLECTORS_THREADS"]
+    threads = (
+        threads
+        if threads is not None
+        else cfg["PROCESS_PRISTINE_COLLECTORS_THREADS"]
+    )
     wait = (
         wait
         if wait is not None
         else cfg["APP_PROCESS_PRISTINE_COLLECTORS_WAIT"]
     )
-    max_count = cfg["APP_PROCESS_PRISTINE_COLLECTORS_MAX_COUNT"]
+    yield_per = cfg["APP_PROCESS_PRISTINE_COLLECTORS_MAX_COUNT"]
     max_postponement = timedelta(days=cfg["APP_EXTREME_MESSAGE_DELAY_DAYS"])
     sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
     hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
@@ -167,7 +171,7 @@ def process_pristine_collectors(
         return iter_pristine_collectors(
             hash_mask=hash_mask,
             hash_prefix=hash_prefix,
-            yield_per=max_count,
+            yield_per=yield_per,
         )
 
     def configure_worker_account(debtor_id, collector_id):
