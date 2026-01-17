@@ -1470,7 +1470,7 @@ def test_process_pristine_collectors(
     result = runner.invoke(
         args=[
             "swpt_trade",
-            "process_pristine_collectors",
+            "roll_worker_turns",
             "--wait",
             "0.000001",
             "--quit-early",

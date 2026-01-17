@@ -47,6 +47,7 @@ ACTIVE_CONFIRMED_DEBTOR_SUBQUERY = (
     .subquery(name="acd")
 )
 
+INSERT_BATCH_SIZE = 5000
 T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
@@ -258,7 +259,10 @@ def get_turns_by_ids(turn_ids: List[int]) -> Sequence[Turn]:
 def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
     db.session.execute(
         postgresql.insert(CollectorAccount)
-        .execution_options(synchronize_session=False)
+        .execution_options(
+            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+            synchronize_session=False,
+        )
         .on_conflict_do_nothing(
             index_elements=[
                 CollectorAccount.debtor_id,
@@ -268,7 +272,7 @@ def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
         [
             {"debtor_id": debtor_id, "collector_id": collector_id}
             for debtor_id, collector_id in pks
-        ]
+        ],
     )
 
 

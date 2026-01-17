@@ -1,18 +1,23 @@
 import logging
-from typing import Iterable, Optional
 from datetime import datetime, timezone, timedelta
 from flask import current_app
-from sqlalchemy import select, update, delete, bindparam
-from sqlalchemy.sql.expression import func, text, tuple_
+from sqlalchemy import select, update, delete, insert, bindparam
+from sqlalchemy.sql.expression import func, text, null, tuple_
+from sqlalchemy.dialects import postgresql
 from swpt_pythonlib.utils import ShardingRealm
-from swpt_pythonlib.multiproc_utils import ThreadPoolProcessor
 from swpt_trade.utils import u16_to_i16
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
+    HUGE_NEGLIGIBLE_AMOUNT,
+    DEFAULT_CONFIG_FLAGS,
+    WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     CollectorAccount,
     CollectorStatusChange,
     NeededCollectorAccount,
+    NeededWorkerAccount,
+    WorkerAccount,
+    ConfigureAccountSignal,
 )
 from swpt_trade import procedures
 
@@ -27,6 +32,10 @@ COLLECTOR_STATUS_CHANGE_PK = tuple_(
 NEEDED_COLLECTOR_ACCOUNT_PK = tuple_(
     NeededCollectorAccount.debtor_id,
     NeededCollectorAccount.collector_id,
+)
+NEEDED_WORKER_ACCOUNT_PK = tuple_(
+    NeededWorkerAccount.creditor_id,
+    NeededWorkerAccount.debtor_id,
 )
 
 
@@ -121,15 +130,16 @@ def create_needed_collector_accounts():
     db.session.close()
 
 
-def iter_pristine_collectors(
-        *,
-        hash_mask: int,
-        hash_prefix: int,
-        yield_per: int,
-) -> Iterable[list[tuple[int, int]]]:
+def process_pristine_collectors() -> None:
+    cfg = current_app.config
+    max_postponement = timedelta(days=cfg["APP_EXTREME_MESSAGE_DELAY_DAYS"])
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
+    hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
+
     with db.engines["solver"].connect() as s_conn:
         s_conn.execute(SET_SEQSCAN_ON)
-        with s_conn.execution_options(yield_per=yield_per).execute(
+        with s_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     CollectorAccount.debtor_id,
                     CollectorAccount.collector_id,
@@ -140,62 +150,137 @@ def iter_pristine_collectors(
                     == hash_prefix,
                 )
         ) as result:
-            for rows in result.partitions():
-                yield rows
+            for rows in result.partitions(INSERT_BATCH_SIZE):
+                _process_pristine_collectors_batch(
+                    worker_account_pks=[
+                        (row.collector_id, row.debtor_id) for row in rows
+                    ],
+                    max_postponement=max_postponement,
+                )
+
+    db.session.close()
 
 
-def process_pristine_collectors(
-        threads: Optional[int] = None,
-        wait: Optional[float] = None,
-        quit_early: bool = True,
+def _process_pristine_collectors_batch(
+        worker_account_pks: list[tuple[int, int]],
+        max_postponement: timedelta,
 ) -> None:
-    cfg = current_app.config
-    threads = (
-        threads
-        if threads is not None
-        else cfg["PROCESS_PRISTINE_COLLECTORS_THREADS"]
-    )
-    wait = (
-        wait
-        if wait is not None
-        else cfg["APP_PROCESS_PRISTINE_COLLECTORS_WAIT"]
-    )
-    yield_per = cfg["APP_PROCESS_PRISTINE_COLLECTORS_MAX_COUNT"]
-    max_postponement = timedelta(days=cfg["APP_EXTREME_MESSAGE_DELAY_DAYS"])
-    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
-    hash_prefix = u16_to_i16(sharding_realm.realm >> 16)
-    hash_mask = u16_to_i16(sharding_realm.realm_mask >> 16)
-    logger = logging.getLogger(__name__)
+    current_ts = datetime.now(tz=timezone.utc)
 
-    def iter_args_collections():
-        return iter_pristine_collectors(
-            hash_mask=hash_mask,
-            hash_prefix=hash_prefix,
-            yield_per=yield_per,
+    # First, we need to check if the `NeededWorkerAccount` records and
+    # their corresponding accounts already exist.
+    needed_worker_accounts = {
+        (row[0], row[1]): (row[2], row[3])
+        for row in db.session.execute(
+                select(
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                    NeededWorkerAccount.configured_at,
+                    WorkerAccount.creditor_id != null(),
+                )
+                .select_from(NeededWorkerAccount)
+                .join(
+                    WorkerAccount,
+                    WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
+                    isouter=True,
+                )
+                .where(NEEDED_WORKER_ACCOUNT_PK.in_(worker_account_pks))
+        ).all()
+    }
+
+    pks_to_create = set(
+        pk
+        for pk in worker_account_pks
+        if pk not in needed_worker_accounts
+    )
+    if pks_to_create:
+        # We need to create `NeededWorkerAccount` records, and send
+        # `ConfigureAccount` messages, so as to configure new accounts
+        # (see `pks_to_configure` bellow).
+        db.session.execute(
+            postgresql.insert(NeededWorkerAccount)
+            .execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            )
+            .on_conflict_do_nothing(
+                index_elements=[
+                    NeededWorkerAccount.creditor_id,
+                    NeededWorkerAccount.debtor_id,
+                ]
+            ),
+            [
+                {
+                    "creditor_id": creditor_id,
+                    "debtor_id": debtor_id,
+                    "configured_at": current_ts,
+                }
+                for creditor_id, debtor_id in pks_to_create
+            ],
         )
 
-    def configure_worker_account(debtor_id, collector_id):
-        try:
-            assert sharding_realm.match(collector_id)
-            if error_ts := procedures.configure_worker_account(
-                debtor_id=debtor_id,
-                collector_id=collector_id,
-                max_postponement=max_postponement,
-            ):
-                logger.warning(
-                    "Failed to create a worker account for a pristine"
-                    " collector (debtor_id=%d, collector_id=%d,"
-                    " attempted_at=%s). Tying again.",
-                    debtor_id,
-                    collector_id,
-                    error_ts,
-                )
-        finally:
-            db.session.close()
+    pks_to_update = set(
+        pk
+        for pk, (configured_at, has_account) in needed_worker_accounts.items()
+        if configured_at + max_postponement < current_ts and not has_account
+    )
+    if pks_to_update:
+        # It's been a while since `ConfigureAccount` messages were
+        # sent for these collector accounts, and yet there are no
+        # accounts created. The only reasonable thing that we can do
+        # in this case, is to send another `ConfigureAccount` messages
+        # for the accounts, hoping that this will fix the problem (see
+        # `pks_to_configure` bellow).
+        db.session.execute(
+            update(NeededWorkerAccount)
+            .execution_options(synchronize_session=False)
+            .where(NEEDED_WORKER_ACCOUNT_PK.in_(pks_to_update))
+            .values(configured_at=current_ts)
+        )
+        logger = logging.getLogger(__name__)
+        for pk in pks_to_update:
+            logger.warning(
+                "Failed to create a worker account for"
+                " collector (debtor_id=%d, collector_id=%d,"
+                " attempted_at=%s). Tying again.",
+                pk[1],
+                pk[0],
+                needed_worker_accounts[pk][0],
+            )
 
-    ThreadPoolProcessor(
-        threads,
-        iter_args_collections=iter_args_collections,
-        process_func=configure_worker_account,
-        wait_seconds=wait,
-    ).run(quit_early=quit_early)
+    pks_to_configure = pks_to_create | pks_to_update
+    if pks_to_configure:
+        db.session.execute(
+            insert(ConfigureAccountSignal).execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            [
+                {
+                    "creditor_id": creditor_id,
+                    "debtor_id": debtor_id,
+                    "ts": current_ts,
+                    "seqnum": 0,
+                    "negligible_amount": HUGE_NEGLIGIBLE_AMOUNT,
+                    "config_flags": DEFAULT_CONFIG_FLAGS,
+                }
+                for creditor_id, debtor_id in pks_to_configure
+            ],
+        )
+        db.session.execute(
+            insert(CollectorStatusChange).execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            [
+                {
+                    "collector_id": collector_id,
+                    "debtor_id": debtor_id,
+                    "from_status": 0,
+                    "to_status": 1,
+                }
+                for collector_id, debtor_id in pks_to_configure
+            ],
+        )
+
+    db.session.commit()

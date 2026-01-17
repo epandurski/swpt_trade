@@ -36,6 +36,7 @@ T = TypeVar("T")
 atomic: Callable[[T], T] = db.atomic
 
 EPS = 1e-5
+INSERT_BATCH_SIZE = 5000
 WORKER_ACCOUNT_LOAD_ONLY_PK = load_only(
     WorkerAccount.creditor_id,
     WorkerAccount.debtor_id,
@@ -61,78 +62,6 @@ WORKER_ACCOUNT_LOAD_ONLY_ACCOUNT_UPDATE_DATA = load_only(
     WorkerAccount.account_id,
     WorkerAccount.debtor_info_iri,
 )
-
-
-@atomic
-def configure_worker_account(
-        *,
-        collector_id: int,
-        debtor_id: int,
-        max_postponement: timedelta,
-) -> Optional[datetime]:
-    def has_worker_account():
-        return (
-            db.session.query(
-                WorkerAccount.query
-                .filter_by(creditor_id=collector_id, debtor_id=debtor_id)
-                .exists()
-            )
-            .scalar()
-        )
-
-    error_ts = None
-    current_ts = datetime.now(tz=timezone.utc)
-    needed_worker_account = (
-        NeededWorkerAccount.query
-        .filter_by(creditor_id=collector_id, debtor_id=debtor_id)
-        .one_or_none()
-    )
-    if needed_worker_account is None:
-        with db.retry_on_integrity_error():
-            db.session.add(
-                NeededWorkerAccount(
-                    creditor_id=collector_id,
-                    debtor_id=debtor_id,
-                    configured_at=current_ts,
-                )
-            )
-        must_configure_account = True
-    elif (
-            needed_worker_account.configured_at + max_postponement < current_ts
-            and not has_worker_account()
-    ):
-        # It's been a while since the last `ConfigureAccount` message
-        # was sent for this collector account, and yet there is no
-        # account created. The only reasonable thing that we can do in
-        # this case, is to send another `ConfigureAccount` message for
-        # the account, hoping that this will fix the problem.
-        error_ts = needed_worker_account.configured_at
-        needed_worker_account.configured_at = current_ts
-        must_configure_account = True
-    else:
-        must_configure_account = False
-
-    if must_configure_account:
-        db.session.add(
-            ConfigureAccountSignal(
-                creditor_id=collector_id,
-                debtor_id=debtor_id,
-                ts=current_ts,
-                seqnum=0,
-                negligible_amount=HUGE_NEGLIGIBLE_AMOUNT,
-                config_flags=DEFAULT_CONFIG_FLAGS,
-            )
-        )
-        db.session.add(
-            CollectorStatusChange(
-                collector_id=collector_id,
-                debtor_id=debtor_id,
-                from_status=0,
-                to_status=1,
-            )
-        )
-
-    return error_ts
 
 
 @atomic
@@ -542,7 +471,10 @@ def register_needed_colector(
         if collector_account_pkeys:
             db.session.execute(
                 postgresql.insert(NeededCollectorAccount)
-                .execution_options(synchronize_session=False)
+                .execution_options(
+                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                    synchronize_session=False,
+                )
                 .on_conflict_do_nothing(
                     index_elements=[
                         NeededCollectorAccount.debtor_id,
@@ -552,7 +484,7 @@ def register_needed_colector(
                 [
                     {"debtor_id": x, "collector_id": y}
                     for x, y in collector_account_pkeys
-                ]
+                ],
             )
 
 
