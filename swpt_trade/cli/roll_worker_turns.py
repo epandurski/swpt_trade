@@ -73,7 +73,9 @@ def roll_worker_turns(wait, quit_early):
             procedures.update_or_create_worker_turn(finished_turn)
 
         # Here we make sure that the connection to the solver's
-        # database is returned to the connection pull.
+        # database is returned to the connection pull. The ultimate
+        # goal is to open only one connection to the solver's database
+        # per worker.
         db.session.close()
 
         for worker_turn in procedures.get_pending_worker_turns():
@@ -138,12 +140,6 @@ def roll_worker_turns(wait, quit_early):
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."
                 )
 
-        # NOTE: Running the next commands here has the same effect as
-        # running the corresponding CLI commands. The reason we run
-        # them here, is to reuse the open connections that we already
-        # have in the connection pool. The ultimate goal is to open
-        # only one connection to the solver's database per worker.
-
         if iteration_counter % 2 == 1:  # pragma: no cover
             # This does the same as the `apply_collector_changes`
             # CLI command. Run it every 2nd iteration:
@@ -151,8 +147,7 @@ def roll_worker_turns(wait, quit_early):
             sync_collectors.create_needed_collector_accounts()
 
         if iteration_counter % 10 == 0:
-            # This does the same as the `process_pristine_collectors`
-            # CLI command. Run it every 10th iteration:
+            # Run this every 10th iteration:
             sync_collectors.process_pristine_collectors()
 
         iteration_counter += 1
