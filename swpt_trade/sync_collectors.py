@@ -219,12 +219,12 @@ def _process_pristine_collectors_batch(
             ],
         )
 
-    pks_to_update = set(
+    pks_to_retry = set(
         pk
         for pk, (configured_at, has_account) in needed_worker_accounts.items()
         if configured_at + max_postponement < current_ts and not has_account
     )
-    if pks_to_update:
+    if pks_to_retry:
         # It's been a while since `ConfigureAccount` messages were
         # sent for these collector accounts, and yet there are no
         # accounts created. The only reasonable thing that we can do
@@ -234,11 +234,11 @@ def _process_pristine_collectors_batch(
         db.session.execute(
             update(NeededWorkerAccount)
             .execution_options(synchronize_session=False)
-            .where(NEEDED_WORKER_ACCOUNT_PK.in_(pks_to_update))
+            .where(NEEDED_WORKER_ACCOUNT_PK.in_(pks_to_retry))
             .values(configured_at=current_ts)
         )
         logger = logging.getLogger(__name__)
-        for pk in pks_to_update:
+        for pk in pks_to_retry:
             logger.warning(
                 "Failed to create a worker account for"
                 " collector (debtor_id=%d, collector_id=%d,"
@@ -248,7 +248,7 @@ def _process_pristine_collectors_batch(
                 needed_worker_accounts[pk][0],
             )
 
-    pks_to_configure = pks_to_create | pks_to_update
+    pks_to_configure = pks_to_create | pks_to_retry
     if pks_to_configure:
         db.session.execute(
             insert(ConfigureAccountSignal).execution_options(
