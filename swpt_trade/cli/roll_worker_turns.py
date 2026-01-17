@@ -141,8 +141,7 @@ def roll_worker_turns(wait, quit_early):
                 )
 
         if iteration_counter % 2 == 1:  # pragma: no cover
-            # This does the same as the `apply_collector_changes`
-            # CLI command. Run it every 2nd iteration:
+            # Run this every 2nd iteration:
             sync_collectors.process_collector_status_changes()
             sync_collectors.create_needed_collector_accounts()
 
