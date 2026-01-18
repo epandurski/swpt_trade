@@ -196,7 +196,7 @@ def _delete_phase2_turn_records_from_table(table) -> None:
             .execution_options(synchronize_session=False)
             .where(
                 Turn.turn_id == table.turn_id,
-                Turn.turn_id >= min_turn_id,
+                Turn.turn_id >= text(str(min_turn_id)),
                 Turn.phase >= 2,
             )
         )
