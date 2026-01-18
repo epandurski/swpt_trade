@@ -84,7 +84,8 @@ def upgrade_():
         'worker_turn',
         fillfactor=100,
         autovacuum_vacuum_scale_factor=0.2,
-        autovacuum_vacuum_insert_scale_factor=0.2,
+        autovacuum_vacuum_insert_threshold=100,
+        autovacuum_vacuum_insert_scale_factor=0.0,
     )
     set_storage_params(
         'debtor_info_fetch',
@@ -364,6 +365,7 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_scale_factor',
+            'autovacuum_vacuum_insert_threshold',
             'autovacuum_vacuum_insert_scale_factor',
         ]
     )
@@ -656,7 +658,8 @@ def upgrade_solver():
         'turn',
         fillfactor=100,
         autovacuum_vacuum_scale_factor=0.2,
-        autovacuum_vacuum_insert_scale_factor=0.2,
+        autovacuum_vacuum_insert_threshold=100,
+        autovacuum_vacuum_insert_scale_factor=0.0,
     )
     set_storage_params(
         'collector_account',
@@ -675,6 +678,7 @@ def downgrade_solver():
         [
             'fillfactor',
             'autovacuum_vacuum_scale_factor',
+            'autovacuum_vacuum_insert_threshold',
             'autovacuum_vacuum_insert_scale_factor',
         ]
     )
