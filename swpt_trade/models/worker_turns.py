@@ -5,6 +5,7 @@ from sqlalchemy.dialects import postgresql as pg
 from sqlalchemy.sql.expression import null, true, false, or_, and_
 from swpt_trade.utils import TransferNote
 from swpt_trade.extensions import db
+from flask import current_app
 
 
 class WorkerTurn(db.Model):
@@ -116,6 +117,15 @@ class AccountLock(db.Model):
     account_creation_date = db.Column(db.DATE)
     account_last_transfer_number = db.Column(db.BigInteger)
     has_been_revised = db.Column(db.BOOLEAN, nullable=False, default=False)
+    is_collector = db.Column(
+        db.BOOLEAN,
+        nullable=False,
+        default=lambda context: (
+            current_app.config["MIN_COLLECTOR_ID"]
+            <= context.get_current_parameters()["creditor_id"]
+            <= current_app.config["MAX_COLLECTOR_ID"]
+        ),
+    )
     __mapper_args__ = {"eager_defaults": True}
     __table_args__ = (
         db.CheckConstraint(max_locked_amount >= 0),
@@ -134,6 +144,16 @@ class AccountLock(db.Model):
         db.Index(
             "idx_lock_account_coordinator_request_id",
             coordinator_request_id,
+            unique=True,
+        ),
+        db.Index(
+            "idx_lock_account_unreleased_collector_locks",
+            creditor_id,
+            debtor_id,
+            postgresql_where=and_(
+                is_collector == true(),
+                released_at == null(),
+            ),
             unique=True,
         ),
         {

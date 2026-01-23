@@ -7,6 +7,7 @@ from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import (
     null,
+    true,
     false,
     case,
     cast,
@@ -99,6 +100,7 @@ LOCKED_SUBQERY = (
     .where(
         AccountLock.creditor_id == NeededWorkerAccount.creditor_id,
         AccountLock.debtor_id == NeededWorkerAccount.debtor_id,
+        AccountLock.is_collector == true(),
         AccountLock.released_at == null(),
     )
     .scalar_subquery()
