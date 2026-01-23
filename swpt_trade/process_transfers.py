@@ -107,7 +107,6 @@ def process_rescheduled_transfers() -> int:
     batch_size = current_app.config["APP_RESCHEDULED_TRANSFERS_BURST_COUNT"]
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=batch_size).execute(
                 select(
                     TransferAttempt.collector_id,
@@ -251,7 +250,6 @@ def signal_dispatching_statuses_ready_to_send() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
@@ -319,7 +317,6 @@ def update_dispatching_statuses_with_everything_sent() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
@@ -370,7 +367,6 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,
@@ -440,7 +436,6 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
                     DispatchingStatus.collector_id,

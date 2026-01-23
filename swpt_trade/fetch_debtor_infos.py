@@ -59,7 +59,6 @@ def process_debtor_info_fetches(max_connections: int, timeout: float) -> int:
     retry_min_seconds = cfg["APP_DEBTOR_INFO_FETCH_RETRY_MIN_SECONDS"]
 
     with db.engine.connect() as w_conn:
-        w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=batch_size).execute(
                 select(
                     DebtorInfoFetch.iri,
