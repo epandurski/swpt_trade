@@ -109,7 +109,7 @@ def test_ensure_collectors(client):
             {
                 "type": "CollectorAccount",
                 "debtorId": 666,
-                "creditorId": 4294967763,
+                "creditorId": 0x100000003a6,
                 "status": 0,
                 "latestStatusChangeAt":
                 cas[0].latest_status_change_at.isoformat(),

@@ -7,8 +7,8 @@ from swpt_trade.extensions import db
 
 config_dict = {
     "TESTING": True,
-    "MIN_COLLECTOR_ID": 4294967296,
-    "MAX_COLLECTOR_ID": 4294968296,
+    "MIN_COLLECTOR_ID": 0x0000010000000000,
+    "MAX_COLLECTOR_ID": 0x00000100000003ff,
     "OWNER_CREDITOR_ID": 12345,
     "TURN_PHASE1_DURATION": "0",
     "TURN_PHASE2_DURATION": "0",
