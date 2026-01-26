@@ -263,6 +263,7 @@ class Configuration(metaclass=MetaEnvReader):
     )
 
     APP_ENABLE_CORS = False
+    APP_COIN_INFO_DOCUMENT_MAX_LENGTH = 50000
     APP_VERIFY_SSL_CERTS = True
     APP_ENABLE_INESSENTIAL_WEBAPIS = False
     APP_TURN_MAX_COMMIT_PERIOD: parse_timedelta = parse_timedelta("30d")
