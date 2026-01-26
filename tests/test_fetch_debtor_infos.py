@@ -245,6 +245,14 @@ def test_parse_debtor_info_document(app):
 
     with pytest.raises(
             InvalidDebtorInfoDocument,
+            match="Too long CoinInfo document",
+    ):
+        _parse_debtor_info_document(
+            "application/vnd.swaptacular.coin-info+json", 100000 * b'x'
+        )
+
+    with pytest.raises(
+            InvalidDebtorInfoDocument,
             match="Invalid CoinInfo document",
     ):
         _parse_debtor_info_document(

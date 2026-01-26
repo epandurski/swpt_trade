@@ -22,7 +22,6 @@ from swpt_trade.models import (
     FetchDebtorInfoSignal,
     StoreDocumentSignal,
     MAX_INT16,
-    SET_SEQSCAN_ON,
     T_INFINITY,
 )
 
@@ -391,6 +390,9 @@ def _parse_debtor_info_document(
         raise InvalidDebtorInfoDocument(
             "Unknown debtor info document type: %s", content_type
         )
+
+    if len(body) > current_app.config["APP_COIN_INFO_DOCUMENT_MAX_LENGTH"]:
+        raise InvalidDebtorInfoDocument("Too long CoinInfo document")
 
     try:
         obj = json.loads(body.decode("utf8"))
