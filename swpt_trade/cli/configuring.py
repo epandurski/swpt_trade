@@ -58,8 +58,8 @@ def subscribe(
         internal_url,
         internal_queue,
 ):  # pragma: no cover
-    """Declare a RabbitMQ queue pair, and subscribe the queues to
-    receive messages.
+    """Declare a RabbitMQ queue pair (for both SMP and internal
+    messages), and subscribe the two queues to receive messages.
 
     If some of the available options are not specified directly, the
     values of the following environment variables will be used:
@@ -220,7 +220,8 @@ def unsubscribe(
         internal_url,
         internal_queue,
 ):  # pragma: no cover
-    """Unsubscribe a RabbitMQ queue pair from receiving messages.
+    """Unsubscribe a RabbitMQ queue pair (for both SMP and internal
+    messages) from receiving messages.
 
     If some of the available options are not specified directly, the
     values of the following environment variables will be used:
@@ -299,7 +300,8 @@ def unsubscribe(
     help="The name of the internal messages queue to delete.",
 )
 def delete_queue(url, queue, internal_url, internal_queue):  # pragma: no cover
-    """Try to safely delete a RabbitMQ queue pair.
+    """Try to safely delete a RabbitMQ queue pair (for both SMP and
+    internal messages).
 
     When the queue is not empty or is currently in use, this command
     will continuously try to delete the queue, until the deletion
