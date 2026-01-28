@@ -25,13 +25,13 @@ from .common import swpt_trade
     "-u",
     "--url",
     type=str,
-    help="The RabbitMQ connection URL.",
+    help="Connection URL for the SMP messages RabbitMQ broker.",
 )
 @click.option(
     "-q",
     "--queue",
     type=str,
-    help="The name of the queue to declare and subscribe.",
+    help="The name of the SMP messages queue to declare and subscribe.",
 )
 @click.option(
     "-k",
@@ -39,9 +39,27 @@ from .common import swpt_trade
     type=str,
     help="The RabbitMQ binding key for the queue.",
 )
-def subscribe(url, queue, queue_routing_key):  # pragma: no cover
-    """Declare a RabbitMQ queue, and subscribe it to receive incoming
-    messages.
+@click.option(
+    "-U",
+    "--internal-url",
+    type=str,
+    help="Connection URL for the internal messages RabbitMQ broker.",
+)
+@click.option(
+    "-Q",
+    "--internal-queue",
+    type=str,
+    help="The name of the internal messages queue to declare and subscribe.",
+)
+def subscribe(
+        url,
+        queue,
+        queue_routing_key,
+        internal_url,
+        internal_queue,
+):  # pragma: no cover
+    """Declare a RabbitMQ queue pair, and subscribe the queues to
+    receive messages.
 
     If some of the available options are not specified directly, the
     values of the following environment variables will be used:
@@ -51,6 +69,11 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     * PROTOCOL_BROKER_QUEUE (defalut "swpt_trade")
 
     * PROTOCOL_BROKER_QUEUE_ROUTING_KEY (default "#")
+
+    * INTERNAL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
+
+    * INTERNAL_BROKER_QUEUE (defalut "$PROTOCOL_BROKER_QUEUE-internal")
+
     """
 
     from swpt_trade.extensions import (
@@ -61,91 +84,101 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     CA_LOOPBACK_FILTER_EXCHANGE = "ca.loopback_filter"
 
     logger = logging.getLogger(__name__)
-    queue_name = queue or current_app.config["PROTOCOL_BROKER_QUEUE"]
-    routing_key = (
-        queue_routing_key
-        or current_app.config["PROTOCOL_BROKER_QUEUE_ROUTING_KEY"]
-    )
-    dead_letter_queue_name = queue_name + ".XQ"
-    broker_url = url or current_app.config["PROTOCOL_BROKER_URL"]
-    connection = pika.BlockingConnection(pika.URLParameters(broker_url))
-    channel = connection.channel()
+    cfg = current_app.config
+    routing_key = queue_routing_key or cfg["PROTOCOL_BROKER_QUEUE_ROUTING_KEY"]
+    url = url or cfg["PROTOCOL_BROKER_URL"]
+    queue = queue or cfg["PROTOCOL_BROKER_QUEUE"]
+    internal_url = internal_url or cfg["INTERNAL_BROKER_URL"]
+    internal_queue = internal_queue or cfg["INTERNAL_BROKER_QUEUE"]
 
-    # declare exchanges
-    channel.exchange_declare(
-        CREDITORS_IN_EXCHANGE, exchange_type="headers", durable=True
-    )
-    channel.exchange_declare(
-        CA_LOOPBACK_FILTER_EXCHANGE, exchange_type="headers", durable=True
-    )
-    channel.exchange_declare(
-        CREDITORS_OUT_EXCHANGE,
-        exchange_type="topic",
-        durable=True,
-        arguments={"alternate-exchange": CA_LOOPBACK_FILTER_EXCHANGE},
-    )
-    channel.exchange_declare(
-        TO_TRADE_EXCHANGE, exchange_type="topic", durable=True
-    )
+    def declare_necessary_creditors_agent_exchanges(broker_url):
+        connection = pika.BlockingConnection(pika.URLParameters(broker_url))
+        channel = connection.channel()
+        logger.info('Connected to "%s".', broker_url)
 
-    channel.exchange_bind(
-        source=CREDITORS_IN_EXCHANGE,
-        destination=TO_TRADE_EXCHANGE,
-        arguments={
-            "x-match": "all",
-            "ca-trade": True,
-        },
-    )
-    logger.info(
-        'Created a binding from "%s" to the "%s" exchange.',
-        CREDITORS_IN_EXCHANGE,
-        TO_TRADE_EXCHANGE,
-    )
+        channel.exchange_declare(
+            CREDITORS_IN_EXCHANGE, exchange_type="headers", durable=True
+        )
+        channel.exchange_declare(
+            CA_LOOPBACK_FILTER_EXCHANGE, exchange_type="headers", durable=True
+        )
+        channel.exchange_declare(
+            CREDITORS_OUT_EXCHANGE,
+            exchange_type="topic",
+            durable=True,
+            arguments={"alternate-exchange": CA_LOOPBACK_FILTER_EXCHANGE},
+        )
+        channel.exchange_declare(
+            TO_TRADE_EXCHANGE, exchange_type="topic", durable=True
+        )
 
-    # Declare a queue and a corresponding dead-letter queue.
-    #
-    # TODO: Using a "quorum" queue here (with a "stream" dead-letter
-    # queue) is not a good idea, because quorum queues consume lots of
-    # memory when there are lots of messages in the queue. In our
-    # case, we can have lots of internal messages generated in a very
-    # short period of time. The problem with the current use of
-    # classical queues is that their support for high-availability is
-    # limited. Probably the best solution is to use a stream instead
-    # of a queue here, but this requires some big changes. It is also
-    # possible to use two queues instead of one: One queue (a quorum
-    # queue) for the external messages; and another classical queue or
-    # a stream for the internal messages, of which we could have a
-    # lot, but for which we do not necessarily need high-availability.
-    # *However*, if the two queue are located on different broker
-    # servers, it might become feasible to use quorum queues for both,
-    # because in this case the broker that has too long queries will
-    # apply "back pressure", but this will not impact the other
-    # broker.
-    channel.queue_declare(dead_letter_queue_name, durable=True)
-    logger.info('Declared "%s" dead-letter queue.', dead_letter_queue_name)
+        channel.exchange_bind(
+            source=CREDITORS_IN_EXCHANGE,
+            destination=TO_TRADE_EXCHANGE,
+            arguments={
+                "x-match": "all",
+                "ca-trade": True,
+            },
+        )
+        logger.info(
+            'Created a binding from "%s" to the "%s" exchange.',
+            CREDITORS_IN_EXCHANGE,
+            TO_TRADE_EXCHANGE,
+        )
 
-    channel.queue_declare(
-        queue_name,
-        durable=True,
-        arguments={
-            "x-dead-letter-exchange": "",
-            "x-dead-letter-routing-key": dead_letter_queue_name,
-        },
-    )
-    logger.info('Declared "%s" queue.', queue_name)
+        channel.close()
+        connection.close()
+        logger.info('Disconnected from "%s".', broker_url)
 
-    # bind the queue
-    channel.queue_bind(
-        exchange=TO_TRADE_EXCHANGE,
-        queue=queue_name,
-        routing_key=routing_key,
-    )
-    logger.info(
-        'Created a binding from "%s" to "%s" with routing key "%s".',
-        TO_TRADE_EXCHANGE,
-        queue_name,
-        routing_key,
-    )
+    def declare_and_bind_queue(broker_url, queue_name):
+        connection = pika.BlockingConnection(pika.URLParameters(broker_url))
+        channel = connection.channel()
+        logger.info('Connected to "%s".', broker_url)
+
+        channel.exchange_declare(
+            TO_TRADE_EXCHANGE, exchange_type="topic", durable=True
+        )
+
+        dead_letter_queue_name = queue_name + ".XQ"
+        channel.queue_declare(
+            dead_letter_queue_name,
+            durable=True,
+            arguments={"x-queue-type": "stream"},
+        )
+        logger.info(
+            'Declared "%s" dead-letter queue.', dead_letter_queue_name
+        )
+        channel.queue_declare(
+            queue_name,
+            durable=True,
+            arguments={
+                "x-queue-type": "quorum",
+                "overflow": "reject-publish",
+                "x-dead-letter-exchange": "",
+                "x-dead-letter-routing-key": dead_letter_queue_name,
+            },
+        )
+        logger.info('Declared "%s" queue.', queue_name)
+
+        channel.queue_bind(
+            exchange=TO_TRADE_EXCHANGE,
+            queue=queue_name,
+            routing_key=routing_key,
+        )
+        logger.info(
+            'Created a binding from "%s" to "%s" with routing key "%s".',
+            TO_TRADE_EXCHANGE,
+            queue_name,
+            routing_key,
+        )
+
+        channel.close()
+        connection.close()
+        logger.info('Disconnected from "%s".', broker_url)
+
+    declare_necessary_creditors_agent_exchanges(url)
+    declare_and_bind_queue(url, queue)
+    declare_and_bind_queue(internal_url, internal_queue)
 
 
 @swpt_trade.command("unsubscribe")
@@ -154,13 +187,13 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     "-u",
     "--url",
     type=str,
-    help="The RabbitMQ connection URL.",
+    help="Connection URL for the SMP messages RabbitMQ broker.",
 )
 @click.option(
     "-q",
     "--queue",
     type=str,
-    help="The name of the queue to unsubscribe.",
+    help="The name of the SMP messages queue to unsubscribe.",
 )
 @click.option(
     "-k",
@@ -168,8 +201,26 @@ def subscribe(url, queue, queue_routing_key):  # pragma: no cover
     type=str,
     help="The RabbitMQ binding key for the queue.",
 )
-def unsubscribe(url, queue, queue_routing_key):  # pragma: no cover
-    """Unsubscribe a RabbitMQ queue from receiving incoming messages.
+@click.option(
+    "-U",
+    "--internal-url",
+    type=str,
+    help="Connection URL for the internal messages RabbitMQ broker.",
+)
+@click.option(
+    "-Q",
+    "--internal-queue",
+    type=str,
+    help="The name of the internal messages queue to unsubscribe.",
+)
+def unsubscribe(
+        url,
+        queue,
+        queue_routing_key,
+        internal_url,
+        internal_queue,
+):  # pragma: no cover
+    """Unsubscribe a RabbitMQ queue pair from receiving messages.
 
     If some of the available options are not specified directly, the
     values of the following environment variables will be used:
@@ -179,31 +230,46 @@ def unsubscribe(url, queue, queue_routing_key):  # pragma: no cover
     * PROTOCOL_BROKER_QUEUE (defalut "swpt_trade")
 
     * PROTOCOL_BROKER_QUEUE_ROUTING_KEY (default "#")
+
+    * INTERNAL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
+
+    * INTERNAL_BROKER_QUEUE (defalut "$PROTOCOL_BROKER_QUEUE-internal")
+
     """
 
     from swpt_trade.extensions import TO_TRADE_EXCHANGE
 
     logger = logging.getLogger(__name__)
-    queue_name = queue or current_app.config["PROTOCOL_BROKER_QUEUE"]
-    routing_key = (
-        queue_routing_key
-        or current_app.config["PROTOCOL_BROKER_QUEUE_ROUTING_KEY"]
-    )
-    broker_url = url or current_app.config["PROTOCOL_BROKER_URL"]
-    connection = pika.BlockingConnection(pika.URLParameters(broker_url))
-    channel = connection.channel()
+    cfg = current_app.config
+    routing_key = queue_routing_key or cfg["PROTOCOL_BROKER_QUEUE_ROUTING_KEY"]
+    url = url or cfg["PROTOCOL_BROKER_URL"]
+    queue = queue or cfg["PROTOCOL_BROKER_QUEUE"]
+    internal_url = internal_url or cfg["INTERNAL_BROKER_URL"]
+    internal_queue = internal_queue or cfg["INTERNAL_BROKER_QUEUE"]
 
-    channel.queue_unbind(
-        exchange=TO_TRADE_EXCHANGE,
-        queue=queue_name,
-        routing_key=routing_key,
-    )
-    logger.info(
-        'Removed binding from "%s" to "%s" with routing key "%s".',
-        TO_TRADE_EXCHANGE,
-        queue_name,
-        routing_key,
-    )
+    def unbind_queue(broker_url, queue_name):
+        connection = pika.BlockingConnection(pika.URLParameters(broker_url))
+        channel = connection.channel()
+        logger.info('Connected to "%s".', broker_url)
+
+        channel.queue_unbind(
+            exchange=TO_TRADE_EXCHANGE,
+            queue=queue_name,
+            routing_key=routing_key,
+        )
+        logger.info(
+            'Removed binding from "%s" to "%s" with routing key "%s".',
+            TO_TRADE_EXCHANGE,
+            queue_name,
+            routing_key,
+        )
+
+        channel.close()
+        connection.close()
+        logger.info('Disconnected from "%s".', broker_url)
+
+    unbind_queue(url, queue)
+    unbind_queue(internal_url, internal_queue)
 
 
 @swpt_trade.command("delete_queue")
@@ -212,16 +278,28 @@ def unsubscribe(url, queue, queue_routing_key):  # pragma: no cover
     "-u",
     "--url",
     type=str,
-    help="The RabbitMQ connection URL.",
+    help="Connection URL for the SMP messages RabbitMQ broker.",
 )
 @click.option(
     "-q",
     "--queue",
     type=str,
-    help="The name of the queue to delete.",
+    help="The name of the SMP messages queue to delete.",
 )
-def delete_queue(url, queue):  # pragma: no cover
-    """Try to safely delete a RabbitMQ queue.
+@click.option(
+    "-U",
+    "--internal-url",
+    type=str,
+    help="Connection URL for the internal messages RabbitMQ broker.",
+)
+@click.option(
+    "-Q",
+    "--internal-queue",
+    type=str,
+    help="The name of the internal messages queue to delete.",
+)
+def delete_queue(url, queue, internal_url, internal_queue):  # pragma: no cover
+    """Try to safely delete a RabbitMQ queue pair.
 
     When the queue is not empty or is currently in use, this command
     will continuously try to delete the queue, until the deletion
@@ -233,38 +311,57 @@ def delete_queue(url, queue):  # pragma: no cover
     * PROTOCOL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
 
     * PROTOCOL_BROKER_QUEUE (defalut "swpt_trade")
+
+    * INTERNAL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
+
+    * INTERNAL_BROKER_QUEUE (defalut "$PROTOCOL_BROKER_QUEUE-internal")
+
     """
 
-    logger = logging.getLogger(__name__)
-    queue_name = queue or current_app.config["PROTOCOL_BROKER_QUEUE"]
-    broker_url = url or current_app.config["PROTOCOL_BROKER_URL"]
-    connection = pika.BlockingConnection(pika.URLParameters(broker_url))
     REPLY_CODE_NOT_FOUND = 404
+    logger = logging.getLogger(__name__)
+    cfg = current_app.config
+    url = url or cfg["PROTOCOL_BROKER_URL"]
+    queue = queue or cfg["PROTOCOL_BROKER_QUEUE"]
+    internal_url = internal_url or cfg["INTERNAL_BROKER_URL"]
+    internal_queue = internal_queue or cfg["INTERNAL_BROKER_QUEUE"]
 
-    # Wait for the queue to become empty. Note that passing
-    # `if_empty=True` to queue_delete() currently does not work for
-    # quorum queues. Instead, we check the number of messages in the
-    # queue before deleting it.
-    while True:
-        channel = connection.channel()
-        try:
-            status = channel.queue_declare(
-                queue_name,
-                durable=True,
-                passive=True,
-            )
-        except pika.exceptions.ChannelClosedByBroker as e:
-            if e.reply_code != REPLY_CODE_NOT_FOUND:
-                raise
-            break  # already deleted
+    def delete_queue(broker_url, queue_name):
+        connection = pika.BlockingConnection(pika.URLParameters(broker_url))
+        logger.info('Connected to "%s".', broker_url)
 
-        if status.method.message_count == 0:
-            channel.queue_delete(queue=queue_name)
-            logger.info('Deleted "%s" queue.', queue_name)
-            break
+        # Wait for the queue to become empty. Note that passing
+        # `if_empty=True` to queue_delete() currently does not work for
+        # quorum queues. Instead, we check the number of messages in the
+        # queue before deleting it.
+        while True:
+            channel = connection.channel()
+            try:
+                status = channel.queue_declare(
+                    queue_name,
+                    durable=True,
+                    passive=True,
+                )
+            except pika.exceptions.ChannelClosedByBroker as e:
+                if e.reply_code != REPLY_CODE_NOT_FOUND:
+                    raise
+                break  # already deleted
 
-        channel.close()
-        time.sleep(3.0)
+            if status.method.message_count == 0:
+                channel.queue_delete(queue=queue_name)
+                logger.info('Deleted "%s" queue.', queue_name)
+                break
+
+            channel.close()
+            time.sleep(3.0)
+
+        if channel.is_open:
+            channel.close()
+        connection.close()
+        logger.info('Disconnected from "%s".', broker_url)
+
+    delete_queue(url, queue)
+    delete_queue(internal_url, internal_queue)
 
 
 @swpt_trade.command("verify_shard_content")

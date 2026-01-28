@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from flask import current_app
 from sqlalchemy import text
-from swpt_trade.extensions import db, publisher
+from swpt_trade.extensions import db
 from swpt_pythonlib import rabbitmq
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.utils import calc_hash
@@ -118,7 +118,7 @@ class Signal(db.Model):
     def send_signalbus_messages(cls, objects):  # pragma: no cover
         assert all(isinstance(obj, cls) for obj in objects)
         messages = (obj._create_message() for obj in objects)
-        publisher.publish_messages([m for m in messages if m is not None])
+        cls.publisher.publish_messages([m for m in messages if m is not None])
 
     def send_signalbus_message(self):  # pragma: no cover
         self.send_signalbus_messages([self])

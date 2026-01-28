@@ -54,7 +54,7 @@ following servers:
    plugin] should be enabled.
 
    The following [RabbitMQ topic exchanges] must be configured on the
-   broker instance:
+   SMP broker instance:
 
    - **`creditors_out`**: For messages that must be sent to accounting
      authorities. The routing key will represent the debtor ID as
@@ -74,7 +74,7 @@ following servers:
      exchange:
 
      * Incoming SMP messages related to *collector accounts*. (To do
-       their jobs, worker servers create and use system accounts,
+       their job, worker servers create and use system accounts,
        called "collector accounts", which act as distribution hubs for
        money.)
 
@@ -89,22 +89,51 @@ following servers:
        work in tandem with the ["Creditors Agent" reference
        implementation].)
 
-     * Internal messages. (To do their jobs, worker servers will send
-       messages to each other. Even when there is only one worker
-       server, it will use the `to_trade` exchange to send messages to
-       itself.)
-
    Also, **for each worker server** one [RabbitMQ queue] must be
-   configured on the broker instance, so that all messages published
-   on the `to_trade` exchange, are routed to one of these queues
-   (determined by the rouging key).
+   configured on the SMP broker instance, so that all messages
+   published on the `to_trade` exchange, are routed to one of these
+   queues (determined by the rouging key).
 
    **Note:** If you execute the "configure" command (see below), with
    the environment variable `SETUP_RABBITMQ_BINDINGS` set to `yes`, an
    attempt will be made to automatically setup all the required
    RabbitMQ queues, exchanges, and the bindings between them.
 
-4. An optional [OAuth 2.0] authorization server, which authorizes
+4. A [RabbitMQ] server instance, which acts as broker for internal
+   messages. The [rabbitmq_random_exchange plugin] should be enabled.
+
+   For *non-production deployments*, you may use the SMP broker
+   instance to handle the internal messages too. However, for
+   production deployments it is recommended to use a separate broker
+   for the internal massages.
+
+   The following [RabbitMQ topic exchanges] must be configured on the
+   internal broker instance:
+
+   - **`to_trade`**: For internal messages that must be processed by
+     one of the worker servers. The routing key will represent the
+     highest 24 bits of the MD5 digest of the sharding key. For
+     example, if the sharding key for a given message type is the
+     creditor ID, and the creditor ID is 123, the routing key will be
+     "1.1.1.1.1.1.0.0.0.0.0.1.0.0.0.0.0.1.1.0.0.0.1.1". This allows
+     different messages to be handled by different worker servers
+     (sharding).
+
+    To do their job, worker servers will send messages to each other.
+    Even when there is only one worker server, it will use the
+    `to_trade` exchange to send messages to itself.
+
+   Also, **for each worker server** one [RabbitMQ queue] must be
+   configured on the internal broker instance, so that all messages
+   published on the `to_trade` exchange, are routed to one of these
+   queues (determined by the rouging key).
+
+   **Note:** If you execute the "configure" command (see below), with
+   the environment variable `SETUP_RABBITMQ_BINDINGS` set to `yes`, an
+   attempt will be made to automatically setup all the required
+   RabbitMQ queues, exchanges, and the bindings between them.
+
+5. An optional [OAuth 2.0] authorization server, which authorizes
    clients' requests to the *admin API*. There is a plethora of
    popular Oauth 2.0 server implementations. Normally, they maintain
    their own user database, and go together with UI for user
@@ -255,10 +284,10 @@ WORKER_POSTGRES_URL=postgresql+psycopg://swpt_worker:swpt_worker@localhost:5435/
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
 
 # Parameters for the communication with the RabbitMQ server which is
-# responsible for brokering SMP messages. The container will connect
-# to "$PROTOCOL_BROKER_URL" (default
-# "amqp://guest:guest@localhost:5672"), will consume messages from the
-# queue named "$PROTOCOL_BROKER_QUEUE" (default "swpt_trade"),
+# responsible for brokering SMP messages. Containers which consume SMP
+# messages will try to connect to "$PROTOCOL_BROKER_URL" (default
+# "amqp://guest:guest@localhost:5672"), and will consume messages from
+# the queue named "$PROTOCOL_BROKER_QUEUE" (default "swpt_trade"),
 # prefetching at most "$PROTOCOL_BROKER_PREFETCH_COUNT" messages at
 # once (default 1). The specified number of processes
 # ("$PROTOCOL_BROKER_PROCESSES") will be spawned to consume and
@@ -271,6 +300,26 @@ PROTOCOL_BROKER_QUEUE=swpt_trade
 PROTOCOL_BROKER_PROCESSES=1
 PROTOCOL_BROKER_THREADS=3
 PROTOCOL_BROKER_PREFETCH_COUNT=10
+
+# Parameters for the communication with the RabbitMQ server which is
+# responsible for brokering internal messages. Containers which
+# consume internal messages will try to connect to
+# "$INTERNAL_BROKER_URL" (default
+# "amqp://guest:guest@localhost:5672"), and will consume messages from
+# the queue named "$INTERNAL_BROKER_QUEUE" (default
+# "$PROTOCOL_BROKER_QUEUE-internal"), prefetching at most
+# "$INTERNAL_BROKER_PREFETCH_COUNT" messages at once (default 1). The
+# specified number of processes ("$INTERNAL_BROKER_PROCESSES") will be
+# spawned to consume and process internal messages (default 1), each
+# process will run "$INTERNAL_BROKER_THREADS" threads in parallel
+# (default 1). Note that INTERNAL_BROKER_PROCESSES can be set to 0, in
+# which case, the container will not consume any internal messages
+# from the queue.
+INTERNAL_BROKER_URL=amqp://guest:guest@localhost:5672
+INTERNAL_BROKER_QUEUE=swpt_trade-internal
+INTERNAL_BROKER_PROCESSES=1
+INTERNAL_BROKER_THREADS=3
+INTERNAL_BROKER_PREFETCH_COUNT=10
 
 # The binding key with which the "$PROTOCOL_BROKER_QUEUE"
 # RabbitMQ queue is bound to the `to_trade` topic
@@ -464,6 +513,14 @@ container allows you to execute the following *documented commands*:
   Starts only the processes that consume SMP messages. This command
   allows you to start as many additional dedicated RabbitMQ message
   processors as necessary, to handle the load. If the
+  `--draining-mode` option is specified, periodic pauses will be made
+  during consumption, to allow the queue to be deleted safely.
+
+* `consume_internal_messages`
+
+  Starts only the processes that consume internal messages. This
+  command allows you to start as many additional dedicated RabbitMQ
+  internal message processors as necessary, to handle the load. If the
   `--draining-mode` option is specified, periodic pauses will be made
   during consumption, to allow the queue to be deleted safely.
 

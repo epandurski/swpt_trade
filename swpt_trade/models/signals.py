@@ -9,6 +9,8 @@ from swpt_pythonlib.utils import (
 )
 from swpt_trade.extensions import (
     db,
+    publisher,
+    internal_publisher,
     CREDITORS_OUT_EXCHANGE,
     TO_TRADE_EXCHANGE,
 )
@@ -24,6 +26,7 @@ class classproperty(object):
 
 
 class ConfigureAccountSignal(Signal):
+    publisher = publisher
     exchange_name = CREDITORS_OUT_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -56,6 +59,7 @@ class ConfigureAccountSignal(Signal):
 
 
 class PrepareTransferSignal(Signal):
+    publisher = publisher
     exchange_name = CREDITORS_OUT_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -97,6 +101,7 @@ class PrepareTransferSignal(Signal):
 
 
 class FinalizeTransferSignal(Signal):
+    publisher = publisher
     exchange_name = CREDITORS_OUT_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -136,6 +141,7 @@ class FinalizeTransferSignal(Signal):
 class FetchDebtorInfoSignal(Signal):
     """Requests a debtor info document to be fetched from Internet.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -176,6 +182,7 @@ class StoreDocumentSignal(Signal):
     serialization errors, because documents are usually fetched and
     stored in large batches.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -224,6 +231,7 @@ class DiscoverDebtorSignal(Signal):
     (aka account heartbeats) to trigger the sending of
     `DiscoverDebtorSignal`s.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -255,6 +263,7 @@ class ConfirmDebtorSignal(Signal):
     This signal informs that the given debtor successfully claimed the
     given debtor info locator.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -285,6 +294,7 @@ class CandidateOfferSignal(Signal):
     positive (the trader wants to buy). The amount can not be zero,
     nor MIN_INT64.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -319,6 +329,7 @@ class NeededCollectorSignal(Signal):
     """Call for the creation of a collector account for a given
     currency.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -343,6 +354,7 @@ class NeededCollectorSignal(Signal):
 class ReviseAccountLockSignal(Signal):
     """A call for resolving the given account lock.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -371,6 +383,7 @@ class ReviseAccountLockSignal(Signal):
 class TriggerTransferSignal(Signal):
     """Triggers a transfer attempt.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -407,6 +420,7 @@ class AccountIdRequestSignal(Signal):
     the `TransferAttempt` model), but the recipient's account ID is
     unknown.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -439,6 +453,7 @@ class AccountIdRequestSignal(Signal):
 class AccountIdResponseSignal(Signal):
     """A response to an `AccountIdRequestSignal`.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -475,6 +490,7 @@ class AccountIdResponseSignal(Signal):
 class StartSendingSignal(Signal):
     """Trigger sending for a given `DispatchingStatus` record.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -503,6 +519,7 @@ class StartSendingSignal(Signal):
 class StartDispatchingSignal(Signal):
     """Trigger dispatching for a given `DispatchingStatus` record.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -531,6 +548,7 @@ class StartDispatchingSignal(Signal):
 class CalculateSurplusSignal(Signal):
     """Trigger the calculation of surplus for a given `WorkerAccount`.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):
@@ -559,6 +577,7 @@ class CalculateSurplusSignal(Signal):
 class ReplayedAccountTransferSignal(Signal):
     """Replays an already received `AccountTransfer` message.
     """
+    publisher = internal_publisher
     exchange_name = TO_TRADE_EXCHANGE
 
     class __marshmallow__(Schema):

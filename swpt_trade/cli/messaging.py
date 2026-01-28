@@ -77,12 +77,12 @@ def consume_messages(
     def _consume_messages(
         url, queue, threads, prefetch_size, prefetch_count
     ):  # pragma: no cover
-        """Consume messages in a subprocess."""
+        """Consume SMP messages in a subprocess."""
 
-        from swpt_trade.actors import SmpConsumer, TerminatedConsumtion
+        from swpt_trade.actors import MessageConsumer, TerminatedConsumtion
         from swpt_trade import create_app
 
-        consumer = SmpConsumer(
+        consumer = MessageConsumer(
             app=create_app(),
             config_prefix="PROTOCOL_BROKER",
             url=url,
@@ -110,6 +110,108 @@ def consume_messages(
     spawn_worker_processes(
         processes=processes or current_app.config["PROTOCOL_BROKER_PROCESSES"],
         target=_consume_messages,
+        url=url,
+        queue=queue,
+        threads=threads,
+        prefetch_size=prefetch_size,
+        prefetch_count=prefetch_count,
+    )
+    sys.exit(1)
+
+
+@swpt_trade.command("consume_internal_messages")
+@with_appcontext
+@click.option("-u", "--url", type=str, help="The RabbitMQ connection URL.")
+@click.option(
+    "-q", "--queue", type=str, help="The name the queue to consume from."
+)
+@click.option(
+    "-p", "--processes", type=int, help="The number of worker processes."
+)
+@click.option(
+    "-t",
+    "--threads",
+    type=int,
+    help="The number of threads running in each process.",
+)
+@click.option(
+    "-s",
+    "--prefetch-size",
+    type=int,
+    help="The prefetch window size in bytes.",
+)
+@click.option(
+    "-c",
+    "--prefetch-count",
+    type=int,
+    help="The prefetch window in terms of whole messages.",
+)
+@click.option(
+    "--draining-mode",
+    is_flag=True,
+    help="Make periodic pauses to allow the queue to be deleted safely.",
+)
+def consume_internal_messages(
+    url, queue, processes, threads, prefetch_size, prefetch_count,
+    draining_mode
+):
+    """Run processes that consume and process incoming internal
+    messages.
+
+    If some of the available options are not specified directly, the
+    values of the following environment variables will be used:
+
+    * INTERNAL_BROKER_URL (default "amqp://guest:guest@localhost:5672")
+
+    * INTERNAL_BROKER_QUEUE (defalut "$PROTOCOL_BROKER_QUEUE-internal",
+      or "swpt_trade-internal" if PROTOCOL_BROKER_QUEUE is not set)
+
+    * INTERNAL_BROKER_PROCESSES (defalut 1)
+
+    * INTERNAL_BROKER_THREADS (defalut 1)
+
+    * INTERNAL_BROKER_PREFETCH_COUNT (default 1)
+
+    * INTERNAL_BROKER_PREFETCH_SIZE (default 0, meaning unlimited)
+
+    """
+
+    def _consume_internal_messages(
+        url, queue, threads, prefetch_size, prefetch_count
+    ):  # pragma: no cover
+        """Consume internal messages in a subprocess."""
+
+        from swpt_trade.actors import MessageConsumer, TerminatedConsumtion
+        from swpt_trade import create_app
+
+        consumer = MessageConsumer(
+            app=create_app(),
+            config_prefix="INTERNAL_BROKER",
+            url=url,
+            queue=queue,
+            threads=threads,
+            prefetch_size=prefetch_size,
+            prefetch_count=prefetch_count,
+            draining_mode=draining_mode,
+        )
+        for sig in HANDLED_SIGNALS:
+            signal.signal(sig, consumer.stop)
+        try_unblock_signals()
+
+        pid = os.getpid()
+        logger = logging.getLogger(__name__)
+        logger.info("Worker with PID %i started processing messages.", pid)
+
+        try:
+            consumer.start()
+        except TerminatedConsumtion:
+            pass
+
+        logger.info("Worker with PID %i stopped processing messages.", pid)
+
+    spawn_worker_processes(
+        processes=processes or current_app.config["INTERNAL_BROKER_PROCESSES"],
+        target=_consume_internal_messages,
         url=url,
         queue=queue,
         threads=threads,

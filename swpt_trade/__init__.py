@@ -238,6 +238,13 @@ class Configuration(metaclass=MetaEnvReader):
     PROTOCOL_BROKER_PREFETCH_SIZE = 0
     PROTOCOL_BROKER_PREFETCH_COUNT = 1
 
+    INTERNAL_BROKER_URL = "amqp://guest:guest@localhost:5672"
+    INTERNAL_BROKER_QUEUE = ""  # defaults to "$PROTOCOL_BROKER_QUEUE-internal"
+    INTERNAL_BROKER_PROCESSES = 1
+    INTERNAL_BROKER_THREADS = 1
+    INTERNAL_BROKER_PREFETCH_SIZE = 0
+    INTERNAL_BROKER_PREFETCH_COUNT = 1
+
     FLUSH_PROCESSES = 1
     FLUSH_PERIOD = 2.0
 
@@ -476,7 +483,7 @@ def create_app(config_dict={}):
     from werkzeug.middleware.proxy_fix import ProxyFix
     from flask import Flask
     from swpt_pythonlib.utils import Int64Converter
-    from .extensions import db, migrate, api, publisher
+    from .extensions import db, migrate, api, publisher, internal_publisher
     from .routes import collectors_api, health_api, specs
     from .cli import swpt_trade
     from . import models  # noqa
@@ -487,6 +494,10 @@ def create_app(config_dict={}):
     app.config.from_object(Configuration)
     app.config.from_mapping(config_dict)
 
+    if not app.config["INTERNAL_BROKER_QUEUE"]:
+        app.config["INTERNAL_BROKER_QUEUE"] = (
+            f'{app.config["PROTOCOL_BROKER_QUEUE"]}-internal'
+        )
     if not app.config["APP_SUPERUSER_SUBJECT_REGEX"]:
         app.config["APP_SUPERUSER_SUBJECT_REGEX"] = _as_regex(
             app.config["OAUTH2_SUPERUSER_USERNAME"]
@@ -522,6 +533,7 @@ def create_app(config_dict={}):
     db.init_app(app)
     migrate.init_app(app, db)
     publisher.init_app(app)
+    internal_publisher.init_app(app)
     api.init_app(app)
     api.register_blueprint(health_api)
     if app.config["APP_ENABLE_INESSENTIAL_WEBAPIS"]:
