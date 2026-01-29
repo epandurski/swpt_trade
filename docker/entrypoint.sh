@@ -108,7 +108,7 @@ case $1 in
         generate_oathkeeper_configuration
         exec supervisord -c "$APP_ROOT_DIR/supervisord-webserver.conf"
         ;;
-    consume_messages | scan_all \
+    consume_messages | consume_internal_messages | scan_all \
         | scan_debtor_info_documents | scan_debtor_locator_claims \
         | scan_trading_policies | scan_worker_accounts \
         | scan_account_locks | scan_recently_needed_collectors \

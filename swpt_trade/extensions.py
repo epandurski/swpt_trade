@@ -46,4 +46,5 @@ def set_postgres_parametes(dbapi_connection, connection_record):
 db = CustomAlchemy()
 migrate = Migrate()
 publisher = rabbitmq.Publisher(url_config_key="PROTOCOL_BROKER_URL")
+internal_publisher = rabbitmq.Publisher(url_config_key="INTERNAL_BROKER_URL")
 api = Api()

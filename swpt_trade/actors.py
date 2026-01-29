@@ -945,7 +945,7 @@ _LOGGER = logging.getLogger(__name__)
 TerminatedConsumtion = rabbitmq.TerminatedConsumtion
 
 
-class SmpConsumer(rabbitmq.Consumer):
+class MessageConsumer(rabbitmq.Consumer):
     """Passes messages to proper handlers (actors)."""
 
     def process_message(self, body, properties):

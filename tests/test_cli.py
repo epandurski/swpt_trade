@@ -20,6 +20,14 @@ def test_consume_messages(app):
     assert result.exit_code == 1
 
 
+def test_consume_internal_messages(app):
+    runner = app.test_cli_runner()
+    result = runner.invoke(
+        args=["swpt_trade", "consume_internal_messages", "--url=INVALID"]
+    )
+    assert result.exit_code == 1
+
+
 def test_flush_messages(mocker, app, db_session):
     send_signalbus_message = Mock()
     mocker.patch(
