@@ -8,6 +8,7 @@ from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
+    SET_SEQSCAN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     CollectorAccount,
     Turn,
@@ -346,6 +347,7 @@ def _collect_trade_statistics(turn_id: int) -> None:
     n_currencies = cfg["APP_NUMBER_OF_CURRENCIES_IN_BUYERS_COUNT_STATS"]
     heap = CurrencyBuyersCountHeap(max_length=max(n_currencies // n_turns, 1))
 
+    db.session.execute(SET_SEQSCAN_ON)
     most_bought_currencies: dict[int, float] = {
         row.debtor_id: row.buyers_average_count
         for row in db.session.execute(
@@ -400,6 +402,8 @@ def _collect_trade_statistics(turn_id: int) -> None:
         delete(MostBoughtCurrency)
         .execution_options(synchronize_session=False)
     )
+    db.session.execute(SET_SEQSCAN_OFF)
+
     if heap:
         locators: dict[int, str] = {
             row.debtor_id: row.debtor_info_locator
