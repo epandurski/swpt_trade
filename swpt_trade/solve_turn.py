@@ -378,9 +378,9 @@ def _collect_trade_statistics(turn_id: int) -> None:
                 func.count(cd.creditor_id).label("buyers_count"),
             )
             .select_from(cd)
-            .where(cd.turn_id == turn_id)
+            .where(cd.turn_id == text(str(turn_id)))
             .group_by(cd.debtor_id)
-            .having(func.count(cd.creditor_id) >= min_count)
+            .having(func.count(cd.creditor_id) >= text(str(min_count)))
             .execution_options(yield_per=SELECT_BATCH_SIZE)
     ) as result:
         for row in result:
