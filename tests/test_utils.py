@@ -20,6 +20,8 @@ from swpt_trade.utils import (
     calc_demurrage,
     DispatchingData,
     calc_balance_at,
+    CurrencyBuyersCount,
+    CurrencyBuyersCountHeap,
 )
 
 
@@ -396,3 +398,51 @@ def test_calc_balance_at():
         last_change_ts=current_ts,
         at=current_ts + timedelta(days=365)
     ) == 0.0
+
+
+def test_currency_buyers_count_heap():
+    assert CurrencyBuyersCount(1.0, 100) < CurrencyBuyersCount(2.0, 10)
+    assert CurrencyBuyersCount(1.0, 10) < CurrencyBuyersCount(1.0, 100)
+
+    heap = CurrencyBuyersCountHeap(max_length=3)
+    assert bool(heap) is False
+    for item in heap:
+        raise Exception()
+    heap.push(2.0, 20)
+    heap.push(5.0, 50)
+    heap.push(1.0, 10)
+    heap.push(3.0, 30)
+    heap.push(4.0, 40)
+    assert bool(heap) is True
+    assert sorted(heap) == [
+        CurrencyBuyersCount(3.0, 30),
+        CurrencyBuyersCount(4.0, 40),
+        CurrencyBuyersCount(5.0, 50),
+    ]
+    heap.set_max_length(2)
+    assert sorted(heap) == [
+        CurrencyBuyersCount(4.0, 40),
+        CurrencyBuyersCount(5.0, 50),
+    ]
+    heap.set_max_length(1)
+    assert sorted(heap) == [
+        CurrencyBuyersCount(5.0, 50),
+    ]
+    with pytest.raises(AssertionError):
+        heap.set_max_length(0)
+    heap.set_max_length(2)
+    assert sorted(heap) == [
+        CurrencyBuyersCount(5.0, 50),
+    ]
+    heap.push(2.0, 20)
+    assert sorted(heap) == [
+        CurrencyBuyersCount(2.0, 20),
+        CurrencyBuyersCount(5.0, 50),
+    ]
+    heap.push(1.0, 10)
+    assert sorted(heap) == [
+        CurrencyBuyersCount(2.0, 20),
+        CurrencyBuyersCount(5.0, 50),
+    ]
+    for item in heap:
+        float(item.debtor_id) == item.buyers_count

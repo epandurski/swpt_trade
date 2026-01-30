@@ -22,10 +22,16 @@ from swpt_trade.models import (
     CreditorTaking,
     OverloadedCurrency,
     HoardedCurrency,
+    MostBoughtCurrency,
 )
 from swpt_trade import procedures
 from swpt_trade.solver import Solver
-from swpt_trade.utils import batched, calc_hash, get_primary_collector_id
+from swpt_trade.utils import (
+    batched,
+    calc_hash,
+    get_primary_collector_id,
+    CurrencyBuyersCountHeap,
+)
 
 INSERT_BATCH_SIZE = 5000
 DELETE_BATCH_SIZE = 5000
@@ -34,6 +40,10 @@ SELECT_BATCH_SIZE = 20000
 COLLECTOR_ACCOUNT_PK = tuple_(
     CollectorAccount.debtor_id,
     CollectorAccount.collector_id,
+)
+CURRENCY_INFO_UNIQUE_INDEX = tuple_(
+    CurrencyInfo.turn_id,
+    CurrencyInfo.debtor_id,
 )
 
 T = TypeVar("T")
@@ -170,6 +180,7 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
         _saturate_hoarded_currencies(turn_id)
+        _collect_trade_statistics(turn_id)
 
         db.session.execute(
             SET_SEQSCAN_ON,
@@ -325,6 +336,100 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
                     "amount": ac.amount,
                     "collector_id": ac.collector_id,
                 } for ac in account_changes
+            ],
+        )
+
+
+def _collect_trade_statistics(turn_id: int) -> None:
+    cfg = current_app.config
+    n_turns = cfg["APP_NUMBER_OF_TURNS_FOR_BUYERS_COUNT_STATS"]
+    n_currencies = cfg["APP_NUMBER_OF_CURRENCIES_IN_BUYERS_COUNT_STATS"]
+    heap = CurrencyBuyersCountHeap(max_length=max(n_currencies // n_turns, 1))
+
+    most_bought_currencies: dict[int, float] = {
+        row.debtor_id: row.buyers_average_count
+        for row in db.session.execute(
+            select(
+                MostBoughtCurrency.debtor_id,
+                MostBoughtCurrency.buyers_average_count,
+            )
+        ).all()
+    }
+    updated: set[int] = set()
+
+    def update(buyers_count: float, debtor_id: int):
+        old_value = most_bought_currencies[debtor_id]
+        new_value = (old_value * (n_turns - 1) + buyers_count) / n_turns
+        most_bought_currencies[debtor_id] = new_value
+        updated.add(debtor_id)
+
+    min_count = (
+        int(min(most_bought_currencies.values()) / 10.0)
+        if len(most_bought_currencies) >= n_currencies
+        else 0
+    )
+    cd = CollectorDispatching
+
+    with db.session.execute(
+            select(
+                cd.debtor_id,
+                func.count(cd.creditor_id).label("buyers_count"),
+            )
+            .select_from(cd)
+            .where(cd.turn_id == turn_id)
+            .group_by(cd.debtor_id)
+            .having(func.count(cd.creditor_id) >= min_count)
+            .execution_options(yield_per=SELECT_BATCH_SIZE)
+    ) as result:
+        for row in result:
+            debtor_id = row.debtor_id
+            if debtor_id in most_bought_currencies:
+                update(row.buyers_count, debtor_id)
+            else:
+                heap.push(row.buyers_count, debtor_id)
+
+    for debtor_id in most_bought_currencies:
+        if debtor_id not in updated:
+            update(0.0, debtor_id)
+
+    heap.set_max_length(n_currencies)
+    for debtor_id, average_buyers_count in most_bought_currencies.items():
+        heap.push(average_buyers_count, debtor_id)
+
+    db.session.execute(
+        delete(MostBoughtCurrency)
+        .execution_options(synchronize_session=False)
+    )
+    if heap:
+        locators: dict[int, str] = {
+            row.debtor_id: row.debtor_info_locator
+            for row in db.session.execute(
+                    select(
+                        CurrencyInfo.debtor_id,
+                        CurrencyInfo.debtor_info_locator,
+                    )
+                    .select_from(CurrencyInfo)
+                    .where(
+                        CurrencyInfo.is_confirmed,
+                        CURRENCY_INFO_UNIQUE_INDEX.in_(
+                            [(turn_id, item.debtor_id) for item in heap]
+                        ),
+                    )
+            ).all()
+        }
+        db.session.execute(
+            insert(MostBoughtCurrency)
+            .execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            [
+                {
+                    "debtor_id": item.debtor_id,
+                    "buyers_average_count": item.buyers_count,
+                    "debtor_info_locator": locators[item.debtor_id],
+                }
+                for item in heap if item.debtor_id in locators
             ],
         )
 

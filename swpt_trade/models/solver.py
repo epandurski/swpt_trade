@@ -403,3 +403,20 @@ class HoardedCurrency(db.Model):
             ),
         },
     )
+
+
+class MostBoughtCurrency(db.Model):
+    __bind_key__ = "solver"
+    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    buyers_average_count = db.Column(db.REAL, nullable=False)
+    debtor_info_locator = db.Column(db.String, nullable=False)
+    __table_args__ = (
+        db.CheckConstraint(buyers_average_count >= 0.0),
+        {
+            "comment": (
+                'Represents the fact that currently, according to the'
+                ' collected trade statistics, a given currency is among the'
+                ' most bought currencies.'
+            ),
+        },
+    )

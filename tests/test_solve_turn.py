@@ -14,6 +14,7 @@ from swpt_trade.models import (
     CreditorTaking,
     OverloadedCurrency,
     HoardedCurrency,
+    MostBoughtCurrency,
     TS0,
 )
 
@@ -41,6 +42,20 @@ def test_try_to_advance_turn_to_phase3(db_session):
     db_session.commit()
 
     db_session.add(
+        MostBoughtCurrency(
+            debtor_id=101,
+            buyers_average_count=1.0,
+            debtor_info_locator='https://example.com/101',
+        )
+    )
+    db_session.add(
+        MostBoughtCurrency(
+            debtor_id=199,
+            buyers_average_count=10.0,
+            debtor_info_locator='https://example.com/199',
+        )
+    )
+    db_session.add(
         HoardedCurrency(
             turn_id=turn.turn_id,
             debtor_id=103,
@@ -65,6 +80,17 @@ def test_try_to_advance_turn_to_phase3(db_session):
             peg_debtor_info_locator='https://example.com/101',
             peg_debtor_id=101,
             peg_exchange_rate=2.0,
+            is_confirmed=True,
+        )
+    )
+    db_session.add(
+        CurrencyInfo(
+            turn_id=turn_id,
+            debtor_info_locator='https://example.com/199',
+            debtor_id=199,
+            peg_debtor_info_locator='https://example.com/101',
+            peg_debtor_id=101,
+            peg_exchange_rate=1.0,
             is_confirmed=True,
         )
     )
@@ -310,3 +336,13 @@ def test_try_to_advance_turn_to_phase3(db_session):
 
     ocs = OverloadedCurrency.query.all()
     assert len(ocs) == 0
+
+    mgcs = MostBoughtCurrency.query.all()
+    mgcs.sort(key=lambda row: row.debtor_id)
+    assert len(mgcs) == 3
+    assert mgcs[0].debtor_id == 101
+    assert mgcs[0].buyers_average_count == 1.0
+    assert mgcs[1].debtor_id == 102
+    assert mgcs[1].buyers_average_count == 2.0
+    assert mgcs[2].debtor_id == 199
+    assert mgcs[2].buyers_average_count == 9.0
