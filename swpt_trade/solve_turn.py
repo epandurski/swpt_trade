@@ -42,7 +42,7 @@ COLLECTOR_ACCOUNT_PK = tuple_(
     CollectorAccount.debtor_id,
     CollectorAccount.collector_id,
 )
-CURRENCY_INFO_UNIQUE_INDEX = tuple_(
+CONFIRMED_CURRENCY_UNIQUE_INDEX = tuple_(
     CurrencyInfo.turn_id,
     CurrencyInfo.debtor_id,
 )
@@ -180,9 +180,9 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
-        _saturate_hoarded_currencies(turn_id)
-        _collect_trade_statistics(turn_id)
 
+        _collect_trade_statistics(turn_id)
+        _saturate_hoarded_currencies(turn_id)
         db.session.execute(
             SET_SEQSCAN_ON,
             bind_arguments={"bind": db.engines["solver"]},
@@ -415,7 +415,7 @@ def _collect_trade_statistics(turn_id: int) -> None:
                     .select_from(CurrencyInfo)
                     .where(
                         CurrencyInfo.is_confirmed,
-                        CURRENCY_INFO_UNIQUE_INDEX.in_(
+                        CONFIRMED_CURRENCY_UNIQUE_INDEX.in_(
                             [(turn_id, item.debtor_id) for item in heap]
                         ),
                     )
