@@ -225,7 +225,7 @@ def _delete_phase3_turn_records_from_table(table) -> None:
             .execution_options(synchronize_session=False)
             .where(
                 Turn.turn_id == table.turn_id,
-                Turn.turn_id >= text(str(min_turn_id)),
+                Turn.turn_id >= min_turn_id,
                 Turn.phase >= 3,
             )
         )
@@ -378,9 +378,9 @@ def _collect_trade_statistics(turn_id: int) -> None:
                 func.count(cd.creditor_id).label("buyers_count"),
             )
             .select_from(cd)
-            .where(cd.turn_id == text(str(turn_id)))
+            .where(cd.turn_id == turn_id)
             .group_by(cd.debtor_id)
-            .having(func.count(cd.creditor_id) >= text(str(min_count)))
+            .having(func.count(cd.creditor_id) >= min_count)
             .execution_options(yield_per=SELECT_BATCH_SIZE)
     ) as result:
         for row in result:
