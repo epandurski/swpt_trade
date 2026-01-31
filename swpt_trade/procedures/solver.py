@@ -118,6 +118,14 @@ def try_to_advance_turn_to_phase2(
 
         db.session.flush()
         db.session.execute(
+            text("ANALYZE debtor_info"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            text("ANALYZE confirmed_debtor"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
             SET_SEQSCAN_ON,
             bind_arguments={"bind": db.engines["solver"]},
         )
@@ -164,6 +172,10 @@ def try_to_advance_turn_to_phase2(
                 )
                 .where(DebtorInfo.turn_id == turn_id),
             )
+        )
+        db.session.execute(
+            text("ANALYZE currency_info"),
+            bind_arguments={"bind": db.engines["solver"]},
         )
 
         # NOTE: When reaching turn phase 2, all records for the given

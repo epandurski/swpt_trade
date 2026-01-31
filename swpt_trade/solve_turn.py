@@ -83,6 +83,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> bool:
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(text("ANALYZE currency_info"))
         conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -118,6 +119,7 @@ def _register_collector_accounts(solver: Solver, turn_id: int) -> None:
 
 def _register_sell_offers(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(text("ANALYZE sell_offer"))
         conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -134,6 +136,7 @@ def _register_sell_offers(solver: Solver, turn_id: int) -> None:
 
 def _register_buy_offers(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(text("ANALYZE buy_offer"))
         conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -265,6 +268,14 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
                 } for ac in account_changes
             ],
         )
+    db.session.execute(
+        text("ANALYZE creditor_taking"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    db.session.execute(
+        text("ANALYZE collector_collecting"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
 
 
 def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
@@ -303,6 +314,14 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
                 } for ct in collector_transfers
             ],
         )
+    db.session.execute(
+        text("ANALYZE collector_sending"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    db.session.execute(
+        text("ANALYZE collector_receiving"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
 
 
 def _write_givings(solver: Solver, turn_id: int) -> None:
@@ -339,6 +358,14 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
                 } for ac in account_changes
             ],
         )
+    db.session.execute(
+        text("ANALYZE collector_dispatching"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    db.session.execute(
+        text("ANALYZE creditor_giving"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
 
 
 def _collect_trade_statistics(turn_id: int) -> None:
