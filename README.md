@@ -207,7 +207,7 @@ SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/
 # The value for PostgreSQL's `work_mem` setting, which will only be
 # used for queries that perform sorting of huge number of rows. Such
 # queries however, will never be executed in parallel. The default is
-# "100MB".
+# "50MB".
 SOLVER_INCREASED_WORK_MEM=20MB
 
 # Set the minimum level of severity for log messages ("info",
