@@ -184,6 +184,11 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
 
+        work_mem = current_app.config["SOLVER_INCREASED_WORK_MEM"]
+        db.session.execute(
+            text(f"SET LOCAL work_mem = '{work_mem}'"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
         _collect_trade_statistics(turn_id)
         _saturate_hoarded_currencies(turn_id)
         db.session.execute(

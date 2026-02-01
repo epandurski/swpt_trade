@@ -212,6 +212,7 @@ class Configuration(metaclass=MetaEnvReader):
     MIN_TRADE_AMOUNT = 1000
 
     SOLVER_POSTGRES_URL = ""
+    SOLVER_INCREASED_WORK_MEM = "200MB"
     SOLVER_CLIENT_POOL_SIZE: int = None
 
     # The default value for `WORKER_POSTGRES_URL` is a random valid
