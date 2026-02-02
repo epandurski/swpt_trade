@@ -24,6 +24,7 @@ from swpt_trade.models import (
     CreditorGiving,
     CreditorTaking,
     OverloadedCurrency,
+    MostBoughtCurrency,
 )
 
 ACTIVE_COLLECTOR_ACCOUNT_EXISTS = (
@@ -118,6 +119,14 @@ def try_to_advance_turn_to_phase2(
 
         db.session.flush()
         db.session.execute(
+            text("ANALYZE debtor_info"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            text("ANALYZE confirmed_debtor"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
             SET_SEQSCAN_ON,
             bind_arguments={"bind": db.engines["solver"]},
         )
@@ -165,6 +174,10 @@ def try_to_advance_turn_to_phase2(
                 .where(DebtorInfo.turn_id == turn_id),
             )
         )
+        db.session.execute(
+            text("ANALYZE currency_info"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
 
         # NOTE: When reaching turn phase 2, all records for the given
         # turn from the `DebtorInfo` and `ConfirmedDebtor` tables will
@@ -196,7 +209,7 @@ def _delete_phase2_turn_records_from_table(table) -> None:
             .execution_options(synchronize_session=False)
             .where(
                 Turn.turn_id == table.turn_id,
-                Turn.turn_id >= text(str(min_turn_id)),
+                Turn.turn_id >= min_turn_id,
                 Turn.phase >= 2,
             )
         )
@@ -338,3 +351,22 @@ def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
             OverloadedCurrency.debtor_id == debtor_id,
         )
     )
+
+
+@atomic
+def get_most_bought_currencies():
+    db.session.execute(
+        SET_SEQSCAN_ON,
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    return db.session.execute(
+        select(
+            MostBoughtCurrency.debtor_id,
+            MostBoughtCurrency.debtor_info_locator,
+            MostBoughtCurrency.buyers_average_count,
+        )
+        .order_by(
+            MostBoughtCurrency.buyers_average_count.desc(),
+            MostBoughtCurrency.debtor_id,
+        )
+    ).all()

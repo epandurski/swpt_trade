@@ -8,6 +8,7 @@ from flask import current_app
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
+    SET_SEQSCAN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     CollectorAccount,
     Turn,
@@ -22,10 +23,16 @@ from swpt_trade.models import (
     CreditorTaking,
     OverloadedCurrency,
     HoardedCurrency,
+    MostBoughtCurrency,
 )
 from swpt_trade import procedures
 from swpt_trade.solver import Solver
-from swpt_trade.utils import batched, calc_hash, get_primary_collector_id
+from swpt_trade.utils import (
+    batched,
+    calc_hash,
+    get_primary_collector_id,
+    CurrencyBuyersCountHeap,
+)
 
 INSERT_BATCH_SIZE = 5000
 DELETE_BATCH_SIZE = 5000
@@ -34,6 +41,10 @@ SELECT_BATCH_SIZE = 20000
 COLLECTOR_ACCOUNT_PK = tuple_(
     CollectorAccount.debtor_id,
     CollectorAccount.collector_id,
+)
+CONFIRMED_CURRENCY_UNIQUE_INDEX = tuple_(
+    CurrencyInfo.turn_id,
+    CurrencyInfo.debtor_id,
 )
 
 T = TypeVar("T")
@@ -72,6 +83,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> bool:
 
 def _register_currencies(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(text("ANALYZE currency_info"))
         conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -107,6 +119,7 @@ def _register_collector_accounts(solver: Solver, turn_id: int) -> None:
 
 def _register_sell_offers(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(text("ANALYZE sell_offer"))
         conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -123,6 +136,7 @@ def _register_sell_offers(solver: Solver, turn_id: int) -> None:
 
 def _register_buy_offers(solver: Solver, turn_id: int) -> None:
     with db.engines['solver'].connect() as conn:
+        conn.execute(text("ANALYZE buy_offer"))
         conn.execute(SET_SEQSCAN_ON)
         with conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
                 select(
@@ -169,8 +183,14 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
-        _saturate_hoarded_currencies(turn_id)
 
+        work_mem = current_app.config["SOLVER_INCREASED_WORK_MEM"]
+        db.session.execute(
+            text(f"SET LOCAL work_mem = '{work_mem}'"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        _collect_trade_statistics(turn_id)
+        _saturate_hoarded_currencies(turn_id)
         db.session.execute(
             SET_SEQSCAN_ON,
             bind_arguments={"bind": db.engines["solver"]},
@@ -213,7 +233,7 @@ def _delete_phase3_turn_records_from_table(table) -> None:
             .execution_options(synchronize_session=False)
             .where(
                 Turn.turn_id == table.turn_id,
-                Turn.turn_id >= text(str(min_turn_id)),
+                Turn.turn_id >= min_turn_id,
                 Turn.phase >= 3,
             )
         )
@@ -253,6 +273,14 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
                 } for ac in account_changes
             ],
         )
+    db.session.execute(
+        text("ANALYZE creditor_taking"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    db.session.execute(
+        text("ANALYZE collector_collecting"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
 
 
 def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
@@ -291,6 +319,14 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
                 } for ct in collector_transfers
             ],
         )
+    db.session.execute(
+        text("ANALYZE collector_sending"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    db.session.execute(
+        text("ANALYZE collector_receiving"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
 
 
 def _write_givings(solver: Solver, turn_id: int) -> None:
@@ -325,6 +361,112 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
                     "amount": ac.amount,
                     "collector_id": ac.collector_id,
                 } for ac in account_changes
+            ],
+        )
+    db.session.execute(
+        text("ANALYZE collector_dispatching"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    db.session.execute(
+        text("ANALYZE creditor_giving"),
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+
+
+def _collect_trade_statistics(turn_id: int) -> None:
+    cfg = current_app.config
+    n_turns = cfg["APP_NUMBER_OF_TURNS_FOR_BUYERS_COUNT_STATS"]
+    n_currencies = cfg["APP_NUMBER_OF_CURRENCIES_IN_BUYERS_COUNT_STATS"]
+    heap = CurrencyBuyersCountHeap(max_length=max(n_currencies // n_turns, 1))
+
+    db.session.execute(SET_SEQSCAN_ON)
+    most_bought_currencies: dict[int, float] = {
+        row.debtor_id: row.buyers_average_count
+        for row in db.session.execute(
+            select(
+                MostBoughtCurrency.debtor_id,
+                MostBoughtCurrency.buyers_average_count,
+            )
+        ).all()
+    }
+    updated: set[int] = set()
+
+    def update(buyers_count: float, debtor_id: int):
+        old_value = most_bought_currencies[debtor_id]
+        new_value = (old_value * (n_turns - 1) + buyers_count) / n_turns
+        most_bought_currencies[debtor_id] = new_value
+        updated.add(debtor_id)
+
+    min_count = (
+        int(min(most_bought_currencies.values()) / 10.0)
+        if len(most_bought_currencies) >= n_currencies
+        else 0
+    )
+    cd = CollectorDispatching
+
+    with db.session.execute(
+            select(
+                cd.debtor_id,
+                func.count(cd.creditor_id).label("buyers_count"),
+            )
+            .select_from(cd)
+            .where(cd.turn_id == turn_id)
+            .group_by(cd.debtor_id)
+            .having(func.count(cd.creditor_id) >= min_count)
+            .execution_options(yield_per=SELECT_BATCH_SIZE)
+    ) as result:
+        for row in result:
+            debtor_id = row.debtor_id
+            buyers_count = float(row.buyers_count)
+            if debtor_id in most_bought_currencies:
+                update(buyers_count, debtor_id)
+            else:
+                heap.push(buyers_count, debtor_id)
+
+    for debtor_id in most_bought_currencies:
+        if debtor_id not in updated:
+            update(0.0, debtor_id)
+
+    heap.set_max_length(n_currencies)
+    for debtor_id, average_buyers_count in most_bought_currencies.items():
+        heap.push(average_buyers_count, debtor_id)
+
+    db.session.execute(
+        delete(MostBoughtCurrency)
+        .execution_options(synchronize_session=False)
+    )
+    db.session.execute(SET_SEQSCAN_OFF)
+
+    if heap:
+        locators: dict[int, str] = {
+            row.debtor_id: row.debtor_info_locator
+            for row in db.session.execute(
+                    select(
+                        CurrencyInfo.debtor_id,
+                        CurrencyInfo.debtor_info_locator,
+                    )
+                    .select_from(CurrencyInfo)
+                    .where(
+                        CurrencyInfo.is_confirmed,
+                        CONFIRMED_CURRENCY_UNIQUE_INDEX.in_(
+                            [(turn_id, item.debtor_id) for item in heap]
+                        ),
+                    )
+            ).all()
+        }
+        db.session.execute(
+            insert(MostBoughtCurrency)
+            .execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            [
+                {
+                    "debtor_id": item.debtor_id,
+                    "buyers_average_count": item.buyers_count,
+                    "debtor_info_locator": locators[item.debtor_id],
+                }
+                for item in heap if item.debtor_id in locators
             ],
         )
 

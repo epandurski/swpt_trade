@@ -868,6 +868,7 @@ def run_phase3_subphase0(turn_id: int) -> None:
             s_conn.execute(SET_SEQSCAN_ON)
             _copy_creditor_takings(s_conn, worker_turn)
             _copy_creditor_givings(s_conn, worker_turn)
+            db.session.execute(text("ANALYZE creditor_participation"))
             _copy_collector_collectings(s_conn, worker_turn, statuses)
             _copy_collector_sendings(s_conn, worker_turn, statuses)
             _copy_collector_receivings(s_conn, worker_turn, statuses)
@@ -1023,6 +1024,7 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                     d["turn_id"],
                     d["amount"],
                 )
+    db.session.execute(text("ANALYZE worker_collecting"))
 
 
 def _copy_collector_sendings(s_conn, worker_turn, statuses):
@@ -1081,6 +1083,7 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                     d["turn_id"],
                     d["amount"],
                 )
+    db.session.execute(text("ANALYZE worker_sending"))
 
 
 def _copy_collector_receivings(s_conn, worker_turn, statuses):
@@ -1140,6 +1143,7 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                     d["turn_id"],
                     d["expected_amount"],
                 )
+    db.session.execute(text("ANALYZE worker_receiving"))
 
 
 def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
@@ -1200,6 +1204,7 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                     d["turn_id"],
                     d["amount"],
                 )
+    db.session.execute(text("ANALYZE worker_dispatching"))
 
 
 def _create_dispatching_statuses(worker_turn, statuses):
@@ -1211,6 +1216,7 @@ def _create_dispatching_statuses(worker_turn, statuses):
             ),
             status_dicts,
         )
+    db.session.execute(text("ANALYZE dispatching_status"))
 
 
 def _insert_revise_account_lock_signals(worker_turn):

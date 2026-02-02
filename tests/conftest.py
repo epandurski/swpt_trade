@@ -15,7 +15,6 @@ config_dict = {
     "OFFERS_POURING_DURATION": timedelta(minutes=5),
     "TRANSFERS_COLLECTOR_LIMIT": 1,
     "APP_ENABLE_CORS": True,
-    "APP_ENABLE_INESSENTIAL_WEBAPIS": True,
     "APP_DEBTOR_INFO_FETCH_BURST_COUNT": 1,
     "APP_RESCHEDULED_TRANSFERS_BURST_COUNT": 1,
     "APP_ACCOUNT_LOCK_MAX_DAYS": 365,
@@ -24,6 +23,8 @@ config_dict = {
     "APP_SURPLUS_BLOCKING_DELAY_DAYS": 14.0,
     "SOLVER_CLIENT_POOL_SIZE": 0,
     "INTERNAL_BROKER_QUEUE": "",
+    "APP_NUMBER_OF_TURNS_FOR_BUYERS_COUNT_STATS": 10,
+    "APP_NUMBER_OF_CURRENCIES_IN_BUYERS_COUNT_STATS": 1000,
 }
 
 
@@ -104,6 +105,7 @@ def db_session(app):
         "TRUNCATE TABLE creditor_giving",
         "TRUNCATE TABLE overloaded_currency",
         "TRUNCATE TABLE hoarded_currency",
+        "TRUNCATE TABLE most_bought_currency",
     ]:
         db.session.execute(
             sqlalchemy.text(cmd),

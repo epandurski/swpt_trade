@@ -174,7 +174,7 @@ def process_delayed_account_transfers() -> int:
                         WorkerTurn.turn_id == DelayedAccountTransfer.turn_id,
                     )
                     .where(
-                        WorkerTurn.turn_id >= text(str(min_turn_id)),
+                        WorkerTurn.turn_id >= min_turn_id,
                         or_(
                             WorkerTurn.phase > 3,
                             and_(

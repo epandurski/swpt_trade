@@ -204,6 +204,12 @@ MAX_COLLECTOR_ID=0x00000100000003ff
 # Connection string for the solver's PostgreSQL database server.
 SOLVER_POSTGRES_URL=postgresql+psycopg://swpt_solver:swpt_solver@localhost:5435/test
 
+# The value for PostgreSQL's `work_mem` setting, which will only be
+# used for queries that perform sorting of huge number of rows. Such
+# queries however, will never be executed in parallel. The default is
+# "50MB".
+SOLVER_INCREASED_WORK_MEM=200MB
+
 # Set the minimum level of severity for log messages ("info",
 # "warning", or "error"). The default is "warning".
 APP_LOG_LEVEL=info

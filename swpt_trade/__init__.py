@@ -212,6 +212,7 @@ class Configuration(metaclass=MetaEnvReader):
     MIN_TRADE_AMOUNT = 1000
 
     SOLVER_POSTGRES_URL = ""
+    SOLVER_INCREASED_WORK_MEM = "50MB"
     SOLVER_CLIENT_POOL_SIZE: int = None
 
     # The default value for `WORKER_POSTGRES_URL` is a random valid
@@ -272,7 +273,6 @@ class Configuration(metaclass=MetaEnvReader):
     APP_ENABLE_CORS = False
     APP_COIN_INFO_DOCUMENT_MAX_LENGTH = 50000
     APP_VERIFY_SSL_CERTS = True
-    APP_ENABLE_INESSENTIAL_WEBAPIS = False
     APP_TURN_MAX_COMMIT_PERIOD: parse_timedelta = parse_timedelta("30d")
     APP_HTTP_FETCH_PERIOD: parse_timedelta = parse_timedelta("15s")
     APP_DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 2
@@ -364,6 +364,8 @@ class Configuration(metaclass=MetaEnvReader):
     APP_DEBTOR_INFO_FETCH_BURST_COUNT = 2000
     APP_DEBTOR_INFO_FETCH_RETRY_MIN_SECONDS = 300.0
     APP_RESCHEDULED_TRANSFERS_BURST_COUNT = 5000
+    APP_NUMBER_OF_TURNS_FOR_BUYERS_COUNT_STATS = 30
+    APP_NUMBER_OF_CURRENCIES_IN_BUYERS_COUNT_STATS = 1000
     APP_SUPERUSER_SUBJECT_REGEX = ""
     APP_SUPERVISOR_SUBJECT_REGEX = ""
     APP_CREDITOR_SUBJECT_REGEX = "^creditors:([0-9]+)$"
@@ -484,7 +486,7 @@ def create_app(config_dict={}):
     from flask import Flask
     from swpt_pythonlib.utils import Int64Converter
     from .extensions import db, migrate, api, publisher, internal_publisher
-    from .routes import collectors_api, health_api, specs
+    from .routes import statistics_api, health_api, specs
     from .cli import swpt_trade
     from . import models  # noqa
 
@@ -536,8 +538,7 @@ def create_app(config_dict={}):
     internal_publisher.init_app(app)
     api.init_app(app)
     api.register_blueprint(health_api)
-    if app.config["APP_ENABLE_INESSENTIAL_WEBAPIS"]:
-        api.register_blueprint(collectors_api)
+    api.register_blueprint(statistics_api)
 
     app.cli.add_command(swpt_trade)
     _check_config_sanity(app.config)

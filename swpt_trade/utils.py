@@ -5,8 +5,9 @@ import math
 import array
 import struct
 import functools
+from heapq import heappush, heappop, heappushpop
 from random import Random
-from typing import TypeVar, Self, Iterable, Callable, Optional
+from typing import TypeVar, Self, Iterable, Callable, Optional, Iterator
 from enum import Enum
 from dataclasses import dataclass
 from hashlib import md5
@@ -95,6 +96,41 @@ class TransferNote:
             f"{first_label}: {i64_to_u64(self.first_id):x}\n"
             f"{second_label}: {i64_to_u64(self.second_id):x}\n"
         )
+
+
+@dataclass(order=True, slots=True, frozen=True)
+class CurrencyBuyersCount:
+    buyers_count: float
+    debtor_id: int
+
+
+class CurrencyBuyersCountHeap:
+    def __init__(self, max_length: int = 1):
+        assert max_length > 0
+        self._heap_max_length = max_length
+        self._heap = []
+
+    def __iter__(self) -> Iterator[CurrencyBuyersCount]:
+        for item in self._heap:
+            yield item
+
+    def __bool__(self):
+        return len(self._heap) > 0
+
+    def push(self, buyers_count: float, debtor_id: int):
+        heap = self._heap
+        new_item = CurrencyBuyersCount(buyers_count, debtor_id)
+        if len(heap) < self._heap_max_length:
+            heappush(heap, new_item)
+        else:
+            heappushpop(heap, new_item)
+
+    def set_max_length(self, max_length: int):
+        assert max_length > 0
+        heap = self._heap
+        while len(heap) > max_length:
+            heappop(heap)
+        self._heap_max_length = max_length
 
 
 class DispatchingData:
