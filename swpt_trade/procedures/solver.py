@@ -24,6 +24,7 @@ from swpt_trade.models import (
     CreditorGiving,
     CreditorTaking,
     OverloadedCurrency,
+    MostBoughtCurrency,
 )
 
 ACTIVE_COLLECTOR_ACCOUNT_EXISTS = (
@@ -350,3 +351,22 @@ def forget_overloaded_currency(turn_id: int, debtor_id: int) -> None:
             OverloadedCurrency.debtor_id == debtor_id,
         )
     )
+
+
+@atomic
+def get_most_bought_currencies():
+    db.session.execute(
+        SET_SEQSCAN_ON,
+        bind_arguments={"bind": db.engines["solver"]},
+    )
+    return db.session.execute(
+        select(
+            MostBoughtCurrency.debtor_id,
+            MostBoughtCurrency.debtor_info_locator,
+            MostBoughtCurrency.buyers_average_count,
+        )
+        .order_by(
+            MostBoughtCurrency.buyers_average_count.desc(),
+            MostBoughtCurrency.debtor_id,
+        )
+    ).all()

@@ -273,7 +273,6 @@ class Configuration(metaclass=MetaEnvReader):
     APP_ENABLE_CORS = False
     APP_COIN_INFO_DOCUMENT_MAX_LENGTH = 50000
     APP_VERIFY_SSL_CERTS = True
-    APP_ENABLE_INESSENTIAL_WEBAPIS = False
     APP_TURN_MAX_COMMIT_PERIOD: parse_timedelta = parse_timedelta("30d")
     APP_HTTP_FETCH_PERIOD: parse_timedelta = parse_timedelta("15s")
     APP_DEFAULT_NUMBER_OF_COLLECTOR_ACCOUNTS = 2
@@ -487,7 +486,7 @@ def create_app(config_dict={}):
     from flask import Flask
     from swpt_pythonlib.utils import Int64Converter
     from .extensions import db, migrate, api, publisher, internal_publisher
-    from .routes import collectors_api, health_api, specs
+    from .routes import statistics_api, health_api, specs
     from .cli import swpt_trade
     from . import models  # noqa
 
@@ -539,8 +538,7 @@ def create_app(config_dict={}):
     internal_publisher.init_app(app)
     api.init_app(app)
     api.register_blueprint(health_api)
-    if app.config["APP_ENABLE_INESSENTIAL_WEBAPIS"]:
-        api.register_blueprint(collectors_api)
+    api.register_blueprint(statistics_api)
 
     app.cli.add_command(swpt_trade)
     _check_config_sanity(app.config)

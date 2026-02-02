@@ -74,6 +74,17 @@ UPDATE_CONFLICT = {
     "content": ERROR_CONTENT,
 }
 
+MOST_BOUGHT_CURRENCIES_CSV_EXAMPLE = {
+    "content": {
+        "text/csv": {
+            "example": (
+                "1000,https://example.com/1#swpt:18446744073709551615\r\n"
+                "500,https://example.com/2#swpt:2\r\n"
+            ),
+        },
+    }
+}
+
 SCOPE_ACCESS_READONLY = [
     {"oauth2": ["access.readonly"]},
 ]
