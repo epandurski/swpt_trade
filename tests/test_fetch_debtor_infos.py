@@ -1,4 +1,5 @@
 import pytest
+import ssl
 from datetime import datetime, timedelta
 from swpt_trade.extensions import db
 from swpt_trade import models as m
@@ -46,7 +47,8 @@ def test_last_fetch_retry(mocker, app, db_session, restore_expiry):
     )
     db.session.commit()
 
-    assert process_debtor_info_fetches(1, 0.1) == 1
+    cafile = '/etc/ssl/certs/ca-certificates.crt'
+    assert process_debtor_info_fetches(1, 0.1, cafile) == 1
     assert len(m.DebtorInfoFetch.query.all()) == 0
 
 
@@ -93,7 +95,8 @@ def test_cached_and_wrong_shard(
     )
     db.session.commit()
 
-    assert process_debtor_info_fetches(1, 0.1) == 2
+    cafile = '/etc/ssl/certs/ca-certificates.crt'
+    assert process_debtor_info_fetches(1, 0.1, cafile) == 2
     assert len(m.DebtorInfoFetch.query.all()) == 0
     assert len(m.DebtorInfoDocument.query.all()) == 1
 
@@ -136,12 +139,13 @@ def test_process_debtor_info_fetches(mocker, app, db_session, current_ts):
         debtor_id=999,
         is_locator_fetch=True,
         is_discovery_fetch=False,
-      )
+    )
     db.session.add(dif1)
     db.session.add(dif2)
     db.session.commit()
 
-    assert process_debtor_info_fetches(1, 0.1) == 2
+    cafile = '/etc/ssl/certs/ca-certificates.crt'
+    assert process_debtor_info_fetches(1, 0.1, cafile) == 2
 
     fetches = m.DebtorInfoFetch.query.all()
     assert len(fetches) == 1
@@ -190,6 +194,9 @@ def test_make_https_requests(app, mocker):
         "swpt_trade.fetch_debtor_infos._parse_debtor_info_document",
         new=parse_debtor_info_document,
     )
+    ssl_context = ssl.create_default_context(
+        cafile='/etc/ssl/certs/ca-certificates.crt'
+    )
     results = _make_https_requests(
         [
             m.DebtorInfoFetch(
@@ -215,6 +222,7 @@ def test_make_https_requests(app, mocker):
         ],
         max_connections=10,
         timeout=30.0,
+        ssl_context=ssl_context,
     )
     assert len(results) == 4
     results.sort(key=lambda r: r.fetch.debtor_id)

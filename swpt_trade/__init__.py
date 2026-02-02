@@ -252,6 +252,7 @@ class Configuration(metaclass=MetaEnvReader):
     HTTP_FETCH_PROCESSES = 1
     HTTP_FETCH_CONNECTIONS = 100
     HTTP_FETCH_TIMEOUT = 10.0
+    HTTP_FETCH_SSL_CERT_FILE = "/etc/ssl/certs/ca-certificates.crt"
 
     TRIGGER_TRANSFERS_PROCESSES = 1
 

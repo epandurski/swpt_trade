@@ -1,5 +1,6 @@
 import logging
 import random
+import ssl
 import asyncio
 import aiohttp
 import json
@@ -50,12 +51,17 @@ class InvalidDebtorInfoDocument(Exception):
     """Invalid debtor info document."""
 
 
-def process_debtor_info_fetches(max_connections: int, timeout: float) -> int:
+def process_debtor_info_fetches(
+        max_connections: int,
+        timeout: float,
+        cafile: str,
+) -> int:
     count = 0
     current_ts = datetime.now(tz=timezone.utc)
     cfg = current_app.config
     batch_size = cfg["APP_DEBTOR_INFO_FETCH_BURST_COUNT"]
     retry_min_seconds = cfg["APP_DEBTOR_INFO_FETCH_RETRY_MIN_SECONDS"]
+    ssl_context = ssl.create_default_context(cafile=cafile)
 
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=batch_size).execute(
@@ -72,6 +78,7 @@ def process_debtor_info_fetches(max_connections: int, timeout: float) -> int:
                     max_connections,
                     timeout,
                     retry_min_seconds,
+                    ssl_context,
                 )
 
     return count
@@ -84,6 +91,7 @@ def _process_debtor_info_fetches_batch(
         max_connections: int,
         timeout: float,
         retry_min_seconds: float,
+        ssl_context: ssl.SSLContext,
 ) -> int:
     cfg = current_app.config
     expiry_period = timedelta(days=cfg["APP_DEBTOR_INFO_EXPIRY_DAYS"])
@@ -98,6 +106,7 @@ def _process_debtor_info_fetches_batch(
         expiry_period,
         max_connections,
         timeout,
+        ssl_context,
     )
     for r in fetch_results:
         fetch = r.fetch
@@ -169,6 +178,7 @@ def _query_and_resolve_pending_fetches(
         expiry_period: timedelta,
         max_connections: int,
         timeout: float,
+        ssl_context: ssl.SSLContext,
 ) -> List[FetchResult]:
     # Lock the `DebtorInfoFetch`es that need to be processed.
     fetch_tuples: List[FetchTuple] = (
@@ -202,7 +212,10 @@ def _query_and_resolve_pending_fetches(
     wrong_shard_results = [FetchResult(fetch=f) for f, _ in wrong_shard]
     cached_results = [FetchResult(fetch=f, document=d) for f, d in cached]
     new_results = _make_https_requests(
-        [f for f, _ in new], max_connections=max_connections, timeout=timeout
+        [f for f, _ in new],
+        max_connections=max_connections,
+        timeout=timeout,
+        ssl_context=ssl_context,
     )
 
     all_results = wrong_shard_results + cached_results + new_results
@@ -272,12 +285,18 @@ def _make_https_requests(
         *,
         max_connections: int,
         timeout: float,
+        ssl_context: ssl.SSLContext,
 ) -> List[FetchResult]:
     results: List[FetchResult] = []
     logger = logging.getLogger(__name__)
     loop = _get_asyncio_loop()
     results_and_errors = loop.run_until_complete(
-        _gather_https_request_results(fetches, max_connections, timeout)
+        _gather_https_request_results(
+            fetches,
+            max_connections,
+            timeout,
+            ssl_context,
+        )
     )
     assert len(fetches) == len(results_and_errors)
 
@@ -305,12 +324,13 @@ async def _gather_https_request_results(
         fetches: List[DebtorInfoFetch],
         max_connections: int,
         timeout: float,
+        ssl_context: ssl.SSLContext,
 ) -> List[Union[FetchResult, Exception]]:
     async with aiohttp.ClientSession(
         connector=aiohttp.TCPConnector(
             limit=max_connections,
             ttl_dns_cache=3600,
-            ssl=current_app.config["APP_VERIFY_SSL_CERTS"],
+            ssl=current_app.config["APP_VERIFY_SSL_CERTS"] and ssl_context,
         ),
         timeout=aiohttp.ClientTimeout(total=timeout),
     ) as client:

@@ -45,9 +45,20 @@ from .common import swpt_trade
     type=float,
     help=(
         "The number of seconds to wait for a response, before the HTTP"
-        " request is cancelled. If not specified, the value of the "
+        " request is cancelled. If not specified, the value of the"
         " HTTP_FETCH_TIMEOUT environment variable will be used, defaulting"
         " to 10 seconds if empty."
+    ),
+)
+@click.option(
+    "-f",
+    "--cafile",
+    type=str,
+    help=(
+        "Only certificate authorities whose root certificates are listed"
+        " this file will be trusted. If not specified, the value of the"
+        " HTTP_FETCH_SSL_CERT_FILE environment variable will be used,"
+        " defaulting to '/etc/ssl/certs/ca-certificates.crt' if empty."
     ),
 )
 @click.option(
@@ -69,6 +80,7 @@ def fetch_debtor_infos(
     processes: int,
     connections: int,
     timeout: float,
+    cafile: str,
     wait: float,
     quit_early: bool,
 ) -> None:
@@ -83,6 +95,7 @@ def fetch_debtor_infos(
     def _fetch(
             connections: int,
             timeout: float,
+            cafile: str,
             wait: float,
     ) -> None:  # pragma: no cover
         from swpt_trade import create_app
@@ -103,7 +116,9 @@ def fetch_debtor_infos(
             while not stopped:
                 started_at = time.time()
                 try:
-                    count = process_debtor_info_fetches(connections, timeout)
+                    count = process_debtor_info_fetches(
+                        connections, timeout, cafile
+                    )
                 except Exception:
                     logger.exception(
                         "Caught error while fetching debtor info documents."
@@ -137,6 +152,11 @@ def fetch_debtor_infos(
             timeout
             if timeout is not None
             else cfg["HTTP_FETCH_TIMEOUT"]
+        ),
+        cafile=(
+            cafile
+            if cafile is not None
+            else cfg["HTTP_FETCH_SSL_CERT_FILE"]
         ),
         wait=(
             wait
