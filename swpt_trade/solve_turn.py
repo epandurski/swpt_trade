@@ -417,10 +417,11 @@ def _collect_trade_statistics(turn_id: int) -> None:
     ) as result:
         for row in result:
             debtor_id = row.debtor_id
+            buyers_count = float(row.buyers_count)
             if debtor_id in most_bought_currencies:
-                update(row.buyers_count, debtor_id)
+                update(buyers_count, debtor_id)
             else:
-                heap.push(row.buyers_count, debtor_id)
+                heap.push(buyers_count, debtor_id)
 
     for debtor_id in most_bought_currencies:
         if debtor_id not in updated:
