@@ -307,6 +307,13 @@ PROTOCOL_BROKER_PROCESSES=1
 PROTOCOL_BROKER_THREADS=3
 PROTOCOL_BROKER_PREFETCH_COUNT=10
 
+# The binding key with which the "$PROTOCOL_BROKER_QUEUE"
+# RabbitMQ queue is bound to the `to_trade` topic
+# exchange (default "#"). The binding key must consist of zero or
+# more 0s or 1s, separated by dots, ending with a hash symbol.
+# For example: "0.1.#", "1.#", or "#".
+PROTOCOL_BROKER_QUEUE_ROUTING_KEY=#
+
 # Parameters for the communication with the RabbitMQ server which is
 # responsible for brokering internal messages. Containers which
 # consume internal messages will try to connect to
@@ -326,13 +333,6 @@ INTERNAL_BROKER_QUEUE=swpt_trade-internal
 INTERNAL_BROKER_PROCESSES=1
 INTERNAL_BROKER_THREADS=3
 INTERNAL_BROKER_PREFETCH_COUNT=10
-
-# The binding key with which the "$PROTOCOL_BROKER_QUEUE"
-# RabbitMQ queue is bound to the `to_trade` topic
-# exchange (default "#"). The binding key must consist of zero or
-# more 0s or 1s, separated by dots, ending with a hash symbol.
-# For example: "0.1.#", "1.#", or "#".
-PROTOCOL_BROKER_QUEUE_ROUTING_KEY=#
 
 # All outgoing RabbitMQ messages are first recorded in the
 # worker's PostgreSQL database, and then are "fulshed" to the
