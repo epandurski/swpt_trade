@@ -345,18 +345,22 @@ PROTOCOL_BROKER_QUEUE_ROUTING_KEY=#
 FLUSH_PROCESSES=2
 FLUSH_PERIOD=5.0
 
-# Worker servers should periodically perform scheduled HTTP
-# requests to fetch debtor info documents. The specified number
-# of processes ("$HTTP_FETCH_PROCESSES") will be spawned to do
-# this job (default 1). Each process will open a maximum number
-# of "$HTTP_FETCH_CONNECTIONS" parallel HTTP connections (default
-# 100), and will give up after not receiving a response
-# for "$HTTP_FETCH_TIMEOUT" seconds (default 10). Note that
-# HTTP_FETCH_PROCESSES can be set to 0, in which case, the
-# container will not try to fetch any debtor info documents.
+# Worker servers should periodically perform scheduled HTTP requests
+# to fetch debtor info documents. The specified number of processes
+# ("$HTTP_FETCH_PROCESSES") will be spawned to do this job (default
+# 1). Each process will open a maximum number of
+# "$HTTP_FETCH_CONNECTIONS" parallel HTTP connections (default 100),
+# and will give up after not receiving a response for
+# "$HTTP_FETCH_TIMEOUT" seconds (default 10). Only certificate
+# authorities which root certificates are listed in the
+# "$HTTP_FETCH_SSL_CERT_FILE" file will be trusted (default
+# "/etc/ssl/certs/ca-certificates.crt"). Note that
+# HTTP_FETCH_PROCESSES can be set to 0, in which case, the container
+# will not try to fetch any debtor info documents.
 HTTP_FETCH_PROCESSES=1
 HTTP_FETCH_CONNECTIONS=100
 HTTP_FETCH_TIMEOUT=10.0
+HTTP_FETCH_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
 
 # The number of processes that will periodically trigger scheduled
 # transfer attempts. The default is 1, which normally should be
@@ -556,8 +560,9 @@ container allows you to execute the following *documented commands*:
   Starts additional worker processes that perform scheduled HTTP
   requests to fetch debtor info documents. These commands allow you to
   start processes dedicated to fetching debtor info documents. (See
-  "HTTP_FETCH_PROCESSES", "HTTP_FETCH_CONNECTIONS", and
-  "HTTP_FETCH_TIMEOUT" environment variables.)
+  "HTTP_FETCH_PROCESSES", "HTTP_FETCH_CONNECTIONS",
+  "HTTP_FETCH_TIMEOUT", and "HTTP_FETCH_SSL_CERT_FILE" environment
+  variables.)
 
 * `trigger_transfers`
 
