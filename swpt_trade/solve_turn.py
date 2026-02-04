@@ -379,7 +379,10 @@ def _collect_trade_statistics(turn_id: int) -> None:
     n_currencies = cfg["APP_NUMBER_OF_CURRENCIES_IN_BUYERS_COUNT_STATS"]
     heap = CurrencyBuyersCountHeap(max_length=max(n_currencies // n_turns, 1))
 
-    db.session.execute(SET_SEQSCAN_ON)
+    db.session.execute(
+        SET_SEQSCAN_ON,
+        bind_arguments={"bind": db.engines["solver"]},
+    )
     most_bought_currencies: dict[int, float] = {
         row.debtor_id: row.buyers_average_count
         for row in db.session.execute(
@@ -435,8 +438,10 @@ def _collect_trade_statistics(turn_id: int) -> None:
         delete(MostBoughtCurrency)
         .execution_options(synchronize_session=False)
     )
-    db.session.execute(SET_SEQSCAN_OFF)
-
+    db.session.execute(
+        SET_SEQSCAN_OFF,
+        bind_arguments={"bind": db.engines["solver"]},
+    )
     if heap:
         locators: dict[int, str] = {
             row.debtor_id: row.debtor_info_locator
