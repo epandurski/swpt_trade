@@ -409,6 +409,12 @@ def _check_config_sanity(c):  # pragma: nocover
             " value."
         )
 
+    if parse_timedelta(c["TURN_PERIOD"]) > timedelta(days=7):
+        raise RuntimeError(
+            "The configured value for TURN_PERIOD is too big. Choose"
+            " a more appropriate value."
+        )
+
     if 0 < parse_timedelta(c["TURN_PHASE1_DURATION"]).total_seconds() < 120:
         # Duration 0 is allowed for testing purposes.
         raise RuntimeError(
@@ -445,8 +451,6 @@ def _check_config_sanity(c):  # pragma: nocover
     if (
             c["APP_SURPLUS_BLOCKING_DELAY_DAYS"]
             < c["APP_EXTREME_MESSAGE_DELAY_DAYS"]
-            or timedelta(days=c["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
-            < 3 * parse_timedelta(c["TURN_PERIOD"])
     ):
         raise RuntimeError(
             "The configured value for APP_SURPLUS_BLOCKING_DELAY_DAYS is too"
