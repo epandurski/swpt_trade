@@ -407,7 +407,7 @@ class HoardedCurrency(db.Model):
 
 class MostBoughtCurrency(db.Model):
     __bind_key__ = "solver"
-    debtor_id = db.Column(db.BigInteger, primary_key=True)
+    debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
     buyers_average_count = db.Column(db.REAL, nullable=False)
     debtor_info_locator = db.Column(db.String, nullable=False)
     __table_args__ = (
