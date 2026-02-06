@@ -65,5 +65,6 @@ def get_pending_worker_turns() -> Sequence[WorkerTurn]:
     return (
         WorkerTurn.query
         .filter(WorkerTurn.worker_turn_subphase < text("10"))
+        .order_by(WorkerTurn.turn_id)
         .all()
     )
