@@ -44,12 +44,12 @@ class WorkerTurn(db.Model):
         ),
         db.Index(
             "idx_worker_turn_phase",
-            phase,
+            turn_id,
             postgresql_where=phase < 3,
         ),
         db.Index(
             "idx_worker_turn_subphase",
-            worker_turn_subphase,
+            turn_id,
             postgresql_where=worker_turn_subphase < 10,
         ),
         {

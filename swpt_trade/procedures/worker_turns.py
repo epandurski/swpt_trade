@@ -54,6 +54,7 @@ def get_unfinished_worker_turn_ids() -> Sequence[int]:
         db.session.execute(
             select(WorkerTurn.turn_id)
             .filter(WorkerTurn.phase < text("3"))
+            .order_by(WorkerTurn.turn_id)
         )
         .scalars()
         .all()
@@ -65,5 +66,6 @@ def get_pending_worker_turns() -> Sequence[WorkerTurn]:
     return (
         WorkerTurn.query
         .filter(WorkerTurn.worker_turn_subphase < text("10"))
+        .order_by(WorkerTurn.turn_id)
         .all()
     )
