@@ -574,8 +574,8 @@ def upgrade_():
     comment='Represents a circular trading round in which a "worker" server participates. "Worker" servers will watch for new and changed rows in the solver\'s `turn` table, and will copy them off.'
     )
     with op.batch_alter_table('worker_turn', schema=None) as batch_op:
-        batch_op.create_index('idx_worker_turn_phase', ['phase'], unique=False, postgresql_where=sa.text('phase < 3'))
-        batch_op.create_index('idx_worker_turn_subphase', ['worker_turn_subphase'], unique=False, postgresql_where=sa.text('worker_turn_subphase < 10'))
+        batch_op.create_index('idx_worker_turn_phase', ['turn_id'], unique=False, postgresql_where=sa.text('phase < 3'))
+        batch_op.create_index('idx_worker_turn_subphase', ['turn_id'], unique=False, postgresql_where=sa.text('worker_turn_subphase < 10'))
 
     # ### end Alembic commands ###
 
@@ -825,7 +825,7 @@ def upgrade_solver():
     comment='Represents a circular trading round, created and managed by the "solver" server. "Worker" servers will watch for changes in this table, so as to participate in the different phases of each trading round.'
     )
     with op.batch_alter_table('turn', schema=None) as batch_op:
-        batch_op.create_index('idx_turn_phase', ['phase'], unique=False, postgresql_where=sa.text('phase < 4'))
+        batch_op.create_index('idx_turn_phase', ['turn_id'], unique=False, postgresql_where=sa.text('phase < 4'))
         batch_op.create_index('idx_turn_started_at', ['started_at'], unique=False)
 
     # ### end Alembic commands ###

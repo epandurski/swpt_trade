@@ -54,6 +54,7 @@ def get_unfinished_worker_turn_ids() -> Sequence[int]:
         db.session.execute(
             select(WorkerTurn.turn_id)
             .filter(WorkerTurn.phase < text("3"))
+            .order_by(WorkerTurn.turn_id)
         )
         .scalars()
         .all()

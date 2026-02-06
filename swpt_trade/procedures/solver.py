@@ -69,12 +69,7 @@ def start_new_turn_if_possible(
         text("LOCK TABLE turn IN SHARE ROW EXCLUSIVE MODE"),
         bind_arguments={"bind": db.engines["solver"]},
     )
-    unfinished_turns = (
-        Turn.query
-        .filter(Turn.phase < text("4"))
-        .order_by(Turn.turn_id)
-        .all()
-    )
+    unfinished_turns = get_unfinished_turns()
     if not unfinished_turns:
         latest_turn = (
             Turn.query
@@ -260,6 +255,7 @@ def get_unfinished_turns() -> Sequence[Turn]:
     return (
         Turn.query
         .filter(Turn.phase < text("4"))
+        .order_by(Turn.turn_id)
         .all()
     )
 

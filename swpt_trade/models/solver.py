@@ -89,7 +89,7 @@ class Turn(db.Model):
         db.CheckConstraint(or_(phase < 3, collection_started_at != null())),
         db.Index(
             "idx_turn_phase",
-            phase,
+            turn_id,
             postgresql_where=phase < 4,
         ),
         db.Index("idx_turn_started_at", started_at),
