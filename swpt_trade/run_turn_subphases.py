@@ -665,7 +665,8 @@ def _copy_usable_collectors(bp: BidProcessor) -> None:
                     CollectorAccount.debtor_id,
                     CollectorAccount.collector_id,
                     CollectorAccount.account_id,
-                    CollectorAccount.status
+                    CollectorAccount.status,
+                    CollectorAccount.latest_status_change_at,
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
