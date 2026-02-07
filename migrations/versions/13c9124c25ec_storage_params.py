@@ -145,7 +145,7 @@ def upgrade_():
     )
     set_storage_params(
         'worker_collecting',
-        fillfactor=50,
+        fillfactor=80,
         autovacuum_vacuum_scale_factor=0.2,
         autovacuum_vacuum_insert_scale_factor=0.2,
     )
@@ -157,7 +157,7 @@ def upgrade_():
     )
     set_storage_params(
         'worker_receiving',
-        fillfactor=50,
+        fillfactor=80,
         autovacuum_vacuum_scale_factor=0.2,
         autovacuum_vacuum_insert_scale_factor=0.2,
     )
