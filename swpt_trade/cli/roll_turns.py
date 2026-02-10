@@ -87,7 +87,7 @@ def roll_turns(period, period_offset, check_interval, quit_early):
     logger.info("Started rolling turns.")
 
     while True:
-        logger.info("Trying to start a new turn or advance started turns.")
+        logger.debug("Trying to start a new turn or advance started turns.")
         check_began_at = datetime.now(tz=timezone.utc)
         started_turns = procedures.start_new_turn_if_possible(
             turn_period=period,
