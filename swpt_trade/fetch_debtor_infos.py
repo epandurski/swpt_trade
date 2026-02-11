@@ -60,7 +60,9 @@ def process_debtor_info_fetches(
     current_ts = datetime.now(tz=timezone.utc)
     cfg = current_app.config
     batch_size = cfg["APP_DEBTOR_INFO_FETCH_BURST_COUNT"]
-    retry_min_seconds = cfg["APP_DEBTOR_INFO_FETCH_RETRY_MIN_SECONDS"]
+    retry_min_seconds = (
+        cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"].total_seconds()
+    )
     ssl_context = ssl.create_default_context(cafile=cafile)
 
     with db.engine.connect() as w_conn:
@@ -262,7 +264,7 @@ def _retry_fetch(
     passed `expiry_period`.
     """
     n = min(fetch.attempts_count, 100)  # We must avoid float overflows!
-    wait_seconds = retry_min_seconds * (2.0 ** n)
+    wait_seconds = retry_min_seconds * (1.5 ** n)
 
     if wait_seconds < expiry_period.total_seconds():
         current_ts = datetime.now(tz=timezone.utc)
