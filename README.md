@@ -539,22 +539,6 @@ container allows you to execute the following *documented commands*:
   Starts only the worker processes that send outgoing messages to the
   RabbitMQ broker, and remove the messages from the PostgreSQL database.
 
-* `flush_configure_accounts`, `flush_prepare_transfers`,
-  `flush_finalize_transfers`, `flush_fetch_debtor_infos`,
-  `flush_store_documents`, `flush_discover_debtors`,
-  `flush_confirm_debtors`,` flush_replayed_account_transfers`,
-  `flush_candidate_offers`, `flush_needed_collectors`,
-  `flush_revise_account_locks`, `flush_trigger_transfers`,
-  `flush_account_id_requests`, `flush_account_id_responses`,
-  `flush_start_sendings`, `flush_start_dispatchings`,
-  `flush_calculate_surpluses`
-
-  Starts additional worker processes that send particular type of outgoing
-  messages to the RabbitMQ broker, and remove the messages from the
-  PostgreSQL database. These commands allow you to start processes dedicated
-  to the flushing of particular type of messages. (See "FLUSH_PROCESSES" and
-  "FLUSH_PERIOD" environment variables.)
-
 * `fetch_debtor_infos`
 
   Starts additional worker processes that perform scheduled HTTP
