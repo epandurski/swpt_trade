@@ -172,7 +172,7 @@ def _process_pristine_collectors_batch(
 
     # First, we need to check if the `NeededWorkerAccount` records and
     # their corresponding accounts already exist.
-    chosen = NeededCollectorAccount.choose_rows(worker_account_pks)
+    chosen = NeededWorkerAccount.choose_rows(worker_account_pks)
     needed_worker_accounts = {
         (row[0], row[1]): (row[2], row[3])
         for row in db.session.execute(
@@ -235,7 +235,7 @@ def _process_pristine_collectors_batch(
         # in this case, is to send another `ConfigureAccount` messages
         # for the accounts, hoping that this will fix the problem (see
         # `pks_to_configure` bellow).
-        to_retry = NeededCollectorAccount.choose_rows(list(pks_to_retry))
+        to_retry = NeededWorkerAccount.choose_rows(list(pks_to_retry))
         db.session.execute(
             update(NeededWorkerAccount)
             .execution_options(synchronize_session=False)
