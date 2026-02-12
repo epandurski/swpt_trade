@@ -334,14 +334,15 @@ INTERNAL_BROKER_PROCESSES=1
 INTERNAL_BROKER_THREADS=3
 INTERNAL_BROKER_PREFETCH_COUNT=10
 
-# All outgoing RabbitMQ messages are first recorded in the
-# worker's PostgreSQL database, and then are "fulshed" to the
-# RabbitMQ message broker. The specified number of
-# processes ("$FLUSH_PROCESSES") will be spawned to flush
-# messages (default 1). Note that FLUSH_PROCESSES can be set to
-# 0, in which case, the container will not flush any messages.
-# The "$FLUSH_PERIOD" value specifies the number of seconds to
-# wait between two sequential flushes (default 5).
+# All outgoing RabbitMQ messages are first recorded in the worker's
+# PostgreSQL database, and then are "fulshed" to the RabbitMQ message
+# broker. The specified number of processes ("$FLUSH_PROCESSES") will
+# be spawned to flush messages (default 1). Note that FLUSH_PROCESSES
+# can be set to 0, in which case, the container will not flush any
+# messages. The "$FLUSH_PERIOD" value specifies the number of seconds
+# to wait between two sequential flushes (default 5). You may need to
+# increase this period as the time needed for the completion of
+# trading turns becomes higher.
 FLUSH_PROCESSES=1
 FLUSH_PERIOD=5.0
 
