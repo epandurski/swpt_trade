@@ -247,7 +247,7 @@ class Configuration(metaclass=MetaEnvReader):
     INTERNAL_BROKER_PREFETCH_COUNT = 1
 
     FLUSH_PROCESSES = 1
-    FLUSH_PERIOD = 2.0
+    FLUSH_PERIOD = 5.0
 
     HTTP_FETCH_PROCESSES = 1
     HTTP_FETCH_CONNECTIONS = 100

@@ -341,8 +341,8 @@ INTERNAL_BROKER_PREFETCH_COUNT=10
 # messages (default 1). Note that FLUSH_PROCESSES can be set to
 # 0, in which case, the container will not flush any messages.
 # The "$FLUSH_PERIOD" value specifies the number of seconds to
-# wait between two sequential flushes (default 2).
-FLUSH_PROCESSES=2
+# wait between two sequential flushes (default 5).
+FLUSH_PROCESSES=1
 FLUSH_PERIOD=5.0
 
 # Worker servers should periodically perform scheduled HTTP requests
