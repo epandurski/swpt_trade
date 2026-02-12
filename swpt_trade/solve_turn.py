@@ -783,8 +783,7 @@ def _delete_stuck_collector_accounts() -> None:
                                 COLLECTOR_ACCOUNT_PK == tuple_(*chosen.c)
                             )
                             .with_for_update(skip_locked=True)
-                    )
-                    .all()
+                    ).all()
                 ]
                 if pks_locked:
                     to_delete = CollectorAccount.choose_rows(pks_locked)

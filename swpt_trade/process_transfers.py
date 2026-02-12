@@ -19,6 +19,7 @@ from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_INDEXSCAN_OFF,
+    SET_FORCE_CUSTOM_PLAN,
     TransferAttempt,
     DispatchingStatus,
     WorkerCollecting,
@@ -269,7 +270,7 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                db.session.execute(SET_INDEXSCAN_OFF)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 chosen = DispatchingStatus.choose_rows([
                     tuple(row)
                     for row in rows
@@ -339,7 +340,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                db.session.execute(SET_INDEXSCAN_OFF)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 chosen = DispatchingStatus.choose_rows([
                     tuple(row)
                     for row in rows
@@ -396,7 +397,7 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                db.session.execute(SET_INDEXSCAN_OFF)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 chosen = DispatchingStatus.choose_rows([
                     tuple(row)
                     for row in rows
@@ -466,7 +467,7 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                db.session.execute(SET_INDEXSCAN_OFF)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 chosen = DispatchingStatus.choose_rows([
                     tuple(row)
                     for row in rows
