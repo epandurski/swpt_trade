@@ -1,18 +1,19 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
+from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import RecentlyNeededCollector
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from swpt_trade.models import (
+    RecentlyNeededCollector,
+    SET_INDEXSCAN_OFF,
+    SET_INDEXSCAN_ON,
+)
 
 
 class RecentlyNeededCollectorsScanner(TableScanner):
     table = RecentlyNeededCollector.__table__
-    pk = table.c.debtor_id
+    pk = tuple_(RecentlyNeededCollector.debtor_id)
     columns = [
         RecentlyNeededCollector.debtor_id,
         RecentlyNeededCollector.needed_at,
@@ -37,7 +38,6 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             "APP_RECENTLY_NEEDED_COLLECTORS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -45,6 +45,7 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
+        db.session.close()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -58,16 +59,21 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             )
 
         pks_to_delete = [
-            row[c_debtor_id] for row in rows if belongs_to_parent_shard(row)
+            (row[c_debtor_id],)
+            for row in rows
+            if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = RecentlyNeededCollector.choose_rows(pks_to_delete)
             to_delete = (
                 RecentlyNeededCollector.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(RecentlyNeededCollector.debtor_id))
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)
@@ -84,19 +90,22 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             return row[c_needed_at] < cutoff_ts
 
         pks_to_delete = [
-            row[c_debtor_id] for row in rows if is_stale(row)
+            (row[c_debtor_id],)
+            for row in rows
+            if is_stale(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = RecentlyNeededCollector.choose_rows(pks_to_delete)
             to_delete = (
                 RecentlyNeededCollector.query
-                .filter(
-                    self.pk.in_(pks_to_delete),
-                    RecentlyNeededCollector.needed_at < cutoff_ts,
-                )
+                .join(chosen, self.pk == tuple_(*chosen.c))
+                .filter(RecentlyNeededCollector.needed_at < cutoff_ts)
                 .with_for_update(skip_locked=True)
                 .options(load_only(RecentlyNeededCollector.debtor_id))
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

@@ -1,19 +1,15 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_, and_, or_, null
 from swpt_trade.extensions import db
-from swpt_trade.models import AccountLock
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from swpt_trade.models import AccountLock, SET_INDEXSCAN_OFF, SET_INDEXSCAN_ON
 
 
 class AccountLocksScanner(TableScanner):
     table = AccountLock.__table__
-    pk = tuple_(table.c.creditor_id, table.c.debtor_id)
+    pk = tuple_(AccountLock.creditor_id, AccountLock.debtor_id)
     columns = [
         AccountLock.creditor_id,
         AccountLock.debtor_id,
@@ -39,7 +35,6 @@ class AccountLocksScanner(TableScanner):
     def target_beat_duration(self) -> int:
         return current_app.config["APP_ACCOUNT_LOCKS_SCAN_BEAT_MILLISECS"]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -47,6 +42,7 @@ class AccountLocksScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
+        db.session.close()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -66,11 +62,15 @@ class AccountLocksScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = AccountLock.choose_rows(pks_to_delete)
             to_delete = (
-                AccountLock.query.filter(self.pk.in_(pks_to_delete))
+                AccountLock.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for account_lock in to_delete:
                 db.session.delete(account_lock)
@@ -101,10 +101,12 @@ class AccountLocksScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = AccountLock.choose_rows(pks_to_delete)
             to_delete = (
                 AccountLock.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(
-                    self.pk.in_(pks_to_delete),
                     or_(
                         AccountLock.initiated_at < cutoff_ts,
                         and_(
@@ -117,6 +119,7 @@ class AccountLocksScanner(TableScanner):
                 .options(load_only(AccountLock.creditor_id))
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

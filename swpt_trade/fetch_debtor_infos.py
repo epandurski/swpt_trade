@@ -24,6 +24,8 @@ from swpt_trade.models import (
     StoreDocumentSignal,
     MAX_INT16,
     T_INFINITY,
+    SET_INDEXSCAN_ON,
+    SET_INDEXSCAN_OFF,
 )
 
 T = TypeVar("T")
@@ -75,7 +77,7 @@ def process_debtor_info_fetches(
         ) as result:
             for rows in result.partitions():
                 count += _process_debtor_info_fetches_batch(
-                    rows,
+                    [tuple(row) for row in rows],
                     current_ts,
                     max_connections,
                     timeout,
@@ -183,8 +185,11 @@ def _query_and_resolve_pending_fetches(
         ssl_context: ssl.SSLContext,
 ) -> List[FetchResult]:
     # Lock the `DebtorInfoFetch`es that need to be processed.
+    db.session.execute(SET_INDEXSCAN_OFF)
+    chosen = DebtorInfoFetch.choose_rows(debtor_info_fetch_pks)
     fetch_tuples: List[FetchTuple] = (
         db.session.query(DebtorInfoFetch, DebtorInfoDocument)
+        .join(chosen, DEBTOR_INFO_FETCH_PK == tuple_(*chosen.c))
         .outerjoin(
             DebtorInfoDocument,
             and_(
@@ -193,8 +198,6 @@ def _query_and_resolve_pending_fetches(
             ),
         )
         .filter(
-            DEBTOR_INFO_FETCH_PK.in_(debtor_info_fetch_pks),
-
             # The reason we use this complex expression here (instead
             # of the simple `DebtorInfoFetch.next_attempt_at <=
             # current_ts`), is to ensure that the planner will not
@@ -206,6 +209,7 @@ def _query_and_resolve_pending_fetches(
         .with_for_update(of=DebtorInfoFetch, skip_locked=True)
         .all()
     )
+    db.session.execute(SET_INDEXSCAN_ON)
 
     # Resolve the `DebtorInfoFetch`es that we have locked.
     wrong_shard, cached, new = _classify_fetch_tuples(

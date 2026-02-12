@@ -1,17 +1,18 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import DebtorInfoDocument
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from swpt_trade.models import (
+    DebtorInfoDocument,
+    SET_INDEXSCAN_OFF,
+    SET_INDEXSCAN_ON,
+)
 
 
 class DebtorInfoDocumentsScanner(TableScanner):
     table = DebtorInfoDocument.__table__
-    pk = table.c.debtor_info_locator
+    pk = tuple_(DebtorInfoDocument.debtor_info_locator)
     columns = [
         DebtorInfoDocument.debtor_info_locator,
         DebtorInfoDocument.fetched_at,
@@ -36,7 +37,6 @@ class DebtorInfoDocumentsScanner(TableScanner):
             "APP_DEBTOR_INFO_DOCUMENTS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -44,6 +44,7 @@ class DebtorInfoDocumentsScanner(TableScanner):
             self._delete_parent_shard_documents(rows, current_ts)
 
         self._delete_stale_documents(rows, current_ts)
+        db.session.close()
 
     def _delete_parent_shard_documents(self, rows, current_ts):
         c = self.table.c
@@ -57,16 +58,20 @@ class DebtorInfoDocumentsScanner(TableScanner):
             )
 
         pks_to_delete = [
-            row[c_debtor_info_locator]
+            (row[c_debtor_info_locator],)
             for row in rows
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
-                DebtorInfoDocument.query.filter(self.pk.in_(pks_to_delete))
+                DebtorInfoDocument.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for document in to_delete:
                 db.session.delete(document)
@@ -83,15 +88,21 @@ class DebtorInfoDocumentsScanner(TableScanner):
             return row[c_fetched_at] < cutoff_ts
 
         pks_to_delete = [
-            row[c_debtor_info_locator] for row in rows if is_stale(row)
+            (row[c_debtor_info_locator],)
+            for row in rows
+            if is_stale(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
-                DebtorInfoDocument.query.filter(self.pk.in_(pks_to_delete))
+                DebtorInfoDocument.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(DebtorInfoDocument.fetched_at < cutoff_ts)
                 .with_for_update(skip_locked=True)
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for document in to_delete:
                 db.session.delete(document)

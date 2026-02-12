@@ -1,18 +1,18 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
-from sqlalchemy.sql.expression import and_, or_, null
+from sqlalchemy.sql.expression import tuple_, and_, or_, null
 from swpt_trade.extensions import db
-from swpt_trade.models import DebtorLocatorClaim
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from swpt_trade.models import (
+    DebtorLocatorClaim,
+    SET_INDEXSCAN_OFF,
+    SET_INDEXSCAN_ON,
+)
 
 
 class DebtorLocatorClaimsScanner(TableScanner):
     table = DebtorLocatorClaim.__table__
-    pk = table.c.debtor_id
+    pk = tuple_(DebtorLocatorClaim.debtor_id)
     columns = [
         DebtorLocatorClaim.debtor_id,
         DebtorLocatorClaim.latest_locator_fetch_at,
@@ -41,7 +41,6 @@ class DebtorLocatorClaimsScanner(TableScanner):
             "APP_DEBTOR_LOCATOR_CLAIMS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -49,6 +48,7 @@ class DebtorLocatorClaimsScanner(TableScanner):
             self._delete_parent_shard_claims(rows, current_ts)
 
         self._delete_stale_claims(rows, current_ts)
+        db.session.close()
 
     def _delete_parent_shard_claims(self, rows, current_ts):
         c = self.table.c
@@ -62,14 +62,20 @@ class DebtorLocatorClaimsScanner(TableScanner):
             )
 
         pks_to_delete = [
-            row[c_debtor_id] for row in rows if belongs_to_parent_shard(row)
+            (row[c_debtor_id],)
+            for row in rows
+            if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = DebtorLocatorClaim.choose_rows(pks_to_delete)
             to_delete = (
-                DebtorLocatorClaim.query.filter(self.pk.in_(pks_to_delete))
+                DebtorLocatorClaim.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for claim in to_delete:
                 db.session.delete(claim)
@@ -95,14 +101,18 @@ class DebtorLocatorClaimsScanner(TableScanner):
             )
 
         pks_to_delete = [
-            row[c_debtor_id] for row in rows if is_stale(row)
+            (row[c_debtor_id],)
+            for row in rows
+            if is_stale(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = DebtorLocatorClaim.choose_rows(pks_to_delete)
             locator_fetch_at = DebtorLocatorClaim.latest_locator_fetch_at
             discovery_fetch_at = DebtorLocatorClaim.latest_discovery_fetch_at
-
             to_delete = (
-                DebtorLocatorClaim.query.filter(self.pk.in_(pks_to_delete))
+                DebtorLocatorClaim.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(
                     or_(
                         and_(
@@ -118,6 +128,7 @@ class DebtorLocatorClaimsScanner(TableScanner):
                 .with_for_update(skip_locked=True)
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for claim in to_delete:
                 db.session.delete(claim)

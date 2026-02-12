@@ -18,6 +18,7 @@ from swpt_trade.extensions import db
 from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
+    SET_INDEXSCAN_OFF,
     TransferAttempt,
     DispatchingStatus,
     WorkerCollecting,
@@ -121,7 +122,10 @@ def process_rescheduled_transfers() -> int:
                 )
         ) as result:
             for rows in result.partitions():
-                count += process_rescheduled_transfers_batch(rows, current_ts)
+                count += process_rescheduled_transfers_batch(
+                    [tuple(row) for row in rows],
+                    current_ts,
+                )
 
     return count
 
@@ -230,13 +234,15 @@ def process_delayed_account_transfers() -> int:
                             ),
                             to_replay,
                         )
+                    chosen = DelayedAccountTransfer.choose_rows(
+                        [(row.turn_id, row.message_id) for row in rows]
+                    )
+                    db.session.execute(SET_INDEXSCAN_OFF)
                     db.session.execute(
                         delete(DelayedAccountTransfer)
                         .execution_options(synchronize_session=False)
                         .where(
-                            DELAYED_ACCOUNT_TRANSFER_PK.in_(
-                                (row.turn_id, row.message_id) for row in rows
-                            )
+                            DELAYED_ACCOUNT_TRANSFER_PK == tuple_(*chosen.c)
                         )
                     )
                     db.session.commit()
@@ -263,33 +269,37 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                this_shard_rows = [
-                    row for row in rows if
-                    sharding_realm.match(row.collector_id)
+                db.session.execute(SET_INDEXSCAN_OFF)
+                chosen = DispatchingStatus.choose_rows([
+                    tuple(row)
+                    for row in rows
+                    if sharding_realm.match(row.collector_id)
+                ])
+                pks_to_update = [
+                    tuple(row)
+                    for row in db.session.execute(
+                            select(
+                                DispatchingStatus.collector_id,
+                                DispatchingStatus.debtor_id,
+                                DispatchingStatus.turn_id,
+                            )
+                            .join(
+                                chosen,
+                                DISPATCHING_STATUS_PK == tuple_(*chosen.c)
+                            )
+                            .where(
+                                DispatchingStatus.started_sending == false(),
+                                DispatchingStatus.awaiting_signal_flag == false(),
+                            )
+                            .with_for_update(skip_locked=True)
+                    ).all()
                 ]
-                locked_rows = (
-                    db.session.execute(
-                        select(
-                            DispatchingStatus.collector_id,
-                            DispatchingStatus.debtor_id,
-                            DispatchingStatus.turn_id,
-                        )
-                        .where(
-                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                            DispatchingStatus.started_sending == false(),
-                            DispatchingStatus.awaiting_signal_flag == false(),
-                        )
-                        .with_for_update(skip_locked=True)
-                    )
-                    .all()
-                )
-                if locked_rows:
-                    current_ts = datetime.now(tz=timezone.utc)
-
+                if pks_to_update:
+                    to_update = DispatchingStatus.choose_rows(pks_to_update)
                     db.session.execute(
                         update(DispatchingStatus)
                         .execution_options(synchronize_session=False)
-                        .where(DISPATCHING_STATUS_PK.in_(locked_rows))
+                        .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
@@ -299,12 +309,11 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                         ),
                         [
                             {
-                                "collector_id": row.collector_id,
-                                "debtor_id": row.debtor_id,
-                                "turn_id": row.turn_id,
-                                "inserted_at": current_ts,
+                                "collector_id": collector_id,
+                                "debtor_id": debtor_id,
+                                "turn_id": turn_id,
                             }
-                            for row in locked_rows
+                            for collector_id, debtor_id, turn_id in pks_to_update
                         ],
                     )
 
@@ -330,31 +339,37 @@ def update_dispatching_statuses_with_everything_sent() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                this_shard_rows = [
-                    row for row in rows if
-                    sharding_realm.match(row.collector_id)
+                db.session.execute(SET_INDEXSCAN_OFF)
+                chosen = DispatchingStatus.choose_rows([
+                    tuple(row)
+                    for row in rows
+                    if sharding_realm.match(row.collector_id)
+                ])
+                pks_to_update = [
+                    tuple(row)
+                    for row in db.session.execute(
+                            select(
+                                DispatchingStatus.collector_id,
+                                DispatchingStatus.debtor_id,
+                                DispatchingStatus.turn_id,
+                            )
+                            .join(
+                                chosen,
+                                DISPATCHING_STATUS_PK == tuple_(*chosen.c)
+                            )
+                            .where(
+                                DispatchingStatus.started_sending == true(),
+                                DispatchingStatus.all_sent == false(),
+                            )
+                            .with_for_update(skip_locked=True)
+                    ).all()
                 ]
-                locked_rows = (
-                    db.session.execute(
-                        select(
-                            DispatchingStatus.collector_id,
-                            DispatchingStatus.debtor_id,
-                            DispatchingStatus.turn_id,
-                        )
-                        .where(
-                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                            DispatchingStatus.started_sending == true(),
-                            DispatchingStatus.all_sent == false(),
-                        )
-                        .with_for_update(skip_locked=True)
-                    )
-                    .all()
-                )
-                if locked_rows:
+                if pks_to_update:
+                    to_update = DispatchingStatus.choose_rows(pks_to_update)
                     db.session.execute(
                         update(DispatchingStatus)
                         .execution_options(synchronize_session=False)
-                        .where(DISPATCHING_STATUS_PK.in_(locked_rows))
+                        .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(all_sent=True)
                     )
 
@@ -381,34 +396,38 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                this_shard_rows = [
-                    row for row in rows if
-                    sharding_realm.match(row.collector_id)
+                db.session.execute(SET_INDEXSCAN_OFF)
+                chosen = DispatchingStatus.choose_rows([
+                    tuple(row)
+                    for row in rows
+                    if sharding_realm.match(row.collector_id)
+                ])
+                pks_to_update = [
+                    tuple(row)
+                    for row in db.session.execute(
+                            select(
+                                DispatchingStatus.collector_id,
+                                DispatchingStatus.debtor_id,
+                                DispatchingStatus.turn_id,
+                            )
+                            .join(
+                                chosen,
+                                DISPATCHING_STATUS_PK == tuple_(*chosen.c)
+                            )
+                            .where(
+                                DispatchingStatus.all_sent == true(),
+                                DispatchingStatus.started_dispatching == false(),
+                                DispatchingStatus.awaiting_signal_flag == false(),
+                            )
+                            .with_for_update(skip_locked=True)
+                    ).all()
                 ]
-                locked_rows = (
-                    db.session.execute(
-                        select(
-                            DispatchingStatus.collector_id,
-                            DispatchingStatus.debtor_id,
-                            DispatchingStatus.turn_id,
-                        )
-                        .where(
-                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                            DispatchingStatus.all_sent == true(),
-                            DispatchingStatus.started_dispatching == false(),
-                            DispatchingStatus.awaiting_signal_flag == false(),
-                        )
-                        .with_for_update(skip_locked=True)
-                    )
-                    .all()
-                )
-                if locked_rows:
-                    current_ts = datetime.now(tz=timezone.utc)
-
+                if pks_to_update:
+                    to_update = DispatchingStatus.choose_rows(pks_to_update)
                     db.session.execute(
                         update(DispatchingStatus)
                         .execution_options(synchronize_session=False)
-                        .where(DISPATCHING_STATUS_PK.in_(locked_rows))
+                        .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
@@ -418,12 +437,11 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                         ),
                         [
                             {
-                                "collector_id": row.collector_id,
-                                "debtor_id": row.debtor_id,
-                                "turn_id": row.turn_id,
-                                "inserted_at": current_ts,
+                                "collector_id": collector_id,
+                                "debtor_id": debtor_id,
+                                "turn_id": turn_id,
                             }
-                            for row in locked_rows
+                            for collector_id, debtor_id, turn_id in pks_to_update
                         ],
                     )
 
@@ -448,30 +466,36 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                this_shard_rows = [
-                    row for row in rows if
-                    sharding_realm.match(row.collector_id)
+                db.session.execute(SET_INDEXSCAN_OFF)
+                chosen = DispatchingStatus.choose_rows([
+                    tuple(row)
+                    for row in rows
+                    if sharding_realm.match(row.collector_id)
+                ])
+                pks_to_update = [
+                    tuple(row)
+                    for row in db.session.execute(
+                            select(
+                                DispatchingStatus.collector_id,
+                                DispatchingStatus.debtor_id,
+                                DispatchingStatus.turn_id,
+                            )
+                            .join(
+                                chosen,
+                                DISPATCHING_STATUS_PK == tuple_(*chosen.c)
+                            )
+                            .where(
+                                DispatchingStatus.started_dispatching == true(),
+                            )
+                            .with_for_update(skip_locked=True)
+                    ).all()
                 ]
-                locked_rows = (
-                    db.session.execute(
-                        select(
-                            DispatchingStatus.collector_id,
-                            DispatchingStatus.debtor_id,
-                            DispatchingStatus.turn_id,
-                        )
-                        .where(
-                            DISPATCHING_STATUS_PK.in_(this_shard_rows),
-                            DispatchingStatus.started_dispatching == true(),
-                        )
-                        .with_for_update(skip_locked=True)
-                    )
-                    .all()
-                )
-                if locked_rows:
+                if pks_to_update:
+                    to_update = DispatchingStatus.choose_rows(pks_to_update)
                     db.session.execute(
                         delete(DispatchingStatus)
                         .execution_options(synchronize_session=False)
-                        .where(DISPATCHING_STATUS_PK.in_(locked_rows))
+                        .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                     )
 
                 db.session.commit()

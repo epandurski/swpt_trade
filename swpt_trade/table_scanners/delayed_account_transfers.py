@@ -1,22 +1,22 @@
 import logging
-from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import DelayedAccountTransfer
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from swpt_trade.models import (
+    DelayedAccountTransfer,
+    SET_INDEXSCAN_OFF,
+    SET_INDEXSCAN_ON,
+)
 
 
 class DelayedAccountTransfersScanner(TableScanner):
     table = DelayedAccountTransfer.__table__
     pk = tuple_(
-        table.c.turn_id,
-        table.c.message_id,
+        DelayedAccountTransfer.turn_id,
+        DelayedAccountTransfer.message_id,
     )
     columns = [
         DelayedAccountTransfer.turn_id,
@@ -43,10 +43,10 @@ class DelayedAccountTransfersScanner(TableScanner):
             "APP_DELAYED_ACCOUNT_TRANSFERS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
         self._delete_stale_records(rows, current_ts)
+        db.session.close()
 
     def _delete_stale_records(self, rows, current_ts):
         c = self.table.c
@@ -59,22 +59,22 @@ class DelayedAccountTransfersScanner(TableScanner):
             return row[c_ts] < cutoff_ts
 
         pks_to_delete = [
-            (
-                row[c_turn_id],
-                row[c_message_id],
-            )
+            (row[c_turn_id], row[c_message_id])
             for row in rows
             if is_stale(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            logger = logging.getLogger(__name__)
+            chosen = DelayedAccountTransfer.choose_rows(pks_to_delete)
             to_delete = (
                 DelayedAccountTransfer.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(DelayedAccountTransfer.turn_id))
                 .all()
             )
-            logger = logging.getLogger(__name__)
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 logger.warning(

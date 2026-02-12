@@ -1,23 +1,23 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import WorkerSending
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from swpt_trade.models import (
+    WorkerSending,
+    SET_INDEXSCAN_ON,
+    SET_INDEXSCAN_OFF,
+)
 
 
 class WorkerSendingsScanner(TableScanner):
     table = WorkerSending.__table__
     pk = tuple_(
-        table.c.from_collector_id,
-        table.c.debtor_id,
-        table.c.turn_id,
-        table.c.to_collector_id,
+        WorkerSending.from_collector_id,
+        WorkerSending.debtor_id,
+        WorkerSending.turn_id,
+        WorkerSending.to_collector_id,
     )
     columns = [
         WorkerSending.from_collector_id,
@@ -43,7 +43,6 @@ class WorkerSendingsScanner(TableScanner):
             "APP_WORKER_SENDINGS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -51,6 +50,7 @@ class WorkerSendingsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
+        db.session.close()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -79,13 +79,16 @@ class WorkerSendingsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = WorkerSending.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerSending.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(WorkerSending.from_collector_id))
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)
@@ -114,13 +117,16 @@ class WorkerSendingsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
+            db.session.execute(SET_INDEXSCAN_OFF)
+            chosen = WorkerSending.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerSending.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(WorkerSending.from_collector_id))
                 .all()
             )
+            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)
