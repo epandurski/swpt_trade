@@ -20,6 +20,7 @@ from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_INDEXSCAN_OFF,
     SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
     TransferAttempt,
     DispatchingStatus,
     WorkerCollecting,
@@ -303,6 +304,7 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                         .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
+                    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
                     db.session.execute(
                         insert(StartSendingSignal).execution_options(
                             insertmanyvalues_page_size=INSERT_BATCH_SIZE,
@@ -431,6 +433,7 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                         .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
+                    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
                     db.session.execute(
                         insert(StartDispatchingSignal).execution_options(
                             insertmanyvalues_page_size=INSERT_BATCH_SIZE,
