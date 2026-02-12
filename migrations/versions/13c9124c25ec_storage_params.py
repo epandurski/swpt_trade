@@ -172,14 +172,12 @@ def upgrade_():
     set_storage_params(
         'needed_collector_account',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'collector_status_change',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
@@ -188,119 +186,102 @@ def upgrade_():
     set_storage_params(
         'configure_account_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'prepare_transfer_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'finalize_transfer_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'fetch_debtor_info_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'store_document_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'discover_debtor_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'confirm_debtor_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'candidate_offer_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'needed_collector_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'revise_account_lock_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'trigger_transfer_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'account_id_request_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'account_id_response_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'start_sending_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'start_dispatching_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'calculate_surplus_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'replayed_account_transfer_signal',
         fillfactor=100,
-        autovacuum_vacuum_cost_delay=0.0,
         autovacuum_vacuum_insert_threshold=-1,
         autovacuum_analyze_threshold=2000000000,
     )
@@ -481,7 +462,6 @@ def downgrade_():
         'needed_collector_account',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -490,7 +470,6 @@ def downgrade_():
         'collector_status_change',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -501,7 +480,6 @@ def downgrade_():
         'configure_account_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -510,7 +488,6 @@ def downgrade_():
         'prepare_transfer_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -519,7 +496,6 @@ def downgrade_():
         'finalize_transfer_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -528,7 +504,6 @@ def downgrade_():
         'fetch_debtor_info_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -537,7 +512,6 @@ def downgrade_():
         'store_document_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -546,7 +520,6 @@ def downgrade_():
         'discover_debtor_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -555,7 +528,6 @@ def downgrade_():
         'confirm_debtor_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -564,7 +536,6 @@ def downgrade_():
         'candidate_offer_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -573,7 +544,6 @@ def downgrade_():
         'needed_collector_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -582,7 +552,6 @@ def downgrade_():
         'revise_account_lock_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -591,7 +560,6 @@ def downgrade_():
         'trigger_transfer_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -600,7 +568,6 @@ def downgrade_():
         'account_id_request_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -609,7 +576,6 @@ def downgrade_():
         'account_id_response_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -618,7 +584,6 @@ def downgrade_():
         'start_sending_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -627,7 +592,6 @@ def downgrade_():
         'start_dispatching_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -636,7 +600,6 @@ def downgrade_():
         'calculate_surplus_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
@@ -645,7 +608,6 @@ def downgrade_():
         'replayed_account_transfer_signal',
         [
             'fillfactor',
-            'autovacuum_vacuum_cost_delay',
             'autovacuum_vacuum_insert_threshold',
             'autovacuum_analyze_threshold',
         ]
