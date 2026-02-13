@@ -68,6 +68,7 @@ class AccountLocksScanner(TableScanner):
                 AccountLock.query
                 .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(AccountLock.creditor_id))
                 .all()
             )
             db.session.execute(SET_INDEXSCAN_ON)

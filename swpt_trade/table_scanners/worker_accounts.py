@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -67,6 +68,7 @@ class WorkerAccountsScanner(TableScanner):
                 WorkerAccount.query
                 .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(WorkerAccount.creditor_id))
                 .all()
             )
             db.session.execute(SET_INDEXSCAN_ON)
@@ -99,6 +101,7 @@ class WorkerAccountsScanner(TableScanner):
                 .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(WorkerAccount.last_heartbeat_ts < cutoff_ts)
                 .with_for_update(skip_locked=True)
+                .options(load_only(WorkerAccount.creditor_id))
                 .all()
             )
             db.session.execute(SET_INDEXSCAN_ON)

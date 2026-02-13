@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.sql.expression import tuple_, and_, or_, null
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     DebtorLocatorClaim,
@@ -73,6 +74,7 @@ class DebtorLocatorClaimsScanner(TableScanner):
                 DebtorLocatorClaim.query
                 .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(DebtorLocatorClaim.debtor_id))
                 .all()
             )
             db.session.execute(SET_INDEXSCAN_ON)
@@ -126,6 +128,7 @@ class DebtorLocatorClaimsScanner(TableScanner):
                     )
                 )
                 .with_for_update(skip_locked=True)
+                .options(load_only(DebtorLocatorClaim.debtor_id))
                 .all()
             )
             db.session.execute(SET_INDEXSCAN_ON)

@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.sql.expression import tuple_
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TradingPolicy,
@@ -87,6 +88,7 @@ class TradingPoliciesScanner(TableScanner):
                 TradingPolicy.query
                 .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(TradingPolicy.creditor_id))
                 .all()
             )
             db.session.execute(SET_INDEXSCAN_ON)
