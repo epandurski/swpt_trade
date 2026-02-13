@@ -140,6 +140,8 @@ def roll_worker_turns(wait, quit_early):
                     f"Invalid subphase for worker turn {worker_turn.turn_id}."
                 )
 
+        db.session.close()
+
         if iteration_counter % 2 == 1:  # pragma: no cover
             # Run this every 2nd iteration:
             sync_collectors.process_collector_status_changes()

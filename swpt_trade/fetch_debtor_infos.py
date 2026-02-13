@@ -84,6 +84,7 @@ def process_debtor_info_fetches(
                     retry_min_seconds,
                     ssl_context,
                 )
+                db.session.close()
 
     return count
 
