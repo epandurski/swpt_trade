@@ -18,7 +18,8 @@ from swpt_trade.extensions import db
 from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     SET_DEFAULT_PLAN_CACHE_MODE,
     TransferAttempt,
@@ -240,7 +241,8 @@ def process_delayed_account_transfers() -> int:
                     chosen = DelayedAccountTransfer.choose_rows(
                         [(row.turn_id, row.message_id) for row in rows]
                     )
-                    db.session.execute(SET_INDEXSCAN_OFF)
+                    db.session.execute(SET_MERGEJOIN_OFF)
+                    db.session.execute(SET_HASHJOIN_OFF)
                     db.session.execute(
                         delete(DelayedAccountTransfer)
                         .execution_options(synchronize_session=False)

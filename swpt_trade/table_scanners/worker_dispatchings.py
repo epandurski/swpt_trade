@@ -6,8 +6,8 @@ from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     WorkerDispatching,
-    SET_INDEXSCAN_ON,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -77,7 +77,8 @@ class WorkerDispatchingsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = WorkerDispatching.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerDispatching.query
@@ -86,7 +87,6 @@ class WorkerDispatchingsScanner(TableScanner):
                 .options(load_only(WorkerDispatching.collector_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)
@@ -115,7 +115,8 @@ class WorkerDispatchingsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = WorkerDispatching.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerDispatching.query
@@ -124,7 +125,6 @@ class WorkerDispatchingsScanner(TableScanner):
                 .options(load_only(WorkerDispatching.collector_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

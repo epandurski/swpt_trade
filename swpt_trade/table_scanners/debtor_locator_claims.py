@@ -6,8 +6,8 @@ from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     DebtorLocatorClaim,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -68,7 +68,8 @@ class DebtorLocatorClaimsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DebtorLocatorClaim.choose_rows(pks_to_delete)
             to_delete = (
                 DebtorLocatorClaim.query
@@ -77,7 +78,6 @@ class DebtorLocatorClaimsScanner(TableScanner):
                 .options(load_only(DebtorLocatorClaim.debtor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for claim in to_delete:
                 db.session.delete(claim)
@@ -108,7 +108,8 @@ class DebtorLocatorClaimsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DebtorLocatorClaim.choose_rows(pks_to_delete)
             locator_fetch_at = DebtorLocatorClaim.latest_locator_fetch_at
             discovery_fetch_at = DebtorLocatorClaim.latest_discovery_fetch_at
@@ -131,7 +132,6 @@ class DebtorLocatorClaimsScanner(TableScanner):
                 .options(load_only(DebtorLocatorClaim.debtor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for claim in to_delete:
                 db.session.delete(claim)

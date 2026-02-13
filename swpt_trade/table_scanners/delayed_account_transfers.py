@@ -7,8 +7,8 @@ from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     DelayedAccountTransfer,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -64,7 +64,8 @@ class DelayedAccountTransfersScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             logger = logging.getLogger(__name__)
             chosen = DelayedAccountTransfer.choose_rows(pks_to_delete)
             to_delete = (
@@ -74,7 +75,6 @@ class DelayedAccountTransfersScanner(TableScanner):
                 .options(load_only(DelayedAccountTransfer.turn_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 logger.warning(

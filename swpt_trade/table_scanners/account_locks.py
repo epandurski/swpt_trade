@@ -4,7 +4,7 @@ from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_, and_, or_, null
 from swpt_trade.extensions import db
-from swpt_trade.models import AccountLock, SET_INDEXSCAN_OFF, SET_INDEXSCAN_ON
+from swpt_trade.models import AccountLock, SET_HASHJOIN_OFF, SET_MERGEJOIN_OFF
 
 
 class AccountLocksScanner(TableScanner):
@@ -62,7 +62,8 @@ class AccountLocksScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = AccountLock.choose_rows(pks_to_delete)
             to_delete = (
                 AccountLock.query
@@ -71,7 +72,6 @@ class AccountLocksScanner(TableScanner):
                 .options(load_only(AccountLock.creditor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for account_lock in to_delete:
                 db.session.delete(account_lock)
@@ -102,7 +102,8 @@ class AccountLocksScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = AccountLock.choose_rows(pks_to_delete)
             to_delete = (
                 AccountLock.query
@@ -120,7 +121,6 @@ class AccountLocksScanner(TableScanner):
                 .options(load_only(AccountLock.creditor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

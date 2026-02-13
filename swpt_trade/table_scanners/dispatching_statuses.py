@@ -5,8 +5,8 @@ from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     DispatchingStatus,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 from .common import ParentRecordsCleaner
 
@@ -64,7 +64,8 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DispatchingStatus.choose_rows(pks_to_delete)
             to_delete = (
                 DispatchingStatus.query
@@ -73,7 +74,6 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
                 .options(load_only(DispatchingStatus.collector_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

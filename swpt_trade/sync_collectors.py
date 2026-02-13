@@ -9,7 +9,8 @@ from swpt_trade.utils import u16_to_i16
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
     HUGE_NEGLIGIBLE_AMOUNT,
     DEFAULT_CONFIG_FLAGS,
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
@@ -88,7 +89,8 @@ def process_collector_status_changes():
                     db.session.execute(ca_update_statement, dicts_to_update)
                     db.session.commit()
 
-                db.session.execute(SET_INDEXSCAN_OFF)
+                db.session.execute(SET_MERGEJOIN_OFF)
+                db.session.execute(SET_HASHJOIN_OFF)
                 chosen = CollectorStatusChange.choose_rows(
                     [(r.collector_id, r.change_id) for r in rows]
                 )
@@ -120,7 +122,8 @@ def create_needed_collector_accounts():
                     procedures.insert_collector_accounts(pks_to_insert)
                     db.session.commit()
 
-                db.session.execute(SET_INDEXSCAN_OFF)
+                db.session.execute(SET_MERGEJOIN_OFF)
+                db.session.execute(SET_HASHJOIN_OFF)
                 to_delete = NeededCollectorAccount.choose_rows(pks)
                 db.session.execute(
                     delete(NeededCollectorAccount)
@@ -168,7 +171,8 @@ def _process_pristine_collectors_batch(
         max_postponement: timedelta,
 ) -> None:
     current_ts = datetime.now(tz=timezone.utc)
-    db.session.execute(SET_INDEXSCAN_OFF)
+    db.session.execute(SET_MERGEJOIN_OFF)
+    db.session.execute(SET_HASHJOIN_OFF)
 
     # First, we need to check if the `NeededWorkerAccount` records and
     # their corresponding accounts already exist.

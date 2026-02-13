@@ -10,8 +10,8 @@ from swpt_trade.models import (
     MIN_INT64,
     MAX_INT64,
     DEFAULT_CONFIG_FLAGS,
-    SET_INDEXSCAN_ON,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -82,7 +82,8 @@ class TradingPoliciesScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TradingPolicy.choose_rows(pks_to_delete)
             to_delete = (
                 TradingPolicy.query
@@ -91,7 +92,6 @@ class TradingPoliciesScanner(TableScanner):
                 .options(load_only(TradingPolicy.creditor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for trading_policy in to_delete:
                 db.session.delete(trading_policy)
@@ -143,7 +143,8 @@ class TradingPoliciesScanner(TableScanner):
             )
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TradingPolicy.choose_rows(pks_to_delete)
             to_delete = (
                 TradingPolicy.query
@@ -151,7 +152,6 @@ class TradingPoliciesScanner(TableScanner):
                 .with_for_update(skip_locked=True)
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for trading_policy in to_delete:
                 if (

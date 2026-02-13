@@ -6,8 +6,8 @@ from sqlalchemy.sql.expression import tuple_, not_, and_, null
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TransferAttempt,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -89,7 +89,8 @@ class TransferAttemptsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TransferAttempt.choose_rows(pks_to_delete)
             to_delete = (
                 TransferAttempt.query
@@ -98,7 +99,6 @@ class TransferAttemptsScanner(TableScanner):
                 .options(load_only(TransferAttempt.collector_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)
@@ -130,7 +130,8 @@ class TransferAttemptsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TransferAttempt.choose_rows(pks_to_delete)
             to_delete = (
                 TransferAttempt.query
@@ -154,7 +155,6 @@ class TransferAttemptsScanner(TableScanner):
                 .options(load_only(TransferAttempt.collector_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

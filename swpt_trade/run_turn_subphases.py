@@ -34,8 +34,10 @@ from swpt_trade.models import (
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
-    SET_INDEXSCAN_ON,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_ON,
+    SET_MERGEJOIN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     SET_DEFAULT_PLAN_CACHE_MODE,
     DebtorInfoDocument,
@@ -1544,7 +1546,8 @@ def _kill_broken_worker_accounts() -> None:
 def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     chosen = NeededWorkerAccount.choose_rows(primary_keys)
 
-    db.session.execute(SET_INDEXSCAN_OFF)
+    db.session.execute(SET_MERGEJOIN_OFF)
+    db.session.execute(SET_HASHJOIN_OFF)
     db.session.execute(
         delete(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
@@ -1596,4 +1599,5 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
             .where(INTEREST_RATE_CHANGE_PK == tuple_(*to_delete.c))
         )
 
-    db.session.execute(SET_INDEXSCAN_ON)
+    db.session.execute(SET_MERGEJOIN_ON)
+    db.session.execute(SET_HASHJOIN_ON)

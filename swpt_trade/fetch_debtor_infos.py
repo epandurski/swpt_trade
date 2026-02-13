@@ -24,8 +24,10 @@ from swpt_trade.models import (
     StoreDocumentSignal,
     MAX_INT16,
     T_INFINITY,
-    SET_INDEXSCAN_ON,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_ON,
+    SET_MERGEJOIN_OFF,
 )
 
 T = TypeVar("T")
@@ -186,7 +188,8 @@ def _query_and_resolve_pending_fetches(
         ssl_context: ssl.SSLContext,
 ) -> List[FetchResult]:
     # Lock the `DebtorInfoFetch`es that need to be processed.
-    db.session.execute(SET_INDEXSCAN_OFF)
+    db.session.execute(SET_MERGEJOIN_OFF)
+    db.session.execute(SET_HASHJOIN_OFF)
     chosen = DebtorInfoFetch.choose_rows(debtor_info_fetch_pks)
     fetch_tuples: List[FetchTuple] = (
         db.session.query(DebtorInfoFetch, DebtorInfoDocument)
@@ -210,7 +213,8 @@ def _query_and_resolve_pending_fetches(
         .with_for_update(of=DebtorInfoFetch, skip_locked=True)
         .all()
     )
-    db.session.execute(SET_INDEXSCAN_ON)
+    db.session.execute(SET_MERGEJOIN_ON)
+    db.session.execute(SET_HASHJOIN_ON)
 
     # Resolve the `DebtorInfoFetch`es that we have locked.
     wrong_shard, cached, new = _classify_fetch_tuples(

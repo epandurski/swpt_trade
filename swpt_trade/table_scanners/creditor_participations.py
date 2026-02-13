@@ -5,8 +5,8 @@ from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     CreditorParticipation,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 from .common import ParentRecordsCleaner
 
@@ -64,7 +64,8 @@ class CreditorParticipationsScanner(ParentRecordsCleaner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = CreditorParticipation.choose_rows(pks_to_delete)
             to_delete = (
                 CreditorParticipation.query
@@ -73,7 +74,6 @@ class CreditorParticipationsScanner(ParentRecordsCleaner):
                 .options(load_only(CreditorParticipation.creditor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for record in to_delete:
                 db.session.delete(record)

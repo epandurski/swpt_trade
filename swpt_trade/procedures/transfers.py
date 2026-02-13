@@ -30,7 +30,8 @@ from swpt_trade.models import (
     MAX_INT64,
     T_INFINITY,
     AGENT_TRANSFER_NOTE_FORMAT,
-    SET_INDEXSCAN_OFF,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
     cr_seq,
     WorkerTurn,
     AccountLock,
@@ -1455,7 +1456,8 @@ def process_rescheduled_transfers_batch(
         transfer_attempt_pks: list,
         current_ts: datetime,
 ) -> int:
-    db.session.execute(SET_INDEXSCAN_OFF)
+    db.session.execute(SET_MERGEJOIN_OFF)
+    db.session.execute(SET_HASHJOIN_OFF)
     chosen = TransferAttempt.choose_rows(transfer_attempt_pks)
     pks_to_trigger = [
         tuple(row)

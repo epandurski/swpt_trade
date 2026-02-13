@@ -6,8 +6,8 @@ from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     WorkerAccount,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -62,7 +62,8 @@ class WorkerAccountsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = WorkerAccount.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerAccount.query
@@ -71,7 +72,6 @@ class WorkerAccountsScanner(TableScanner):
                 .options(load_only(WorkerAccount.creditor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for worker_account in to_delete:
                 db.session.delete(worker_account)
@@ -94,7 +94,8 @@ class WorkerAccountsScanner(TableScanner):
             if is_dead(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = WorkerAccount.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerAccount.query
@@ -104,7 +105,6 @@ class WorkerAccountsScanner(TableScanner):
                 .options(load_only(WorkerAccount.creditor_id))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for worker_account in to_delete:
                 db.session.delete(worker_account)

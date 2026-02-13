@@ -9,8 +9,10 @@ from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_ON,
+    SET_MERGEJOIN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     CollectorAccount,
     Turn,
@@ -447,7 +449,11 @@ def _collect_trade_statistics(turn_id: int) -> None:
     )
     if heap:
         db.session.execute(
-            SET_INDEXSCAN_OFF,
+            SET_MERGEJOIN_OFF,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            SET_HASHJOIN_OFF,
             bind_arguments={"bind": db.engines["solver"]},
         )
         chosen_currencies = HoardedCurrency.choose_rows(
@@ -470,7 +476,11 @@ def _collect_trade_statistics(turn_id: int) -> None:
             ).all()
         }
         db.session.execute(
-            SET_INDEXSCAN_ON,
+            SET_MERGEJOIN_ON,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            SET_HASHJOIN_ON,
             bind_arguments={"bind": db.engines["solver"]},
         )
         db.session.execute(
@@ -661,7 +671,11 @@ def _disable_some_collector_accounts() -> None:
     def process_waiting():
         if waiting_to_be_disabled:
             db.session.execute(
-                SET_INDEXSCAN_OFF,
+                SET_MERGEJOIN_OFF,
+                bind_arguments={"bind": db.engines["solver"]},
+            )
+            db.session.execute(
+                SET_HASHJOIN_OFF,
                 bind_arguments={"bind": db.engines["solver"]},
             )
             chosen = CollectorAccount.choose_rows(waiting_to_be_disabled)
@@ -776,7 +790,11 @@ def _delete_stuck_collector_accounts() -> None:
         ) as result:
             for rows in result.partitions(DELETE_BATCH_SIZE):
                 db.session.execute(
-                    SET_INDEXSCAN_OFF,
+                    SET_MERGEJOIN_OFF,
+                    bind_arguments={"bind": db.engines["solver"]},
+                )
+                db.session.execute(
+                    SET_HASHJOIN_OFF,
                     bind_arguments={"bind": db.engines["solver"]},
                 )
                 chosen = CollectorAccount.choose_rows(

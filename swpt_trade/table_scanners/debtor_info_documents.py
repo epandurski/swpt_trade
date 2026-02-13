@@ -6,8 +6,8 @@ from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     DebtorInfoDocument,
-    SET_INDEXSCAN_OFF,
-    SET_INDEXSCAN_ON,
+    SET_HASHJOIN_OFF,
+    SET_MERGEJOIN_OFF,
 )
 
 
@@ -64,7 +64,8 @@ class DebtorInfoDocumentsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
                 DebtorInfoDocument.query
@@ -73,7 +74,6 @@ class DebtorInfoDocumentsScanner(TableScanner):
                 .options(load_only(DebtorInfoDocument.debtor_info_locator))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for document in to_delete:
                 db.session.delete(document)
@@ -95,7 +95,8 @@ class DebtorInfoDocumentsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_INDEXSCAN_OFF)
+            db.session.execute(SET_MERGEJOIN_OFF)
+            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
                 DebtorInfoDocument.query
@@ -105,7 +106,6 @@ class DebtorInfoDocumentsScanner(TableScanner):
                 .options(load_only(DebtorInfoDocument.debtor_info_locator))
                 .all()
             )
-            db.session.execute(SET_INDEXSCAN_ON)
 
             for document in to_delete:
                 db.session.delete(document)
