@@ -10,6 +10,7 @@ from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
     SET_INDEXSCAN_OFF,
+    SET_INDEXSCAN_ON,
     SET_FORCE_CUSTOM_PLAN,
     CollectorAccount,
     Turn,
@@ -445,6 +446,13 @@ def _collect_trade_statistics(turn_id: int) -> None:
         bind_arguments={"bind": db.engines["solver"]},
     )
     if heap:
+        db.session.execute(
+            SET_INDEXSCAN_OFF,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        chosen_currencies = HoardedCurrency.choose_rows(
+            [(turn_id, item.debtor_id) for item in heap]
+        )
         locators: dict[int, str] = {
             row.debtor_id: row.debtor_info_locator
             for row in db.session.execute(
@@ -453,14 +461,18 @@ def _collect_trade_statistics(turn_id: int) -> None:
                         CurrencyInfo.debtor_info_locator,
                     )
                     .select_from(CurrencyInfo)
-                    .where(
-                        CurrencyInfo.is_confirmed,
-                        CONFIRMED_CURRENCY_UNIQUE_INDEX.in_(
-                            [(turn_id, item.debtor_id) for item in heap]
-                        ),
+                    .join(
+                        chosen_currencies,
+                        CONFIRMED_CURRENCY_UNIQUE_INDEX
+                        == tuple_(*chosen_currencies.c),
                     )
+                    .where(CurrencyInfo.is_confirmed)
             ).all()
         }
+        db.session.execute(
+            SET_INDEXSCAN_ON,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
         db.session.execute(
             insert(MostBoughtCurrency)
             .execution_options(

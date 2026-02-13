@@ -375,7 +375,7 @@ class OverloadedCurrency(db.Model):
     )
 
 
-class HoardedCurrency(db.Model):
+class HoardedCurrency(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)

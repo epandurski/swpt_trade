@@ -143,9 +143,11 @@ def upgrade_solver():
     from swpt_trade import models
 
     create_pktype(models.CollectorAccount)
+    create_pktype(models.HoardedCurrency)
 
 
 def downgrade_solver():
     from swpt_trade import models
 
     drop_pktype(models.CollectorAccount)
+    drop_pktype(models.HoardedCurrency)

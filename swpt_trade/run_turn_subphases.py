@@ -34,6 +34,8 @@ from swpt_trade.models import (
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
+    SET_INDEXSCAN_ON,
+    SET_INDEXSCAN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     SET_DEFAULT_PLAN_CACHE_MODE,
     DebtorInfoDocument,
@@ -1470,7 +1472,7 @@ def _update_worker_account_surplus_amounts(turn_id: int) -> None:
                             }
                         )
                     else:
-                        accounts_not_from_this_shard.append(row)
+                        accounts_not_from_this_shard.append(tuple(row))
 
                     if signal_dicts:
                         db.session.execute(
@@ -1516,17 +1518,18 @@ def _kill_broken_worker_accounts() -> None:
                 )
         ) as result:
             for rows in result.partitions(KILL_ACCOUNTS_BATCH_SIZE):
-                _kill_needed_worker_accounts_and_rate_stats(rows)
+                pks_to_kill = [tuple(row) for row in rows]
+                _kill_needed_worker_accounts_and_rate_stats(pks_to_kill)
                 status_change_dicts = (
                     {
-                        "collector_id": row.creditor_id,
-                        "debtor_id": row.debtor_id,
+                        "collector_id": creditor_id,
+                        "debtor_id": debtor_id,
                         "from_status": 3,
                         "to_status": 1,
                         "account_id": None,
                     }
-                    for row in rows
-                    if sharding_realm.match(row.creditor_id)
+                    for creditor_id, debtor_id in pks_to_kill
+                    if sharding_realm.match(creditor_id)
                 )
                 if status_change_dicts:
                     db.session.execute(
@@ -1539,10 +1542,13 @@ def _kill_broken_worker_accounts() -> None:
 
 
 def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
+    chosen = NeededWorkerAccount.choose_rows(primary_keys)
+
+    db.session.execute(SET_INDEXSCAN_OFF)
     db.session.execute(
         delete(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
-        .where(NEEDED_WORKER_ACCOUNT_PK.in_(primary_keys))
+        .where(NEEDED_WORKER_ACCOUNT_PK == tuple_(*chosen.c))
     )
 
     # NOTE: Here instead of directly executing an
@@ -1565,8 +1571,9 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     # "InterestRateChange" row which will have to be
     # removed manually at some point in the very distant
     # future) is minimal.
-    interest_rate_changes_to_delete = (
-        db.session.execute(
+    pks_to_delete = [
+        tuple(row)
+        for row in db.session.execute(
             select(
                 InterestRateChange.creditor_id,
                 InterestRateChange.debtor_id,
@@ -1576,15 +1583,17 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
                 tuple_(
                     InterestRateChange.creditor_id,
                     InterestRateChange.debtor_id,
-                ).in_(primary_keys)
+                ) == tuple_(*chosen.c)
             )
             .with_for_update(skip_locked=True)
-        )
-        .all()
-    )
-    for batch in batched(interest_rate_changes_to_delete, DELETE_BATCH_SIZE):
+        ).all()
+    ]
+    for pks_batch in batched(pks_to_delete, DELETE_BATCH_SIZE):
+        to_delete = InterestRateChange.choose_rows(list(pks_batch))
         db.session.execute(
             delete(InterestRateChange)
             .execution_options(synchronize_session=False)
-            .where(INTEREST_RATE_CHANGE_PK.in_(batch))
+            .where(INTEREST_RATE_CHANGE_PK == tuple_(*to_delete.c))
         )
+
+    db.session.execute(SET_INDEXSCAN_ON)
