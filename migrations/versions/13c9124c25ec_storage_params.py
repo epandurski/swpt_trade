@@ -173,13 +173,11 @@ def upgrade_():
         'needed_collector_account',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'collector_status_change',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
 
     # Signals:
@@ -187,103 +185,86 @@ def upgrade_():
         'configure_account_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'prepare_transfer_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'finalize_transfer_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'fetch_debtor_info_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'store_document_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'discover_debtor_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'confirm_debtor_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'candidate_offer_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'needed_collector_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'revise_account_lock_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'trigger_transfer_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'account_id_request_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'account_id_response_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'start_sending_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'start_dispatching_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'calculate_surplus_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
     set_storage_params(
         'replayed_account_transfer_signal',
         fillfactor=100,
         autovacuum_vacuum_insert_threshold=-1,
-        autovacuum_analyze_threshold=2000000000,
     )
 
 
@@ -463,7 +444,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -471,7 +451,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
 
@@ -481,7 +460,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -489,7 +467,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -497,7 +474,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -505,7 +481,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -513,7 +488,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -521,7 +495,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -529,7 +502,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -537,7 +509,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -545,7 +516,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -553,7 +523,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -561,7 +530,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -569,7 +537,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -577,7 +544,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -585,7 +551,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -593,7 +558,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -601,7 +565,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
     reset_storage_params(
@@ -609,7 +572,6 @@ def downgrade_():
         [
             'fillfactor',
             'autovacuum_vacuum_insert_threshold',
-            'autovacuum_analyze_threshold',
         ]
     )
 
