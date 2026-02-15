@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from marshmallow import ValidationError
 from flask import current_app
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.sql.expression import tuple_, and_, null, func
 from sqlalchemy.orm.attributes import flag_modified
 from swpt_pythonlib.utils import ShardingRealm
@@ -24,10 +24,8 @@ from swpt_trade.models import (
     StoreDocumentSignal,
     MAX_INT16,
     T_INFINITY,
-    SET_HASHJOIN_ON,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_ON,
-    SET_MERGEJOIN_OFF,
+    SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
 )
 
 T = TypeVar("T")
@@ -68,6 +66,9 @@ def process_debtor_info_fetches(
         cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"].total_seconds()
     )
     ssl_context = ssl.create_default_context(cafile=cafile)
+
+    db.session.execute(text("ANALYZE (SKIP_LOCKED) debtor_info_fetch"))
+    db.session.commit()
 
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=batch_size).execute(
@@ -188,8 +189,7 @@ def _query_and_resolve_pending_fetches(
         ssl_context: ssl.SSLContext,
 ) -> List[FetchResult]:
     # Lock the `DebtorInfoFetch`es that need to be processed.
-    db.session.execute(SET_MERGEJOIN_OFF)
-    db.session.execute(SET_HASHJOIN_OFF)
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
     chosen = DebtorInfoFetch.choose_rows(debtor_info_fetch_pks)
     fetch_tuples: List[FetchTuple] = (
         db.session.query(DebtorInfoFetch, DebtorInfoDocument)
@@ -213,8 +213,7 @@ def _query_and_resolve_pending_fetches(
         .with_for_update(of=DebtorInfoFetch, skip_locked=True)
         .all()
     )
-    db.session.execute(SET_MERGEJOIN_ON)
-    db.session.execute(SET_HASHJOIN_ON)
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
 
     # Resolve the `DebtorInfoFetch`es that we have locked.
     wrong_shard, cached, new = _classify_fetch_tuples(

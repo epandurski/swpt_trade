@@ -1,17 +1,13 @@
 from datetime import datetime, timedelta, timezone
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import (
-    RecentlyNeededCollector,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
-)
+from swpt_trade.models import RecentlyNeededCollector
+from .common import PlansDiscardingTableScanner
 
 
-class RecentlyNeededCollectorsScanner(TableScanner):
+class RecentlyNeededCollectorsScanner(PlansDiscardingTableScanner):
     table = RecentlyNeededCollector.__table__
     pk = tuple_(RecentlyNeededCollector.debtor_id)
     columns = [
@@ -45,7 +41,7 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
-        db.session.close()
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -64,8 +60,6 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = RecentlyNeededCollector.choose_rows(pks_to_delete)
             to_delete = (
                 RecentlyNeededCollector.query
@@ -95,8 +89,6 @@ class RecentlyNeededCollectorsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = RecentlyNeededCollector.choose_rows(pks_to_delete)
             to_delete = (
                 RecentlyNeededCollector.query

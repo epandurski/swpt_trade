@@ -34,10 +34,6 @@ from swpt_trade.models import (
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
-    SET_HASHJOIN_ON,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_ON,
-    SET_MERGEJOIN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     SET_DEFAULT_PLAN_CACHE_MODE,
     DebtorInfoDocument,
@@ -553,17 +549,18 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         w_conn.execute(SET_SEQSCAN_ON)
 
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
-                # TODO: Consider skipping worker accounts that have
-                # been inactive for a long time. The way to do this
-                # probably would be to add a `last_used_ts` column to
-                # the WorkerAccount table, and update its value
-                # whenever a corresponding DispatchingStatus record
-                # has been created or deleted. However, this probably
-                # will not solve the problem with wasting resources on
-                # unused currencies, because bids for such currencies
-                # will probably continue to come from "normal" users,
-                # who do not care to remove them from their list of
-                # traded currencies.
+                # NOTE: It is worth considering here, to skip worker
+                # accounts that have been inactive for a long time.
+                # The way to do this probably would be to add a
+                # `last_used_ts` column to the WorkerAccount table,
+                # and update its value whenever a corresponding
+                # DispatchingStatus record has been created or
+                # deleted. However, this probably will not solve the
+                # problem with wasting resources on unused currencies,
+                # because bids for such currencies will probably
+                # continue to come from "normal" users, who do not
+                # care to remove them from their list of traded
+                # currencies.
                 select(
                     WorkerAccount.creditor_id,
                     WorkerAccount.debtor_id,
@@ -1546,8 +1543,7 @@ def _kill_broken_worker_accounts() -> None:
 def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     chosen = NeededWorkerAccount.choose_rows(primary_keys)
 
-    db.session.execute(SET_MERGEJOIN_OFF)
-    db.session.execute(SET_HASHJOIN_OFF)
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
     db.session.execute(
         delete(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
@@ -1599,5 +1595,4 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
             .where(INTEREST_RATE_CHANGE_PK == tuple_(*to_delete.c))
         )
 
-    db.session.execute(SET_MERGEJOIN_ON)
-    db.session.execute(SET_HASHJOIN_ON)
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)

@@ -1,17 +1,13 @@
 from datetime import datetime, timezone, timedelta
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_, not_, and_, null
 from swpt_trade.extensions import db
-from swpt_trade.models import (
-    TransferAttempt,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
-)
+from swpt_trade.models import TransferAttempt
+from .common import PlansDiscardingTableScanner
 
 
-class TransferAttemptsScanner(TableScanner):
+class TransferAttemptsScanner(PlansDiscardingTableScanner):
     table = TransferAttempt.__table__
     pk = tuple_(
         TransferAttempt.collector_id,
@@ -60,7 +56,7 @@ class TransferAttemptsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
-        db.session.close()
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -89,8 +85,6 @@ class TransferAttemptsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TransferAttempt.choose_rows(pks_to_delete)
             to_delete = (
                 TransferAttempt.query
@@ -130,8 +124,6 @@ class TransferAttemptsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TransferAttempt.choose_rows(pks_to_delete)
             to_delete = (
                 TransferAttempt.query

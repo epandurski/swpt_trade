@@ -9,8 +9,9 @@ from swpt_trade.utils import u16_to_i16
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
+    SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
+    SET_STATISTICS_TARGET,
     HUGE_NEGLIGIBLE_AMOUNT,
     DEFAULT_CONFIG_FLAGS,
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
@@ -60,6 +61,9 @@ def process_collector_status_changes():
             latest_status_change_at=current_ts,
         )
     )
+    db.session.execute(SET_STATISTICS_TARGET)
+    db.session.execute(text("ANALYZE collector_status_change"))
+    db.session.commit()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -89,8 +93,7 @@ def process_collector_status_changes():
                     db.session.execute(ca_update_statement, dicts_to_update)
                     db.session.commit()
 
-                db.session.execute(SET_MERGEJOIN_OFF)
-                db.session.execute(SET_HASHJOIN_OFF)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 chosen = CollectorStatusChange.choose_rows(
                     [(r.collector_id, r.change_id) for r in rows]
                 )
@@ -107,6 +110,10 @@ def process_collector_status_changes():
 def create_needed_collector_accounts():
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
+    db.session.execute(SET_STATISTICS_TARGET)
+    db.session.execute(text("ANALYZE needed_collector_account"))
+    db.session.commit()
+
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
@@ -122,8 +129,7 @@ def create_needed_collector_accounts():
                     procedures.insert_collector_accounts(pks_to_insert)
                     db.session.commit()
 
-                db.session.execute(SET_MERGEJOIN_OFF)
-                db.session.execute(SET_HASHJOIN_OFF)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 to_delete = NeededCollectorAccount.choose_rows(pks)
                 db.session.execute(
                     delete(NeededCollectorAccount)
@@ -171,11 +177,10 @@ def _process_pristine_collectors_batch(
         max_postponement: timedelta,
 ) -> None:
     current_ts = datetime.now(tz=timezone.utc)
-    db.session.execute(SET_MERGEJOIN_OFF)
-    db.session.execute(SET_HASHJOIN_OFF)
 
     # First, we need to check if the `NeededWorkerAccount` records and
     # their corresponding accounts already exist.
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
     chosen = NeededWorkerAccount.choose_rows(worker_account_pks)
     needed_worker_accounts = {
         (row[0], row[1]): (row[2], row[3])
@@ -195,6 +200,7 @@ def _process_pristine_collectors_batch(
                 )
         ).all()
     }
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
 
     pks_to_create = set(
         pk
@@ -239,6 +245,8 @@ def _process_pristine_collectors_batch(
         # in this case, is to send another `ConfigureAccount` messages
         # for the accounts, hoping that this will fix the problem (see
         # `pks_to_configure` bellow).
+
+        db.session.execute(SET_FORCE_CUSTOM_PLAN)
         to_retry = NeededWorkerAccount.choose_rows(list(pks_to_retry))
         db.session.execute(
             update(NeededWorkerAccount)
@@ -246,6 +254,8 @@ def _process_pristine_collectors_batch(
             .where(NEEDED_WORKER_ACCOUNT_PK == tuple_(*to_retry.c))
             .values(configured_at=current_ts)
         )
+        db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
+
         logger = logging.getLogger(__name__)
         for pk in pks_to_retry:
             logger.warning(

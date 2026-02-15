@@ -1,18 +1,14 @@
 import logging
 from datetime import datetime, timezone, timedelta
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import (
-    DelayedAccountTransfer,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
-)
+from swpt_trade.models import DelayedAccountTransfer
+from .common import PlansDiscardingTableScanner
 
 
-class DelayedAccountTransfersScanner(TableScanner):
+class DelayedAccountTransfersScanner(PlansDiscardingTableScanner):
     table = DelayedAccountTransfer.__table__
     pk = tuple_(
         DelayedAccountTransfer.turn_id,
@@ -46,7 +42,7 @@ class DelayedAccountTransfersScanner(TableScanner):
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
         self._delete_stale_records(rows, current_ts)
-        db.session.close()
+        self._process_rows_done()
 
     def _delete_stale_records(self, rows, current_ts):
         c = self.table.c
@@ -64,8 +60,6 @@ class DelayedAccountTransfersScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             logger = logging.getLogger(__name__)
             chosen = DelayedAccountTransfer.choose_rows(pks_to_delete)
             to_delete = (

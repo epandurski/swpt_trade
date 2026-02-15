@@ -3,11 +3,7 @@ from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
-from swpt_trade.models import (
-    DispatchingStatus,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
-)
+from swpt_trade.models import DispatchingStatus
 from .common import ParentRecordsCleaner
 
 
@@ -43,7 +39,7 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
     def process_rows(self, rows):
         assert current_app.config["DELETE_PARENT_SHARD_RECORDS"]
         self._delete_parent_shard_records(rows, datetime.now(tz=timezone.utc))
-        db.session.close()
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -64,8 +60,6 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DispatchingStatus.choose_rows(pks_to_delete)
             to_delete = (
                 DispatchingStatus.query

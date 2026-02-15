@@ -30,8 +30,8 @@ from swpt_trade.models import (
     MAX_INT64,
     T_INFINITY,
     AGENT_TRANSFER_NOTE_FORMAT,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
+    SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
     cr_seq,
     WorkerTurn,
     AccountLock,
@@ -1456,8 +1456,7 @@ def process_rescheduled_transfers_batch(
         transfer_attempt_pks: list,
         current_ts: datetime,
 ) -> int:
-    db.session.execute(SET_MERGEJOIN_OFF)
-    db.session.execute(SET_HASHJOIN_OFF)
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
     chosen = TransferAttempt.choose_rows(transfer_attempt_pks)
     pks_to_trigger = [
         tuple(row)
@@ -1483,6 +1482,8 @@ def process_rescheduled_transfers_batch(
                 .with_for_update(skip_locked=True)
         ).all()
     ]
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
+
     if pks_to_trigger:
         db.session.execute(
             insert(TriggerTransferSignal)

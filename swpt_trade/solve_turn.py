@@ -9,11 +9,8 @@ from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
-    SET_HASHJOIN_ON,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_ON,
-    SET_MERGEJOIN_OFF,
     SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
     CollectorAccount,
     Turn,
     CurrencyInfo,
@@ -449,11 +446,7 @@ def _collect_trade_statistics(turn_id: int) -> None:
     )
     if heap:
         db.session.execute(
-            SET_MERGEJOIN_OFF,
-            bind_arguments={"bind": db.engines["solver"]},
-        )
-        db.session.execute(
-            SET_HASHJOIN_OFF,
+            SET_FORCE_CUSTOM_PLAN,
             bind_arguments={"bind": db.engines["solver"]},
         )
         chosen_currencies = HoardedCurrency.choose_rows(
@@ -476,11 +469,7 @@ def _collect_trade_statistics(turn_id: int) -> None:
             ).all()
         }
         db.session.execute(
-            SET_MERGEJOIN_ON,
-            bind_arguments={"bind": db.engines["solver"]},
-        )
-        db.session.execute(
-            SET_HASHJOIN_ON,
+            SET_DEFAULT_PLAN_CACHE_MODE,
             bind_arguments={"bind": db.engines["solver"]},
         )
         db.session.execute(
@@ -671,11 +660,7 @@ def _disable_some_collector_accounts() -> None:
     def process_waiting():
         if waiting_to_be_disabled:
             db.session.execute(
-                SET_MERGEJOIN_OFF,
-                bind_arguments={"bind": db.engines["solver"]},
-            )
-            db.session.execute(
-                SET_HASHJOIN_OFF,
+                SET_FORCE_CUSTOM_PLAN,
                 bind_arguments={"bind": db.engines["solver"]},
             )
             chosen = CollectorAccount.choose_rows(waiting_to_be_disabled)
@@ -690,6 +675,10 @@ def _disable_some_collector_accounts() -> None:
                     status=3,
                     latest_status_change_at=current_ts,
                 )
+            )
+            db.session.execute(
+                SET_DEFAULT_PLAN_CACHE_MODE,
+                bind_arguments={"bind": db.engines["solver"]},
             )
             waiting_to_be_disabled.clear()
 
@@ -790,11 +779,7 @@ def _delete_stuck_collector_accounts() -> None:
         ) as result:
             for rows in result.partitions(DELETE_BATCH_SIZE):
                 db.session.execute(
-                    SET_MERGEJOIN_OFF,
-                    bind_arguments={"bind": db.engines["solver"]},
-                )
-                db.session.execute(
-                    SET_HASHJOIN_OFF,
+                    SET_FORCE_CUSTOM_PLAN,
                     bind_arguments={"bind": db.engines["solver"]},
                 )
                 chosen = CollectorAccount.choose_rows(

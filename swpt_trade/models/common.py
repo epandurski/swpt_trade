@@ -30,12 +30,10 @@ ACCOUNT_ID_MAX_BYTES = 100
 CT_AGENT = "agent"
 SET_SEQSCAN_ON = text("SET LOCAL enable_seqscan = on")
 SET_SEQSCAN_OFF = text("SET LOCAL enable_seqscan = off")
-SET_HASHJOIN_ON = text("SET LOCAL enable_hashjoin = on")
-SET_HASHJOIN_OFF = text("SET LOCAL enable_hashjoin = off")
-SET_MERGEJOIN_ON = text("SET LOCAL enable_mergejoin = on")
-SET_MERGEJOIN_OFF = text("SET LOCAL enable_mergejoin = off")
 SET_FORCE_CUSTOM_PLAN = text("SET LOCAL plan_cache_mode = force_custom_plan")
 SET_DEFAULT_PLAN_CACHE_MODE = text("SET LOCAL plan_cache_mode = DEFAULT")
+SET_STATISTICS_TARGET = text("SET LOCAL default_statistics_target = 1")
+DISCARD_PLANS = text("DISCARD PLANS")
 
 SMP_MESSAGE_TYPES = set([
     "ConfigureAccount",

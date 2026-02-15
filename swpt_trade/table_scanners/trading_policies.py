@@ -1,5 +1,4 @@
 from datetime import datetime, timezone, timedelta
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.sql.expression import tuple_
 from sqlalchemy.orm import load_only
@@ -10,12 +9,11 @@ from swpt_trade.models import (
     MIN_INT64,
     MAX_INT64,
     DEFAULT_CONFIG_FLAGS,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
 )
+from .common import PlansDiscardingTableScanner
 
 
-class TradingPoliciesScanner(TableScanner):
+class TradingPoliciesScanner(PlansDiscardingTableScanner):
     table = TradingPolicy.__table__
     pk = tuple_(TradingPolicy.creditor_id, TradingPolicy.debtor_id)
     columns = [
@@ -62,7 +60,7 @@ class TradingPoliciesScanner(TableScanner):
             self._delete_parent_shard_trading_policies(rows, current_ts)
 
         self._delete_useless_trading_policies(rows, current_ts)
-        db.session.close()
+        self._process_rows_done()
 
     def _delete_parent_shard_trading_policies(self, rows, current_ts):
         c = self.table.c
@@ -82,8 +80,6 @@ class TradingPoliciesScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TradingPolicy.choose_rows(pks_to_delete)
             to_delete = (
                 TradingPolicy.query
@@ -143,8 +139,6 @@ class TradingPoliciesScanner(TableScanner):
             )
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = TradingPolicy.choose_rows(pks_to_delete)
             to_delete = (
                 TradingPolicy.query

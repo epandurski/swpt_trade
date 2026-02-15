@@ -1,17 +1,13 @@
 from datetime import datetime, timedelta, timezone
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.sql.expression import tuple_
 from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
-from swpt_trade.models import (
-    DebtorInfoDocument,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
-)
+from swpt_trade.models import DebtorInfoDocument
+from .common import PlansDiscardingTableScanner
 
 
-class DebtorInfoDocumentsScanner(TableScanner):
+class DebtorInfoDocumentsScanner(PlansDiscardingTableScanner):
     table = DebtorInfoDocument.__table__
     pk = tuple_(DebtorInfoDocument.debtor_info_locator)
     columns = [
@@ -45,7 +41,7 @@ class DebtorInfoDocumentsScanner(TableScanner):
             self._delete_parent_shard_documents(rows, current_ts)
 
         self._delete_stale_documents(rows, current_ts)
-        db.session.close()
+        self._process_rows_done()
 
     def _delete_parent_shard_documents(self, rows, current_ts):
         c = self.table.c
@@ -64,8 +60,6 @@ class DebtorInfoDocumentsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
                 DebtorInfoDocument.query
@@ -95,8 +89,6 @@ class DebtorInfoDocumentsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
-            db.session.execute(SET_MERGEJOIN_OFF)
-            db.session.execute(SET_HASHJOIN_OFF)
             chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
                 DebtorInfoDocument.query

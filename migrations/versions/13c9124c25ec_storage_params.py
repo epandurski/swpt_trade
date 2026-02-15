@@ -172,12 +172,10 @@ def upgrade_():
     set_storage_params(
         'needed_collector_account',
         fillfactor=100,
-        autovacuum_vacuum_insert_threshold=-1,
     )
     set_storage_params(
         'collector_status_change',
         fillfactor=100,
-        autovacuum_vacuum_insert_threshold=-1,
     )
 
     # Signals:
@@ -443,14 +441,12 @@ def downgrade_():
         'needed_collector_account',
         [
             'fillfactor',
-            'autovacuum_vacuum_insert_threshold',
         ]
     )
     reset_storage_params(
         'collector_status_change',
         [
             'fillfactor',
-            'autovacuum_vacuum_insert_threshold',
         ]
     )
 

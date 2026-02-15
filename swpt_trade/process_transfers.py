@@ -18,8 +18,6 @@ from swpt_trade.extensions import db
 from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
-    SET_HASHJOIN_OFF,
-    SET_MERGEJOIN_OFF,
     SET_FORCE_CUSTOM_PLAN,
     SET_DEFAULT_PLAN_CACHE_MODE,
     TransferAttempt,
@@ -110,6 +108,9 @@ def process_rescheduled_transfers() -> int:
     current_ts = datetime.now(tz=timezone.utc)
     batch_size = current_app.config["APP_RESCHEDULED_TRANSFERS_BURST_COUNT"]
 
+    db.session.execute(text("ANALYZE transfer_attempt"))
+    db.session.commit()
+
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=batch_size).execute(
                 select(
@@ -142,6 +143,9 @@ def process_delayed_account_transfers() -> int:
     sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
     delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
     count = 0
+
+    db.session.execute(text("ANALYZE delayed_account_transfer"))
+    db.session.commit()
 
     with db.engine.connect() as w_conn:
         min_turn_id = (
@@ -241,8 +245,7 @@ def process_delayed_account_transfers() -> int:
                     chosen = DelayedAccountTransfer.choose_rows(
                         [(row.turn_id, row.message_id) for row in rows]
                     )
-                    db.session.execute(SET_MERGEJOIN_OFF)
-                    db.session.execute(SET_HASHJOIN_OFF)
+                    db.session.execute(SET_FORCE_CUSTOM_PLAN)
                     db.session.execute(
                         delete(DelayedAccountTransfer)
                         .execution_options(synchronize_session=False)
