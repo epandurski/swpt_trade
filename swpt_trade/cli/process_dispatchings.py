@@ -2,10 +2,8 @@ import logging
 import time
 import click
 from datetime import timedelta
-from sqlalchemy import text
 from flask import current_app
 from flask.cli import with_appcontext
-from swpt_trade.extensions import db
 from .common import swpt_trade
 
 
@@ -52,9 +50,7 @@ def process_dispatchings(wait, quit_early):
         )
         started_at = time.time()
 
-        db.session.execute(text("ANALYZE dispatching_status"))
-        db.session.commit()
-
+        pt.analyze_dispatching_statuses_table()
         pt.signal_dispatching_statuses_ready_to_send()
         pt.update_dispatching_statuses_with_everything_sent()
         pt.signal_dispatching_statuses_ready_to_dispatch()
