@@ -1482,9 +1482,8 @@ def process_rescheduled_transfers_batch(
                 .with_for_update(skip_locked=True)
         ).all()
     ]
-    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
-
     if pks_to_trigger:
+        db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
         db.session.execute(
             insert(TriggerTransferSignal)
             .execution_options(
@@ -1509,6 +1508,7 @@ def process_rescheduled_transfers_batch(
                 ) in pks_to_trigger
             ],
         )
+        db.session.execute(SET_FORCE_CUSTOM_PLAN)
         to_update = TransferAttempt.choose_rows(pks_to_trigger)
         db.session.execute(
             update(TransferAttempt)

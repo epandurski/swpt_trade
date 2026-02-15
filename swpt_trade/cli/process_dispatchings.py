@@ -1,11 +1,11 @@
 import logging
 import time
 import click
-import random
 from datetime import timedelta
+from sqlalchemy import text
 from flask import current_app
 from flask.cli import with_appcontext
-from swpt_trade import sync_collectors
+from swpt_trade.extensions import db
 from .common import swpt_trade
 
 
@@ -51,6 +51,10 @@ def process_dispatchings(wait, quit_early):
             "Looking for collector accounts ready to initiate transfers."
         )
         started_at = time.time()
+
+        db.session.execute(text("ANALYZE dispatching_status"))
+        db.session.commit()
+
         pt.signal_dispatching_statuses_ready_to_send()
         pt.update_dispatching_statuses_with_everything_sent()
         pt.signal_dispatching_statuses_ready_to_dispatch()
