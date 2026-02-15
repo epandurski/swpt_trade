@@ -260,12 +260,6 @@ def process_delayed_account_transfers() -> int:
     return count
 
 
-def analyze_dispatching_statuses_table() -> None:
-    db.session.execute(text("ANALYZE dispatching_status"))
-    db.session.commit()
-    db.session.close()
-
-
 def signal_dispatching_statuses_ready_to_send() -> None:
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
