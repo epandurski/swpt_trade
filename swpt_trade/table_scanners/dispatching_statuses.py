@@ -1,4 +1,3 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timezone
 from flask import current_app
 from sqlalchemy.orm import load_only
@@ -7,13 +6,14 @@ from swpt_trade.extensions import db
 from swpt_trade.models import DispatchingStatus
 from .common import ParentRecordsCleaner
 
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
-
 
 class DispatchingStatusesScanner(ParentRecordsCleaner):
     table = DispatchingStatus.__table__
-    pk = tuple_(table.c.collector_id, table.c.debtor_id, table.c.turn_id)
+    pk = tuple_(
+        DispatchingStatus.collector_id,
+        DispatchingStatus.debtor_id,
+        DispatchingStatus.turn_id,
+    )
     columns = [
         DispatchingStatus.collector_id,
         DispatchingStatus.debtor_id,
@@ -36,10 +36,10 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
             "APP_DISPATCHING_STATUSES_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         assert current_app.config["DELETE_PARENT_SHARD_RECORDS"]
         self._delete_parent_shard_records(rows, datetime.now(tz=timezone.utc))
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -60,9 +60,10 @@ class DispatchingStatusesScanner(ParentRecordsCleaner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            chosen = DispatchingStatus.choose_rows(pks_to_delete)
             to_delete = (
                 DispatchingStatus.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(DispatchingStatus.collector_id))
                 .all()

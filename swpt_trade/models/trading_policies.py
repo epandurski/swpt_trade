@@ -7,10 +7,11 @@ from .common import (
     MIN_INT64,
     MAX_INT64,
     DEFAULT_CONFIG_FLAGS,
+    ChooseRowsMixin,
 )
 
 
-class TradingPolicy(db.Model):
+class TradingPolicy(db.Model, ChooseRowsMixin):
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
 

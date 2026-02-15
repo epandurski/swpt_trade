@@ -1,24 +1,20 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_, not_, and_, null
 from swpt_trade.extensions import db
 from swpt_trade.models import TransferAttempt
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from .common import PlansDiscardingTableScanner
 
 
-class TransferAttemptsScanner(TableScanner):
+class TransferAttemptsScanner(PlansDiscardingTableScanner):
     table = TransferAttempt.__table__
     pk = tuple_(
-        table.c.collector_id,
-        table.c.turn_id,
-        table.c.debtor_id,
-        table.c.creditor_id,
-        table.c.transfer_kind,
+        TransferAttempt.collector_id,
+        TransferAttempt.turn_id,
+        TransferAttempt.debtor_id,
+        TransferAttempt.creditor_id,
+        TransferAttempt.transfer_kind,
     )
     columns = [
         TransferAttempt.collector_id,
@@ -53,7 +49,6 @@ class TransferAttemptsScanner(TableScanner):
             "APP_TRANSFER_ATTEMPTS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -61,6 +56,7 @@ class TransferAttemptsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -89,9 +85,10 @@ class TransferAttemptsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            chosen = TransferAttempt.choose_rows(pks_to_delete)
             to_delete = (
                 TransferAttempt.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(TransferAttempt.collector_id))
                 .all()
@@ -127,10 +124,11 @@ class TransferAttemptsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
+            chosen = TransferAttempt.choose_rows(pks_to_delete)
             to_delete = (
                 TransferAttempt.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(
-                    self.pk.in_(pks_to_delete),
                     not_(
                         # Deleting surplus-moving transfers that have
                         # a chance to succeed may interfere with the

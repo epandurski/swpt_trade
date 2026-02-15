@@ -334,15 +334,16 @@ INTERNAL_BROKER_PROCESSES=1
 INTERNAL_BROKER_THREADS=3
 INTERNAL_BROKER_PREFETCH_COUNT=10
 
-# All outgoing RabbitMQ messages are first recorded in the
-# worker's PostgreSQL database, and then are "fulshed" to the
-# RabbitMQ message broker. The specified number of
-# processes ("$FLUSH_PROCESSES") will be spawned to flush
-# messages (default 1). Note that FLUSH_PROCESSES can be set to
-# 0, in which case, the container will not flush any messages.
-# The "$FLUSH_PERIOD" value specifies the number of seconds to
-# wait between two sequential flushes (default 2).
-FLUSH_PROCESSES=2
+# All outgoing RabbitMQ messages are first recorded in the worker's
+# PostgreSQL database, and then are "fulshed" to the RabbitMQ message
+# broker. The specified number of processes ("$FLUSH_PROCESSES") will
+# be spawned to flush messages (default 1). Note that FLUSH_PROCESSES
+# can be set to 0, in which case, the container will not flush any
+# messages. The "$FLUSH_PERIOD" value specifies the number of seconds
+# to wait between two sequential flushes (default 5). You may need to
+# increase this period as the time needed for the completion of
+# trading turns becomes higher.
+FLUSH_PROCESSES=1
 FLUSH_PERIOD=5.0
 
 # Worker servers should periodically perform scheduled HTTP requests
@@ -538,22 +539,6 @@ container allows you to execute the following *documented commands*:
 
   Starts only the worker processes that send outgoing messages to the
   RabbitMQ broker, and remove the messages from the PostgreSQL database.
-
-* `flush_configure_accounts`, `flush_prepare_transfers`,
-  `flush_finalize_transfers`, `flush_fetch_debtor_infos`,
-  `flush_store_documents`, `flush_discover_debtors`,
-  `flush_confirm_debtors`,` flush_replayed_account_transfers`,
-  `flush_candidate_offers`, `flush_needed_collectors`,
-  `flush_revise_account_locks`, `flush_trigger_transfers`,
-  `flush_account_id_requests`, `flush_account_id_responses`,
-  `flush_start_sendings`, `flush_start_dispatchings`,
-  `flush_calculate_surpluses`
-
-  Starts additional worker processes that send particular type of outgoing
-  messages to the RabbitMQ broker, and remove the messages from the
-  PostgreSQL database. These commands allow you to start processes dedicated
-  to the flushing of particular type of messages. (See "FLUSH_PROCESSES" and
-  "FLUSH_PERIOD" environment variables.)
 
 * `fetch_debtor_infos`
 

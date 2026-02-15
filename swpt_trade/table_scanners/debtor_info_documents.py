@@ -1,17 +1,15 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.sql.expression import tuple_
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import DebtorInfoDocument
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from .common import PlansDiscardingTableScanner
 
 
-class DebtorInfoDocumentsScanner(TableScanner):
+class DebtorInfoDocumentsScanner(PlansDiscardingTableScanner):
     table = DebtorInfoDocument.__table__
-    pk = table.c.debtor_info_locator
+    pk = tuple_(DebtorInfoDocument.debtor_info_locator)
     columns = [
         DebtorInfoDocument.debtor_info_locator,
         DebtorInfoDocument.fetched_at,
@@ -36,7 +34,6 @@ class DebtorInfoDocumentsScanner(TableScanner):
             "APP_DEBTOR_INFO_DOCUMENTS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -44,6 +41,7 @@ class DebtorInfoDocumentsScanner(TableScanner):
             self._delete_parent_shard_documents(rows, current_ts)
 
         self._delete_stale_documents(rows, current_ts)
+        self._process_rows_done()
 
     def _delete_parent_shard_documents(self, rows, current_ts):
         c = self.table.c
@@ -57,14 +55,17 @@ class DebtorInfoDocumentsScanner(TableScanner):
             )
 
         pks_to_delete = [
-            row[c_debtor_info_locator]
+            (row[c_debtor_info_locator],)
             for row in rows
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
-                DebtorInfoDocument.query.filter(self.pk.in_(pks_to_delete))
+                DebtorInfoDocument.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(DebtorInfoDocument.debtor_info_locator))
                 .all()
             )
 
@@ -83,13 +84,18 @@ class DebtorInfoDocumentsScanner(TableScanner):
             return row[c_fetched_at] < cutoff_ts
 
         pks_to_delete = [
-            row[c_debtor_info_locator] for row in rows if is_stale(row)
+            (row[c_debtor_info_locator],)
+            for row in rows
+            if is_stale(row)
         ]
         if pks_to_delete:
+            chosen = DebtorInfoDocument.choose_rows(pks_to_delete)
             to_delete = (
-                DebtorInfoDocument.query.filter(self.pk.in_(pks_to_delete))
+                DebtorInfoDocument.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(DebtorInfoDocument.fetched_at < cutoff_ts)
                 .with_for_update(skip_locked=True)
+                .options(load_only(DebtorInfoDocument.debtor_info_locator))
                 .all()
             )
 

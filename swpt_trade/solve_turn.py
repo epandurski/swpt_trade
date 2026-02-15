@@ -10,6 +10,7 @@ from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_SEQSCAN_OFF,
     SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
     CollectorAccount,
     Turn,
     CurrencyInfo,
@@ -75,6 +76,7 @@ def try_to_advance_turn_to_phase3(turn: Turn) -> bool:
         _strengthen_overloaded_currencies()
         _disable_some_collector_accounts()
         _delete_stuck_collector_accounts()
+        db.session.close()
 
         return True
 
@@ -443,6 +445,13 @@ def _collect_trade_statistics(turn_id: int) -> None:
         bind_arguments={"bind": db.engines["solver"]},
     )
     if heap:
+        db.session.execute(
+            SET_FORCE_CUSTOM_PLAN,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        chosen_currencies = HoardedCurrency.choose_rows(
+            [(turn_id, item.debtor_id) for item in heap]
+        )
         locators: dict[int, str] = {
             row.debtor_id: row.debtor_info_locator
             for row in db.session.execute(
@@ -451,14 +460,18 @@ def _collect_trade_statistics(turn_id: int) -> None:
                         CurrencyInfo.debtor_info_locator,
                     )
                     .select_from(CurrencyInfo)
-                    .where(
-                        CurrencyInfo.is_confirmed,
-                        CONFIRMED_CURRENCY_UNIQUE_INDEX.in_(
-                            [(turn_id, item.debtor_id) for item in heap]
-                        ),
+                    .join(
+                        chosen_currencies,
+                        CONFIRMED_CURRENCY_UNIQUE_INDEX
+                        == tuple_(*chosen_currencies.c),
                     )
+                    .where(CurrencyInfo.is_confirmed)
             ).all()
         }
+        db.session.execute(
+            SET_DEFAULT_PLAN_CACHE_MODE,
+            bind_arguments={"bind": db.engines["solver"]},
+        )
         db.session.execute(
             insert(MostBoughtCurrency)
             .execution_options(
@@ -647,16 +660,25 @@ def _disable_some_collector_accounts() -> None:
     def process_waiting():
         if waiting_to_be_disabled:
             db.session.execute(
+                SET_FORCE_CUSTOM_PLAN,
+                bind_arguments={"bind": db.engines["solver"]},
+            )
+            chosen = CollectorAccount.choose_rows(waiting_to_be_disabled)
+            db.session.execute(
                 update(CollectorAccount)
                 .execution_options(synchronize_session=False)
                 .where(
-                    COLLECTOR_ACCOUNT_PK.in_(waiting_to_be_disabled),
+                    COLLECTOR_ACCOUNT_PK == tuple_(*chosen.c),
                     CollectorAccount.status == 2,
                 )
                 .values(
                     status=3,
                     latest_status_change_at=current_ts,
                 )
+            )
+            db.session.execute(
+                SET_DEFAULT_PLAN_CACHE_MODE,
+                bind_arguments={"bind": db.engines["solver"]},
             )
             waiting_to_be_disabled.clear()
 
@@ -756,23 +778,33 @@ def _delete_stuck_collector_accounts() -> None:
                 )
         ) as result:
             for rows in result.partitions(DELETE_BATCH_SIZE):
-                to_delete = (
-                    db.session.execute(
-                        select(
-                            CollectorAccount.debtor_id,
-                            CollectorAccount.collector_id,
-                        )
-                        .where(COLLECTOR_ACCOUNT_PK.in_(rows))
-                        .with_for_update(skip_locked=True)
-                    )
-                    .all()
+                db.session.execute(
+                    SET_FORCE_CUSTOM_PLAN,
+                    bind_arguments={"bind": db.engines["solver"]},
                 )
-                if to_delete:
+                chosen = CollectorAccount.choose_rows(
+                    [tuple(row) for row in rows]
+                )
+                pks_locked = [
+                    tuple(row)
+                    for row in db.session.execute(
+                            select(
+                                CollectorAccount.debtor_id,
+                                CollectorAccount.collector_id,
+                            )
+                            .select_from(CollectorAccount)
+                            .join(
+                                chosen,
+                                COLLECTOR_ACCOUNT_PK == tuple_(*chosen.c)
+                            )
+                            .with_for_update(skip_locked=True)
+                    ).all()
+                ]
+                if pks_locked:
+                    to_delete = CollectorAccount.choose_rows(pks_locked)
                     db.session.execute(
                         delete(CollectorAccount)
                         .execution_options(synchronize_session=False)
-                        .where(COLLECTOR_ACCOUNT_PK.in_(to_delete))
+                        .where(COLLECTOR_ACCOUNT_PK == tuple_(*to_delete.c))
                     )
                 db.session.commit()
-
-    db.session.close()

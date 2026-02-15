@@ -549,17 +549,18 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
         w_conn.execute(SET_SEQSCAN_ON)
 
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
-                # TODO: Consider skipping worker accounts that have
-                # been inactive for a long time. The way to do this
-                # probably would be to add a `last_used_ts` column to
-                # the WorkerAccount table, and update its value
-                # whenever a corresponding DispatchingStatus record
-                # has been created or deleted. However, this probably
-                # will not solve the problem with wasting resources on
-                # unused currencies, because bids for such currencies
-                # will probably continue to come from "normal" users,
-                # who do not care to remove them from their list of
-                # traded currencies.
+                # NOTE: It is worth considering here, to skip worker
+                # accounts that have been inactive for a long time.
+                # The way to do this probably would be to add a
+                # `last_used_ts` column to the WorkerAccount table,
+                # and update its value whenever a corresponding
+                # DispatchingStatus record has been created or
+                # deleted. However, this probably will not solve the
+                # problem with wasting resources on unused currencies,
+                # because bids for such currencies will probably
+                # continue to come from "normal" users, who do not
+                # care to remove them from their list of traded
+                # currencies.
                 select(
                     WorkerAccount.creditor_id,
                     WorkerAccount.debtor_id,
@@ -1470,7 +1471,7 @@ def _update_worker_account_surplus_amounts(turn_id: int) -> None:
                             }
                         )
                     else:
-                        accounts_not_from_this_shard.append(row)
+                        accounts_not_from_this_shard.append(tuple(row))
 
                     if signal_dicts:
                         db.session.execute(
@@ -1516,17 +1517,18 @@ def _kill_broken_worker_accounts() -> None:
                 )
         ) as result:
             for rows in result.partitions(KILL_ACCOUNTS_BATCH_SIZE):
-                _kill_needed_worker_accounts_and_rate_stats(rows)
+                pks_to_kill = [tuple(row) for row in rows]
+                _kill_needed_worker_accounts_and_rate_stats(pks_to_kill)
                 status_change_dicts = (
                     {
-                        "collector_id": row.creditor_id,
-                        "debtor_id": row.debtor_id,
+                        "collector_id": creditor_id,
+                        "debtor_id": debtor_id,
                         "from_status": 3,
                         "to_status": 1,
                         "account_id": None,
                     }
-                    for row in rows
-                    if sharding_realm.match(row.creditor_id)
+                    for creditor_id, debtor_id in pks_to_kill
+                    if sharding_realm.match(creditor_id)
                 )
                 if status_change_dicts:
                     db.session.execute(
@@ -1539,10 +1541,13 @@ def _kill_broken_worker_accounts() -> None:
 
 
 def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
+    chosen = NeededWorkerAccount.choose_rows(primary_keys)
+
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
     db.session.execute(
         delete(NeededWorkerAccount)
         .execution_options(synchronize_session=False)
-        .where(NEEDED_WORKER_ACCOUNT_PK.in_(primary_keys))
+        .where(NEEDED_WORKER_ACCOUNT_PK == tuple_(*chosen.c))
     )
 
     # NOTE: Here instead of directly executing an
@@ -1565,8 +1570,9 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
     # "InterestRateChange" row which will have to be
     # removed manually at some point in the very distant
     # future) is minimal.
-    interest_rate_changes_to_delete = (
-        db.session.execute(
+    pks_to_delete = [
+        tuple(row)
+        for row in db.session.execute(
             select(
                 InterestRateChange.creditor_id,
                 InterestRateChange.debtor_id,
@@ -1576,15 +1582,17 @@ def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:
                 tuple_(
                     InterestRateChange.creditor_id,
                     InterestRateChange.debtor_id,
-                ).in_(primary_keys)
+                ) == tuple_(*chosen.c)
             )
             .with_for_update(skip_locked=True)
-        )
-        .all()
-    )
-    for batch in batched(interest_rate_changes_to_delete, DELETE_BATCH_SIZE):
+        ).all()
+    ]
+    for pks_batch in batched(pks_to_delete, DELETE_BATCH_SIZE):
+        to_delete = InterestRateChange.choose_rows(list(pks_batch))
         db.session.execute(
             delete(InterestRateChange)
             .execution_options(synchronize_session=False)
-            .where(INTEREST_RATE_CHANGE_PK.in_(batch))
+            .where(INTEREST_RATE_CHANGE_PK == tuple_(*to_delete.c))
         )
+
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)

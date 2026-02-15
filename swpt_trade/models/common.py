@@ -3,6 +3,7 @@ import json
 from datetime import datetime, timezone
 from flask import current_app
 from sqlalchemy import text
+from sqlalchemy.inspection import inspect
 from swpt_trade.extensions import db
 from swpt_pythonlib import rabbitmq
 from swpt_pythonlib.utils import ShardingRealm
@@ -31,6 +32,8 @@ SET_SEQSCAN_ON = text("SET LOCAL enable_seqscan = on")
 SET_SEQSCAN_OFF = text("SET LOCAL enable_seqscan = off")
 SET_FORCE_CUSTOM_PLAN = text("SET LOCAL plan_cache_mode = force_custom_plan")
 SET_DEFAULT_PLAN_CACHE_MODE = text("SET LOCAL plan_cache_mode = DEFAULT")
+SET_STATISTICS_TARGET = text("SET LOCAL default_statistics_target = 1")
+DISCARD_PLANS = text("DISCARD PLANS")
 
 SMP_MESSAGE_TYPES = set([
     "ConfigureAccount",
@@ -111,7 +114,20 @@ def message_belongs_to_this_shard(
         raise RuntimeError("Unknown message type.")
 
 
-class Signal(db.Model):
+class ChooseRowsMixin:
+    @classmethod
+    def choose_rows(cls, primary_keys: list[tuple], name: str = "chosen"):
+        pktype_name = f"{cls.__table__.name}_pktype"
+        bindparam_name = f"{name}_rows"
+        return (
+            text(f"SELECT * FROM unnest(:{bindparam_name} :: {pktype_name}[])")
+            .bindparams(**{bindparam_name: primary_keys})
+            .columns(**{c.key: c.type for c in inspect(cls).primary_key})
+            .cte(name=name)
+        )
+
+
+class Signal(db.Model, ChooseRowsMixin):
     __abstract__ = True
 
     @classmethod

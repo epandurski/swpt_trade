@@ -4,6 +4,7 @@ import click
 from datetime import datetime, timezone, timedelta
 from flask import current_app
 from flask.cli import with_appcontext
+from swpt_trade.extensions import db
 from swpt_trade import procedures
 from .common import swpt_trade
 
@@ -87,7 +88,7 @@ def roll_turns(period, period_offset, check_interval, quit_early):
     logger.info("Started rolling turns.")
 
     while True:
-        logger.info("Trying to start a new turn or advance started turns.")
+        logger.debug("Trying to start a new turn or advance started turns.")
         check_began_at = datetime.now(tz=timezone.utc)
         started_turns = procedures.start_new_turn_if_possible(
             turn_period=period,
@@ -143,6 +144,7 @@ def roll_turns(period, period_offset, check_interval, quit_early):
                 is_done = procedures.try_to_advance_turn_to_phase4(turn_id)
                 log_result(is_done)
 
+        db.session.close()
         elapsed_time = datetime.now(tz=timezone.utc) - check_began_at
         wait_seconds = (check_interval - elapsed_time).total_seconds()
 

@@ -1,8 +1,7 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.sql.expression import tuple_
+from sqlalchemy.orm import load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     TradingPolicy,
@@ -11,14 +10,12 @@ from swpt_trade.models import (
     MAX_INT64,
     DEFAULT_CONFIG_FLAGS,
 )
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from .common import PlansDiscardingTableScanner
 
 
-class TradingPoliciesScanner(TableScanner):
+class TradingPoliciesScanner(PlansDiscardingTableScanner):
     table = TradingPolicy.__table__
-    pk = tuple_(table.c.creditor_id, table.c.debtor_id)
+    pk = tuple_(TradingPolicy.creditor_id, TradingPolicy.debtor_id)
     columns = [
         TradingPolicy.creditor_id,
         TradingPolicy.debtor_id,
@@ -56,7 +53,6 @@ class TradingPoliciesScanner(TableScanner):
     def target_beat_duration(self) -> int:
         return current_app.config["APP_TRADING_POLICIES_SCAN_BEAT_MILLISECS"]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -64,6 +60,7 @@ class TradingPoliciesScanner(TableScanner):
             self._delete_parent_shard_trading_policies(rows, current_ts)
 
         self._delete_useless_trading_policies(rows, current_ts)
+        self._process_rows_done()
 
     def _delete_parent_shard_trading_policies(self, rows, current_ts):
         c = self.table.c
@@ -83,9 +80,12 @@ class TradingPoliciesScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            chosen = TradingPolicy.choose_rows(pks_to_delete)
             to_delete = (
-                TradingPolicy.query.filter(self.pk.in_(pks_to_delete))
+                TradingPolicy.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(TradingPolicy.creditor_id))
                 .all()
             )
 
@@ -139,8 +139,10 @@ class TradingPoliciesScanner(TableScanner):
             )
         ]
         if pks_to_delete:
+            chosen = TradingPolicy.choose_rows(pks_to_delete)
             to_delete = (
-                TradingPolicy.query.filter(self.pk.in_(pks_to_delete))
+                TradingPolicy.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .all()
             )

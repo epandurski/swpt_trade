@@ -9,6 +9,9 @@ from swpt_trade.utils import u16_to_i16
 from swpt_trade.extensions import db
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
+    SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
+    SET_STATISTICS_TARGET,
     HUGE_NEGLIGIBLE_AMOUNT,
     DEFAULT_CONFIG_FLAGS,
     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
@@ -58,6 +61,9 @@ def process_collector_status_changes():
             latest_status_change_at=current_ts,
         )
     )
+    db.session.execute(SET_STATISTICS_TARGET)
+    db.session.execute(text("ANALYZE collector_status_change"))
+    db.session.commit()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -87,14 +93,14 @@ def process_collector_status_changes():
                     db.session.execute(ca_update_statement, dicts_to_update)
                     db.session.commit()
 
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
+                chosen = CollectorStatusChange.choose_rows(
+                    [(r.collector_id, r.change_id) for r in rows]
+                )
                 db.session.execute(
                     delete(CollectorStatusChange)
                     .execution_options(synchronize_session=False)
-                    .where(
-                        COLLECTOR_STATUS_CHANGE_PK.in_(
-                            (r.collector_id, r.change_id) for r in rows
-                        )
-                    )
+                    .where(COLLECTOR_STATUS_CHANGE_PK == tuple_(*chosen.c))
                 )
                 db.session.commit()
 
@@ -103,6 +109,10 @@ def process_collector_status_changes():
 
 def create_needed_collector_accounts():
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+
+    db.session.execute(SET_STATISTICS_TARGET)
+    db.session.execute(text("ANALYZE needed_collector_account"))
+    db.session.commit()
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -113,17 +123,18 @@ def create_needed_collector_accounts():
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                to_insert = [
-                    row for row in rows if sharding_realm.match(row.debtor_id)
-                ]
-                if to_insert:
-                    procedures.insert_collector_accounts(to_insert)
+                pks = [tuple(row) for row in rows]
+                pks_to_insert = [x for x in pks if sharding_realm.match(x[0])]
+                if pks_to_insert:
+                    procedures.insert_collector_accounts(pks_to_insert)
                     db.session.commit()
 
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
+                to_delete = NeededCollectorAccount.choose_rows(pks)
                 db.session.execute(
                     delete(NeededCollectorAccount)
                     .execution_options(synchronize_session=False)
-                    .where(NEEDED_COLLECTOR_ACCOUNT_PK.in_(rows))
+                    .where(NEEDED_COLLECTOR_ACCOUNT_PK == tuple_(*to_delete.c))
                 )
                 db.session.commit()
 
@@ -169,6 +180,8 @@ def _process_pristine_collectors_batch(
 
     # First, we need to check if the `NeededWorkerAccount` records and
     # their corresponding accounts already exist.
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
+    chosen = NeededWorkerAccount.choose_rows(worker_account_pks)
     needed_worker_accounts = {
         (row[0], row[1]): (row[2], row[3])
         for row in db.session.execute(
@@ -179,14 +192,15 @@ def _process_pristine_collectors_batch(
                     WorkerAccount.creditor_id != null(),
                 )
                 .select_from(NeededWorkerAccount)
+                .join(chosen, NEEDED_WORKER_ACCOUNT_PK == tuple_(*chosen.c))
                 .join(
                     WorkerAccount,
                     WORKER_ACCOUNT_TABLES_JOIN_PREDICATE,
                     isouter=True,
                 )
-                .where(NEEDED_WORKER_ACCOUNT_PK.in_(worker_account_pks))
         ).all()
     }
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
 
     pks_to_create = set(
         pk
@@ -231,12 +245,17 @@ def _process_pristine_collectors_batch(
         # in this case, is to send another `ConfigureAccount` messages
         # for the accounts, hoping that this will fix the problem (see
         # `pks_to_configure` bellow).
+
+        db.session.execute(SET_FORCE_CUSTOM_PLAN)
+        to_retry = NeededWorkerAccount.choose_rows(list(pks_to_retry))
         db.session.execute(
             update(NeededWorkerAccount)
             .execution_options(synchronize_session=False)
-            .where(NEEDED_WORKER_ACCOUNT_PK.in_(pks_to_retry))
+            .where(NEEDED_WORKER_ACCOUNT_PK == tuple_(*to_retry.c))
             .values(configured_at=current_ts)
         )
+        db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
+
         logger = logging.getLogger(__name__)
         for pk in pks_to_retry:
             logger.warning(

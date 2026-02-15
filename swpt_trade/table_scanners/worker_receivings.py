@@ -1,23 +1,19 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timezone
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
 from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import WorkerReceiving
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from .common import PlansDiscardingTableScanner
 
 
-class WorkerReceivingsScanner(TableScanner):
+class WorkerReceivingsScanner(PlansDiscardingTableScanner):
     table = WorkerReceiving.__table__
     pk = tuple_(
-        table.c.to_collector_id,
-        table.c.debtor_id,
-        table.c.turn_id,
-        table.c.from_collector_id,
+        WorkerReceiving.to_collector_id,
+        WorkerReceiving.debtor_id,
+        WorkerReceiving.turn_id,
+        WorkerReceiving.from_collector_id,
     )
     columns = [
         WorkerReceiving.to_collector_id,
@@ -44,7 +40,6 @@ class WorkerReceivingsScanner(TableScanner):
             "APP_WORKER_RECEIVINGS_SCAN_BEAT_MILLISECS"
         ]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -52,6 +47,7 @@ class WorkerReceivingsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_stale_records(rows, current_ts)
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -80,9 +76,10 @@ class WorkerReceivingsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            chosen = WorkerReceiving.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerReceiving.query
-                .filter(self.pk.in_(pks_to_delete))
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
                 .options(load_only(WorkerReceiving.to_collector_id))
                 .all()
@@ -119,12 +116,11 @@ class WorkerReceivingsScanner(TableScanner):
             if is_stale(row)
         ]
         if pks_to_delete:
+            chosen = WorkerReceiving.choose_rows(pks_to_delete)
             to_delete = (
                 WorkerReceiving.query
-                .filter(
-                    self.pk.in_(pks_to_delete),
-                    WorkerReceiving.received_amount == 0,
-                )
+                .join(chosen, self.pk == tuple_(*chosen.c))
+                .filter(WorkerReceiving.received_amount == 0)
                 .with_for_update(skip_locked=True)
                 .options(load_only(WorkerReceiving.to_collector_id))
                 .all()

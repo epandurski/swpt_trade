@@ -30,6 +30,8 @@ from swpt_trade.models import (
     MAX_INT64,
     T_INFINITY,
     AGENT_TRANSFER_NOTE_FORMAT,
+    SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
     cr_seq,
     WorkerTurn,
     AccountLock,
@@ -1454,30 +1456,34 @@ def process_rescheduled_transfers_batch(
         transfer_attempt_pks: list,
         current_ts: datetime,
 ) -> int:
-    to_trigger = db.session.execute(
-        select(
-            TransferAttempt.collector_id,
-            TransferAttempt.turn_id,
-            TransferAttempt.debtor_id,
-            TransferAttempt.creditor_id,
-            TransferAttempt.transfer_kind,
-        )
-        .select_from(TransferAttempt)
-        .where(
-            TRANSFER_ATTEMPT_PK.in_(transfer_attempt_pks),
-
-            # The reason we use this complex expression here (instead
-            # of the simple `TransferAttempt.rescheduled_for <=
-            # current_ts`), is to ensure that the planner will not
-            # decide to use the index on the `rescheduled_for` column
-            # for the prepared generic plan.
-            func.least(TransferAttempt.rescheduled_for, T_INFINITY)
-            <= current_ts,
-        )
-        .with_for_update(skip_locked=True)
-    ).all()
-
-    if to_trigger:
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
+    chosen = TransferAttempt.choose_rows(transfer_attempt_pks)
+    pks_to_trigger = [
+        tuple(row)
+        for row in db.session.execute(
+                select(
+                    TransferAttempt.collector_id,
+                    TransferAttempt.turn_id,
+                    TransferAttempt.debtor_id,
+                    TransferAttempt.creditor_id,
+                    TransferAttempt.transfer_kind,
+                )
+                .select_from(TransferAttempt)
+                .join(chosen, TRANSFER_ATTEMPT_PK == tuple_(*chosen.c))
+                .where(
+                    # The reason we use this complex expression here (instead
+                    # of the simple `TransferAttempt.rescheduled_for <=
+                    # current_ts`), is to ensure that the planner will not
+                    # decide to use the index on the `rescheduled_for` column
+                    # for the prepared generic plan.
+                    func.least(TransferAttempt.rescheduled_for, T_INFINITY)
+                    <= current_ts,
+                )
+                .with_for_update(skip_locked=True)
+        ).all()
+    ]
+    if pks_to_trigger:
+        db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
         db.session.execute(
             insert(TriggerTransferSignal)
             .execution_options(
@@ -1486,24 +1492,32 @@ def process_rescheduled_transfers_batch(
             ),
             [
                 dict(
-                    collector_id=attempt.collector_id,
-                    turn_id=attempt.turn_id,
-                    debtor_id=attempt.debtor_id,
-                    creditor_id=attempt.creditor_id,
-                    transfer_kind=attempt.transfer_kind,
+                    collector_id=collector_id,
+                    turn_id=turn_id,
+                    debtor_id=debtor_id,
+                    creditor_id=creditor_id,
+                    transfer_kind=transfer_kind,
                     inserted_at=current_ts,
                 )
-                for attempt in to_trigger
+                for (
+                    collector_id,
+                    turn_id,
+                    debtor_id,
+                    creditor_id,
+                    transfer_kind,
+                ) in pks_to_trigger
             ],
         )
+        db.session.execute(SET_FORCE_CUSTOM_PLAN)
+        to_update = TransferAttempt.choose_rows(pks_to_trigger)
         db.session.execute(
             update(TransferAttempt)
             .execution_options(synchronize_session=False)
-            .where(TRANSFER_ATTEMPT_PK.in_(to_trigger))
+            .where(TRANSFER_ATTEMPT_PK == tuple_(*to_update.c))
             .values(rescheduled_for=None)
         )
 
-    return len(to_trigger)
+    return len(pks_to_trigger)
 
 
 @atomic

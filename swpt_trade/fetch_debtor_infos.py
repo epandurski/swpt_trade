@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from marshmallow import ValidationError
 from flask import current_app
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.sql.expression import tuple_, and_, null, func
 from sqlalchemy.orm.attributes import flag_modified
 from swpt_pythonlib.utils import ShardingRealm
@@ -24,6 +24,8 @@ from swpt_trade.models import (
     StoreDocumentSignal,
     MAX_INT16,
     T_INFINITY,
+    SET_FORCE_CUSTOM_PLAN,
+    SET_DEFAULT_PLAN_CACHE_MODE,
 )
 
 T = TypeVar("T")
@@ -60,8 +62,13 @@ def process_debtor_info_fetches(
     current_ts = datetime.now(tz=timezone.utc)
     cfg = current_app.config
     batch_size = cfg["APP_DEBTOR_INFO_FETCH_BURST_COUNT"]
-    retry_min_seconds = cfg["APP_DEBTOR_INFO_FETCH_RETRY_MIN_SECONDS"]
+    retry_min_seconds = (
+        cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"].total_seconds()
+    )
     ssl_context = ssl.create_default_context(cafile=cafile)
+
+    db.session.execute(text("ANALYZE (SKIP_LOCKED) debtor_info_fetch"))
+    db.session.commit()
 
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=batch_size).execute(
@@ -73,13 +80,14 @@ def process_debtor_info_fetches(
         ) as result:
             for rows in result.partitions():
                 count += _process_debtor_info_fetches_batch(
-                    rows,
+                    [tuple(row) for row in rows],
                     current_ts,
                     max_connections,
                     timeout,
                     retry_min_seconds,
                     ssl_context,
                 )
+                db.session.close()
 
     return count
 
@@ -181,8 +189,11 @@ def _query_and_resolve_pending_fetches(
         ssl_context: ssl.SSLContext,
 ) -> List[FetchResult]:
     # Lock the `DebtorInfoFetch`es that need to be processed.
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
+    chosen = DebtorInfoFetch.choose_rows(debtor_info_fetch_pks)
     fetch_tuples: List[FetchTuple] = (
         db.session.query(DebtorInfoFetch, DebtorInfoDocument)
+        .join(chosen, DEBTOR_INFO_FETCH_PK == tuple_(*chosen.c))
         .outerjoin(
             DebtorInfoDocument,
             and_(
@@ -191,8 +202,6 @@ def _query_and_resolve_pending_fetches(
             ),
         )
         .filter(
-            DEBTOR_INFO_FETCH_PK.in_(debtor_info_fetch_pks),
-
             # The reason we use this complex expression here (instead
             # of the simple `DebtorInfoFetch.next_attempt_at <=
             # current_ts`), is to ensure that the planner will not
@@ -204,6 +213,7 @@ def _query_and_resolve_pending_fetches(
         .with_for_update(of=DebtorInfoFetch, skip_locked=True)
         .all()
     )
+    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
 
     # Resolve the `DebtorInfoFetch`es that we have locked.
     wrong_shard, cached, new = _classify_fetch_tuples(
@@ -262,7 +272,7 @@ def _retry_fetch(
     passed `expiry_period`.
     """
     n = min(fetch.attempts_count, 100)  # We must avoid float overflows!
-    wait_seconds = retry_min_seconds * (2.0 ** n)
+    wait_seconds = retry_min_seconds * (1.5 ** n)
 
     if wait_seconds < expiry_period.total_seconds():
         current_ts = datetime.now(tz=timezone.utc)

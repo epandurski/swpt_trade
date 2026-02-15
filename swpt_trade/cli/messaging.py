@@ -240,7 +240,7 @@ def consume_internal_messages(
     help=(
         "Flush every FLOAT seconds."
         " If not specified, the value of the FLUSH_PERIOD environment"
-        " variable will be used, defaulting to 2 seconds if empty."
+        " variable will be used, defaulting to 5 seconds if empty."
     ),
 )
 @click.option(

@@ -1,18 +1,15 @@
-from typing import TypeVar, Callable
 from datetime import datetime, timedelta, timezone
-from swpt_pythonlib.scan_table import TableScanner
 from flask import current_app
+from sqlalchemy.orm import load_only
 from sqlalchemy.sql.expression import tuple_
 from swpt_trade.extensions import db
 from swpt_trade.models import WorkerAccount
-
-T = TypeVar("T")
-atomic: Callable[[T], T] = db.atomic
+from .common import PlansDiscardingTableScanner
 
 
-class WorkerAccountsScanner(TableScanner):
+class WorkerAccountsScanner(PlansDiscardingTableScanner):
     table = WorkerAccount.__table__
-    pk = tuple_(table.c.creditor_id, table.c.debtor_id)
+    pk = tuple_(WorkerAccount.creditor_id, WorkerAccount.debtor_id)
     columns = [
         WorkerAccount.creditor_id,
         WorkerAccount.debtor_id,
@@ -34,7 +31,6 @@ class WorkerAccountsScanner(TableScanner):
     def target_beat_duration(self) -> int:
         return current_app.config["APP_WORKER_ACCOUNTS_SCAN_BEAT_MILLISECS"]
 
-    @atomic
     def process_rows(self, rows):
         current_ts = datetime.now(tz=timezone.utc)
 
@@ -42,6 +38,7 @@ class WorkerAccountsScanner(TableScanner):
             self._delete_parent_shard_records(rows, current_ts)
 
         self._delete_dead_worker_accounts(rows, current_ts)
+        self._process_rows_done()
 
     def _delete_parent_shard_records(self, rows, current_ts):
         c = self.table.c
@@ -61,9 +58,12 @@ class WorkerAccountsScanner(TableScanner):
             if belongs_to_parent_shard(row)
         ]
         if pks_to_delete:
+            chosen = WorkerAccount.choose_rows(pks_to_delete)
             to_delete = (
-                WorkerAccount.query.filter(self.pk.in_(pks_to_delete))
+                WorkerAccount.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .with_for_update(skip_locked=True)
+                .options(load_only(WorkerAccount.creditor_id))
                 .all()
             )
 
@@ -88,10 +88,13 @@ class WorkerAccountsScanner(TableScanner):
             if is_dead(row)
         ]
         if pks_to_delete:
+            chosen = WorkerAccount.choose_rows(pks_to_delete)
             to_delete = (
-                WorkerAccount.query.filter(self.pk.in_(pks_to_delete))
+                WorkerAccount.query
+                .join(chosen, self.pk == tuple_(*chosen.c))
                 .filter(WorkerAccount.last_heartbeat_ts < cutoff_ts)
                 .with_for_update(skip_locked=True)
+                .options(load_only(WorkerAccount.creditor_id))
                 .all()
             )
 

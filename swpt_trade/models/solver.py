@@ -1,10 +1,10 @@
 from __future__ import annotations
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
-from .common import get_now_utc, calc_i64_column_hash
+from .common import get_now_utc, calc_i64_column_hash, ChooseRowsMixin
 
 
-class CollectorAccount(db.Model):
+class CollectorAccount(db.Model, ChooseRowsMixin):
     # NOTE: The `status` column is not be part of the primary key, but
     # it probably is a good idea to include it in the primary key
     # index to allow index-only scans. Because SQLAlchemy does not
@@ -375,7 +375,7 @@ class OverloadedCurrency(db.Model):
     )
 
 
-class HoardedCurrency(db.Model):
+class HoardedCurrency(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
