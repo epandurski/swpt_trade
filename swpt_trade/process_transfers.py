@@ -130,8 +130,9 @@ def process_rescheduled_transfers() -> int:
                     [tuple(row) for row in rows],
                     current_ts,
                 )
-                db.session.close()
+                db.session.commit()
 
+    db.session.close()
     return count
 
 

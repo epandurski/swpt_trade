@@ -69,6 +69,7 @@ def process_debtor_info_fetches(
 
     db.session.execute(text("ANALYZE (SKIP_LOCKED) debtor_info_fetch"))
     db.session.commit()
+    db.session.close()
 
     with db.engine.connect() as w_conn:
         with w_conn.execution_options(yield_per=batch_size).execute(
