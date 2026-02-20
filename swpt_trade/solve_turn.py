@@ -165,23 +165,6 @@ def _try_to_commit_solver_results(solver: Solver, turn_id: int) -> bool:
         turn.collection_started_at = datetime.now(tz=timezone.utc)
         db.session.flush()
 
-        # TODO: Executing "_write_takings()",
-        # "_write_collector_transfers()", and "_write_givings()" here
-        # may amount to a huge number of rows that need to be inserted
-        # in the `creditor_taking`, `collector_collecting`,
-        # `collector_sending`, `collector_receiving`,
-        # `collector_dispatching`, and `creditor_giving` tables as
-        # quickly as possible. Currently, we do this in a single
-        # thread that simply pushes inserts to the database (even
-        # though, we send many inserts per one round-trip to the
-        # database). Consider instead, writing the data to local
-        # file(s) first, and then running several threads or processes
-        # that read those files, and push rows to the database in
-        # parallel. This may allow us to send much more rows per
-        # second. However, the benefits from these complications are
-        # not obvious. Another possible, but quite ugly and not very
-        # promising way to improve the rate of inserts would be to
-        # remove the primary key indexes from the relevant tables.
         _write_takings(solver, turn_id)
         _write_collector_transfers(solver, turn_id)
         _write_givings(solver, turn_id)
@@ -244,37 +227,60 @@ def _delete_phase3_turn_records_from_table(table) -> None:
 def _write_takings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.takings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
-            insert(CreditorTaking).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "creditor_id": ac.creditor_id,
-                    "debtor_id": ac.debtor_id,
-                    "creditor_hash": calc_hash(ac.creditor_id),
-                    "amount": -ac.amount,
-                    "collector_id": ac.collector_id,
-                } for ac in account_changes
-            ],
+            insert(CreditorTaking)
+            .execution_options(synchronize_session=False)
+            .from_select(
+                [
+                    "turn_id",
+                    "creditor_id",
+                    "debtor_id",
+                    "creditor_hash",
+                    "amount",
+                    "collector_id",
+                ],
+                CreditorTaking.rows_to_insert(
+                    [
+                        (
+                            turn_id,
+                            ac.creditor_id,
+                            ac.debtor_id,
+                            calc_hash(ac.creditor_id),
+                            -ac.amount,
+                            ac.collector_id,
+                        )
+                        for ac in account_changes
+                    ]
+                ),
+            )
         )
         db.session.execute(
-            insert(CollectorCollecting).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "debtor_id": ac.debtor_id,
-                    "creditor_id": ac.creditor_id,
-                    "amount": -ac.amount,
-                    "collector_id": ac.collector_id,
-                    "collector_hash": calc_hash(ac.collector_id),
-                } for ac in account_changes
-            ],
+            insert(CollectorCollecting)
+            .execution_options(synchronize_session=False)
+            .from_select(
+                [
+                    "turn_id",
+                    "debtor_id",
+                    "creditor_id",
+                    "amount",
+                    "collector_id",
+                    "collector_hash",
+                ],
+                CollectorCollecting.rows_to_insert(
+                    [
+                        (
+                            turn_id,
+                            ac.debtor_id,
+                            ac.creditor_id,
+                            -ac.amount,
+                            ac.collector_id,
+                            calc_hash(ac.collector_id),
+                        )
+                        for ac in account_changes
+                    ]
+                ),
+            )
         )
+
     db.session.execute(
         text("ANALYZE creditor_taking"),
         bind_arguments={"bind": db.engines["solver"]},
@@ -290,37 +296,60 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
             solver.collector_transfers_iter(), INSERT_BATCH_SIZE
     ):
         db.session.execute(
-            insert(CollectorSending).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "debtor_id": ct.debtor_id,
-                    "from_collector_id": ct.from_creditor_id,
-                    "to_collector_id": ct.to_creditor_id,
-                    "from_collector_hash": calc_hash(ct.from_creditor_id),
-                    "amount": ct.amount,
-                } for ct in collector_transfers
-            ],
+            insert(CollectorSending)
+            .execution_options(synchronize_session=False)
+            .from_select(
+                [
+                    "turn_id",
+                    "debtor_id",
+                    "from_collector_id",
+                    "to_collector_id",
+                    "from_collector_hash",
+                    "amount",
+                ],
+                CollectorSending.rows_to_insert(
+                    [
+                        (
+                            turn_id,
+                            ct.debtor_id,
+                            ct.from_creditor_id,
+                            ct.to_creditor_id,
+                            calc_hash(ct.from_creditor_id),
+                            ct.amount,
+                        )
+                        for ct in collector_transfers
+                    ]
+                ),
+            )
         )
         db.session.execute(
-            insert(CollectorReceiving).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "debtor_id": ct.debtor_id,
-                    "to_collector_id": ct.to_creditor_id,
-                    "from_collector_id": ct.from_creditor_id,
-                    "to_collector_hash": calc_hash(ct.to_creditor_id),
-                    "amount": ct.amount,
-                } for ct in collector_transfers
-            ],
+            insert(CollectorReceiving)
+            .execution_options(synchronize_session=False)
+            .from_select(
+                [
+                    "turn_id",
+                    "debtor_id",
+                    "to_collector_id",
+                    "from_collector_id",
+                    "to_collector_hash",
+                    "amount",
+                ],
+                CollectorReceiving.rows_to_insert(
+                    [
+                        (
+                            turn_id,
+                            ct.debtor_id,
+                            ct.to_creditor_id,
+                            ct.from_creditor_id,
+                            calc_hash(ct.to_creditor_id),
+                            ct.amount,
+                        )
+                        for ct in collector_transfers
+                    ]
+                ),
+            )
         )
+
     db.session.execute(
         text("ANALYZE collector_sending"),
         bind_arguments={"bind": db.engines["solver"]},
@@ -334,37 +363,60 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
 def _write_givings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.givings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
-            insert(CollectorDispatching).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "debtor_id": ac.debtor_id,
-                    "creditor_id": ac.creditor_id,
-                    "amount": ac.amount,
-                    "collector_id": ac.collector_id,
-                    "collector_hash": calc_hash(ac.collector_id),
-                } for ac in account_changes
-            ],
+            insert(CollectorDispatching)
+            .execution_options(synchronize_session=False)
+            .from_select(
+                [
+                    "turn_id",
+                    "debtor_id",
+                    "creditor_id",
+                    "amount",
+                    "collector_id",
+                    "collector_hash",
+                ],
+                CollectorDispatching.rows_to_insert(
+                    [
+                        (
+                            turn_id,
+                            ac.debtor_id,
+                            ac.creditor_id,
+                            ac.amount,
+                            ac.collector_id,
+                            calc_hash(ac.collector_id),
+                        )
+                        for ac in account_changes
+                    ]
+                ),
+            )
         )
         db.session.execute(
-            insert(CreditorGiving).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "creditor_id": ac.creditor_id,
-                    "debtor_id": ac.debtor_id,
-                    "creditor_hash": calc_hash(ac.creditor_id),
-                    "amount": ac.amount,
-                    "collector_id": ac.collector_id,
-                } for ac in account_changes
-            ],
+            insert(CreditorGiving)
+            .execution_options(synchronize_session=False)
+            .from_select(
+                [
+                    "turn_id",
+                    "creditor_id",
+                    "debtor_id",
+                    "creditor_hash",
+                    "amount",
+                    "collector_id",
+                ],
+                CreditorGiving.rows_to_insert(
+                    [
+                        (
+                            turn_id,
+                            ac.creditor_id,
+                            ac.debtor_id,
+                            calc_hash(ac.creditor_id),
+                            ac.amount,
+                            ac.collector_id,
+                        )
+                        for ac in account_changes
+                    ]
+                ),
+            )
         )
+
     db.session.execute(
         text("ANALYZE collector_dispatching"),
         bind_arguments={"bind": db.engines["solver"]},

@@ -126,6 +126,17 @@ class ChooseRowsMixin:
             .cte(name=name)
         )
 
+    @classmethod
+    def rows_to_insert(cls, rows: list[tuple], name: str = "to_insert"):
+        table_name = cls.__table__.name
+        bindparam_name = f"{name}_rows"
+        return (
+            text(f"SELECT * FROM unnest(:{bindparam_name} :: {table_name}[])")
+            .bindparams(**{bindparam_name: rows})
+            .columns(**{c.key: c.type for c in inspect(cls).columns})
+            .cte(name=name)
+        )
+
 
 class Signal(db.Model, ChooseRowsMixin):
     __abstract__ = True

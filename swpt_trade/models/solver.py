@@ -218,7 +218,7 @@ class BuyOffer(db.Model):
     )
 
 
-class CreditorTaking(db.Model):
+class CreditorTaking(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -241,7 +241,7 @@ class CreditorTaking(db.Model):
     )
 
 
-class CollectorCollecting(db.Model):
+class CollectorCollecting(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -264,7 +264,7 @@ class CollectorCollecting(db.Model):
     )
 
 
-class CollectorSending(db.Model):
+class CollectorSending(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -288,7 +288,7 @@ class CollectorSending(db.Model):
     )
 
 
-class CollectorReceiving(db.Model):
+class CollectorReceiving(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -312,7 +312,7 @@ class CollectorReceiving(db.Model):
     )
 
 
-class CollectorDispatching(db.Model):
+class CollectorDispatching(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -335,7 +335,7 @@ class CollectorDispatching(db.Model):
     )
 
 
-class CreditorGiving(db.Model):
+class CreditorGiving(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
