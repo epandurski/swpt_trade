@@ -131,6 +131,7 @@ def roll_turns(period, period_offset, check_interval, quit_early):
                     turn_id=turn_id,
                     phase2_duration=phase2_duration,
                     max_commit_period=max_commit_period,
+                    work_mem=current_app.config["SOLVER_INCREASED_WORK_MEM"],
                 )
                 log_result(is_done)
 

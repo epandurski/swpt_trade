@@ -105,6 +105,7 @@ def try_to_advance_turn_to_phase2(
         turn_id: int,
         phase2_duration: timedelta,
         max_commit_period: timedelta,
+        work_mem: str = "4MB",
 ) -> bool:
     current_ts = datetime.now(tz=timezone.utc)
     turn = (
@@ -124,6 +125,10 @@ def try_to_advance_turn_to_phase2(
         )
         db.session.execute(
             text("ANALYZE confirmed_debtor"),
+            bind_arguments={"bind": db.engines["solver"]},
+        )
+        db.session.execute(
+            text(f"SET LOCAL work_mem = '{work_mem}'"),
             bind_arguments={"bind": db.engines["solver"]},
         )
         db.session.execute(
