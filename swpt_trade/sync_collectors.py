@@ -297,7 +297,7 @@ def _process_pristine_collectors_batch(
                     )
                     for collector_id, debtor_id in pks_to_configure
                 ],
-                default_columns=["change_id"]
+                default_columns=["change_id"],
             )
         )
 
