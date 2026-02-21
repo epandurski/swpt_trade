@@ -627,11 +627,11 @@ def _disable_some_collector_accounts() -> None:
     @atomic
     def process_waiting():
         if waiting_to_be_disabled:
+            chosen = CollectorAccount.choose_rows(waiting_to_be_disabled)
             db.session.execute(
                 SET_FORCE_CUSTOM_PLAN,
                 bind_arguments={"bind": db.engines["solver"]},
             )
-            chosen = CollectorAccount.choose_rows(waiting_to_be_disabled)
             db.session.execute(
                 update(CollectorAccount)
                 .execution_options(synchronize_session=False)

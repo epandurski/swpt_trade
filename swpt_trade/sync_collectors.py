@@ -93,10 +93,10 @@ def process_collector_status_changes():
                     db.session.execute(ca_update_statement, dicts_to_update)
                     db.session.commit()
 
-                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 chosen = CollectorStatusChange.choose_rows(
                     [(r.collector_id, r.change_id) for r in rows]
                 )
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 db.session.execute(
                     delete(CollectorStatusChange)
                     .execution_options(synchronize_session=False)
@@ -129,8 +129,8 @@ def create_needed_collector_accounts():
                     procedures.insert_collector_accounts(pks_to_insert)
                     db.session.commit()
 
-                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 to_delete = NeededCollectorAccount.choose_rows(pks)
+                db.session.execute(SET_FORCE_CUSTOM_PLAN)
                 db.session.execute(
                     delete(NeededCollectorAccount)
                     .execution_options(synchronize_session=False)
@@ -246,8 +246,8 @@ def _process_pristine_collectors_batch(
         # for the accounts, hoping that this will fix the problem (see
         # `pks_to_configure` bellow).
 
-        db.session.execute(SET_FORCE_CUSTOM_PLAN)
         to_retry = NeededWorkerAccount.choose_rows(list(pks_to_retry))
+        db.session.execute(SET_FORCE_CUSTOM_PLAN)
         db.session.execute(
             update(NeededWorkerAccount)
             .execution_options(synchronize_session=False)
