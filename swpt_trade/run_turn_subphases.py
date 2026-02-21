@@ -206,36 +206,30 @@ def _populate_debtor_infos(w_conn, s_conn, turn_id):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "turn_id": turn_id,
-                    "debtor_info_locator": row.debtor_info_locator,
-                    "debtor_id": row.debtor_id,
-                    "peg_debtor_info_locator": row.peg_debtor_info_locator,
-                    "peg_debtor_id": row.peg_debtor_id,
-                    "peg_exchange_rate": row.peg_exchange_rate,
-                }
-                for row in rows
-                if sharding_realm.match_str(row.debtor_info_locator)
-            ]
-            if dicts_to_insert:
-                try:
-                    s_conn.execute(
-                        insert(DebtorInfo).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        dicts_to_insert,
-                    )
-                except IntegrityError:
-                    logger = logging.getLogger(__name__)
-                    logger.warning(
-                        "An attempt has been made to insert an already"
-                        " existing debtor info row for turn %d.",
-                        turn_id,
-                    )
-                    s_conn.rollback()
-                    break
+            try:
+                s_conn.execute(
+                    DebtorInfo.insert_rows([
+                        (
+                            turn_id,
+                            row.debtor_info_locator,
+                            row.debtor_id,
+                            row.peg_debtor_info_locator,
+                            row.peg_debtor_id,
+                            row.peg_exchange_rate,
+                        )
+                        for row in rows
+                        if sharding_realm.match_str(row.debtor_info_locator)
+                    ])
+                )
+            except IntegrityError:
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "An attempt has been made to insert an already"
+                    " existing debtor info row for turn %d.",
+                    turn_id,
+                )
+                s_conn.rollback()
+                break
         else:
             s_conn.commit()
 
@@ -251,33 +245,27 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
             .where(DebtorLocatorClaim.debtor_info_locator != null())
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "turn_id": turn_id,
-                    "debtor_info_locator": row.debtor_info_locator,
-                    "debtor_id": row.debtor_id,
-                }
-                for row in rows
-                if sharding_realm.match(row.debtor_id)
-            ]
-            if dicts_to_insert:
-                try:
-                    s_conn.execute(
-                        insert(ConfirmedDebtor).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        dicts_to_insert,
-                    )
-                except IntegrityError:
-                    logger = logging.getLogger(__name__)
-                    logger.warning(
-                        "An attempt has been made to insert an already"
-                        " existing confirmed debtor row for turn %d.",
-                        turn_id,
-                    )
-                    s_conn.rollback()
-                    break
+            try:
+                s_conn.execute(
+                    ConfirmedDebtor.insert_rows([
+                        (
+                            turn_id,
+                            row.debtor_id,
+                            row.debtor_info_locator,
+                        )
+                        for row in rows
+                        if sharding_realm.match(row.debtor_id)
+                    ])
+                )
+            except IntegrityError:
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "An attempt has been made to insert an already"
+                    " existing confirmed debtor row for turn %d.",
+                    turn_id,
+                )
+                s_conn.rollback()
+                break
         else:
             s_conn.commit()
 
@@ -631,22 +619,18 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
 def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
     for candidate_offers in batched(bp.analyze_bids(), INSERT_BATCH_SIZE):
         db.session.execute(
-            insert(CandidateOfferSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "turn_id": turn_id,
-                    "amount": o.amount,
-                    "debtor_id": o.debtor_id,
-                    "creditor_id": o.creditor_id,
-                    "account_creation_date": o.aux_data.creation_date,
-                    "last_transfer_number": o.aux_data.last_transfer_number,
-                    "inserted_at": ts,
-                }
+            CandidateOfferSignal.insert_rows([
+                (
+                    turn_id,
+                    o.debtor_id,
+                    o.creditor_id,
+                    o.amount,
+                    o.aux_data.creation_date,
+                    o.aux_data.last_transfer_number,
+                    ts,
+                )
                 for o in candidate_offers
-            ],
+            ])
         )
 
 
@@ -671,28 +655,21 @@ def _copy_usable_collectors(bp: BidProcessor) -> None:
                 )
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                dicts_to_insert = [
-                    {
-                        "debtor_id": row.debtor_id,
-                        "collector_id": row.collector_id,
-                        "account_id": row.account_id,
-                        "disabled_at": (
-                            None
-                            if row.status == 2
-                            else row.latest_status_change_at
-                        ),
-                    }
-                    for row in rows if row.status >= 2
-                ]
-                if dicts_to_insert:
-                    db.session.execute(
-                        insert(UsableCollector).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        dicts_to_insert,
-                    )
-
+                db.session.execute(
+                    UsableCollector.insert_rows([
+                        (
+                            row.debtor_id,
+                            row.collector_id,
+                            row.account_id,
+                            (
+                                None
+                                if row.status == 2
+                                else row.latest_status_change_at
+                            ),
+                        )
+                        for row in rows if row.status >= 2
+                    ])
+                )
                 for row in rows:
                     bp.remove_currency_to_be_confirmed(row.debtor_id)
 
@@ -704,17 +681,17 @@ def _insert_needed_collector_signals(bp: BidProcessor) -> None:
             bp.currencies_to_be_confirmed(), INSERT_BATCH_SIZE
     ):
         db.session.execute(
-            insert(NeededCollectorSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "debtor_id": debtor_id,
-                    "inserted_at": current_ts,
-                }
-                for debtor_id in debtor_ids
-            ],
+            NeededCollectorSignal.insert_rows(
+                [
+                    (
+                        None,  # signal_id
+                        debtor_id,
+                        current_ts,
+                    )
+                    for debtor_id in debtor_ids
+                ],
+                default_columns=["signal_id"],
+            )
         )
 
 
@@ -768,35 +745,29 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "turn_id": turn_id,
-                    "creditor_id": row.creditor_id,
-                    "debtor_id": row.debtor_id,
-                    "amount": -row.amount,
-                    "collector_id": row.collector_id,
-                }
-                for row in rows
-                if sharding_realm.match(row.creditor_id)
-            ]
-            if dicts_to_insert:
-                try:
-                    s_conn.execute(
-                        insert(SellOffer).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        dicts_to_insert,
-                    )
-                except IntegrityError:
-                    logger = logging.getLogger(__name__)
-                    logger.warning(
-                        "An attempt has been made to insert an already"
-                        " existing sell offer row for turn %d.",
-                        turn_id,
-                    )
-                    s_conn.rollback()
-                    break
+            try:
+                s_conn.execute(
+                    SellOffer.insert_rows([
+                        (
+                            turn_id,
+                            row.creditor_id,
+                            row.debtor_id,
+                            -row.amount,
+                            row.collector_id,
+                        )
+                        for row in rows
+                        if sharding_realm.match(row.creditor_id)
+                    ])
+                )
+            except IntegrityError:
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "An attempt has been made to insert an already"
+                    " existing sell offer row for turn %d.",
+                    turn_id,
+                )
+                s_conn.rollback()
+                break
         else:
             s_conn.commit()
 
@@ -819,34 +790,28 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "turn_id": turn_id,
-                    "creditor_id": row.creditor_id,
-                    "debtor_id": row.debtor_id,
-                    "amount": row.amount,
-                }
-                for row in rows
-                if sharding_realm.match(row.creditor_id)
-            ]
-            if dicts_to_insert:
-                try:
-                    s_conn.execute(
-                        insert(BuyOffer).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        dicts_to_insert,
-                    )
-                except IntegrityError:
-                    logger = logging.getLogger(__name__)
-                    logger.warning(
-                        "An attempt has been made to insert an already"
-                        " existing buy offer row for turn %d.",
-                        turn_id,
-                    )
-                    s_conn.rollback()
-                    break
+            try:
+                s_conn.execute(
+                    BuyOffer.insert_rows([
+                        (
+                            turn_id,
+                            row.creditor_id,
+                            row.debtor_id,
+                            row.amount,
+                        )
+                        for row in rows
+                        if sharding_realm.match(row.creditor_id)
+                    ])
+                )
+            except IntegrityError:
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "An attempt has been made to insert an already"
+                    " existing buy offer row for turn %d.",
+                    turn_id,
+                )
+                s_conn.rollback()
+                break
         else:
             s_conn.commit()
 
@@ -901,27 +866,18 @@ def _copy_creditor_takings(s_conn, worker_turn):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "turn_id": turn_id,
-                    "creditor_id": row.creditor_id,
-                    "debtor_id": row.debtor_id,
-                    "amount": (-row.amount),
-                    "collector_id": row.collector_id,
-                }
+            to_insert = [
+                (
+                    row.creditor_id,
+                    row.debtor_id,
+                    turn_id,
+                    -row.amount,
+                    row.collector_id,
+                )
                 for row in rows
             ]
-            assert all(
-                sharding_realm.match(r["creditor_id"])
-                for r in dicts_to_insert
-            )
-            db.session.execute(
-                insert(CreditorParticipation).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                ),
-                dicts_to_insert,
-            )
+            assert all(sharding_realm.match(t[0]) for t in to_insert)
+            db.session.execute(CreditorParticipation.insert_rows(to_insert))
 
 
 def _copy_creditor_givings(s_conn, worker_turn):
@@ -945,27 +901,18 @@ def _copy_creditor_givings(s_conn, worker_turn):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "turn_id": turn_id,
-                    "creditor_id": row.creditor_id,
-                    "debtor_id": row.debtor_id,
-                    "amount": row.amount,
-                    "collector_id": row.collector_id,
-                }
+            to_insert = [
+                (
+                    row.creditor_id,
+                    row.debtor_id,
+                    turn_id,
+                    row.amount,
+                    row.collector_id,
+                )
                 for row in rows
             ]
-            assert all(
-                sharding_realm.match(r["creditor_id"])
-                for r in dicts_to_insert
-            )
-            db.session.execute(
-                insert(CreditorParticipation).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                ),
-                dicts_to_insert,
-            )
+            assert all(sharding_realm.match(t[0]) for t in to_insert)
+            db.session.execute(CreditorParticipation.insert_rows(to_insert))
 
 
 def _copy_collector_collectings(s_conn, worker_turn, statuses):
@@ -996,36 +943,23 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "collector_id": row.collector_id,
-                    "debtor_id": row.debtor_id,
-                    "turn_id": turn_id,
-                    "creditor_id": row.creditor_id,
-                    "amount": row.amount,
-                    "collected": False,
-                    "purge_after": purge_after,
-                }
+            to_insert = [
+                (
+                    row.collector_id,
+                    row.debtor_id,
+                    turn_id,
+                    row.creditor_id,
+                    row.amount,
+                    False,
+                    purge_after,
+                )
                 for row in rows
             ]
-            assert all(
-                sharding_realm.match(r["collector_id"])
-                for r in dicts_to_insert
-            )
-            db.session.execute(
-                insert(WorkerCollecting).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                ),
-                dicts_to_insert,
-            )
-            for d in dicts_to_insert:
-                statuses.register_collecting(
-                    d["collector_id"],
-                    d["debtor_id"],
-                    d["turn_id"],
-                    d["amount"],
-                )
+            assert all(sharding_realm.match(t[0]) for t in to_insert)
+            db.session.execute(WorkerCollecting.insert_rows(to_insert))
+            for t in to_insert:
+                statuses.register_collecting(t[0], t[1], t[2], t[4])
+
     db.session.execute(text("ANALYZE worker_collecting"))
 
 
@@ -1056,35 +990,22 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "from_collector_id": row.from_collector_id,
-                    "turn_id": turn_id,
-                    "debtor_id": row.debtor_id,
-                    "to_collector_id": row.to_collector_id,
-                    "amount": row.amount,
-                    "purge_after": purge_after,
-                }
+            to_insert = [
+                (
+                    row.from_collector_id,
+                    row.debtor_id,
+                    turn_id,
+                    row.to_collector_id,
+                    row.amount,
+                    purge_after,
+                )
                 for row in rows
             ]
-            assert all(
-                sharding_realm.match(r["from_collector_id"])
-                for r in dicts_to_insert
-            )
-            db.session.execute(
-                insert(WorkerSending).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                ),
-                dicts_to_insert,
-            )
-            for d in dicts_to_insert:
-                statuses.register_sending(
-                    d["from_collector_id"],
-                    d["debtor_id"],
-                    d["turn_id"],
-                    d["amount"],
-                )
+            assert all(sharding_realm.match(t[0]) for t in to_insert)
+            db.session.execute(WorkerSending.insert_rows(to_insert))
+            for t in to_insert:
+                statuses.register_sending(t[0], t[1], t[2], t[4])
+
     db.session.execute(text("ANALYZE worker_sending"))
 
 
@@ -1115,36 +1036,23 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "to_collector_id": row.to_collector_id,
-                    "turn_id": turn_id,
-                    "debtor_id": row.debtor_id,
-                    "from_collector_id": row.from_collector_id,
-                    "expected_amount": row.amount,
-                    "received_amount": 0,
-                    "purge_after": purge_after,
-                }
+            to_insert = [
+                (
+                    row.to_collector_id,
+                    row.debtor_id,
+                    turn_id,
+                    row.from_collector_id,
+                    row.amount,
+                    0,
+                    purge_after,
+                )
                 for row in rows
             ]
-            assert all(
-                sharding_realm.match(r["to_collector_id"])
-                for r in dicts_to_insert
-            )
-            db.session.execute(
-                insert(WorkerReceiving).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                ),
-                dicts_to_insert,
-            )
-            for d in dicts_to_insert:
-                statuses.register_receiving(
-                    d["to_collector_id"],
-                    d["debtor_id"],
-                    d["turn_id"],
-                    d["expected_amount"],
-                )
+            assert all(sharding_realm.match(t[0]) for t in to_insert)
+            db.session.execute(WorkerReceiving.insert_rows(to_insert))
+            for t in to_insert:
+                statuses.register_receiving(t[0], t[1], t[2], t[4])
+
     db.session.execute(text("ANALYZE worker_receiving"))
 
 
@@ -1177,35 +1085,22 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
             )
     ) as result:
         for rows in result.partitions(INSERT_BATCH_SIZE):
-            dicts_to_insert = [
-                {
-                    "collector_id": row.collector_id,
-                    "debtor_id": row.debtor_id,
-                    "turn_id": turn_id,
-                    "creditor_id": row.creditor_id,
-                    "amount": row.amount,
-                    "purge_after": purge_after,
-                }
+            to_insert = [
+                (
+                    row.collector_id,
+                    row.debtor_id,
+                    turn_id,
+                    row.creditor_id,
+                    row.amount,
+                    purge_after,
+                )
                 for row in rows
             ]
-            assert all(
-                sharding_realm.match(r["collector_id"])
-                for r in dicts_to_insert
-            )
-            db.session.execute(
-                insert(WorkerDispatching).execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                ),
-                dicts_to_insert,
-            )
-            for d in dicts_to_insert:
-                statuses.register_dispatching(
-                    d["collector_id"],
-                    d["debtor_id"],
-                    d["turn_id"],
-                    d["amount"],
-                )
+            assert all(sharding_realm.match(t[0]) for t in to_insert)
+            db.session.execute(WorkerDispatching.insert_rows(to_insert))
+            for t in to_insert:
+                statuses.register_dispatching(t[0], t[1], t[2], t[4])
+
     db.session.execute(text("ANALYZE worker_dispatching"))
 
 
@@ -1236,24 +1131,22 @@ def _insert_revise_account_lock_signals(worker_turn):
                 .where(AccountLock.turn_id == turn_id)
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
-                dicts_to_insert = [
-                    {
-                        "creditor_id": row.creditor_id,
-                        "debtor_id": row.debtor_id,
-                        "turn_id": turn_id,
-                        "inserted_at": current_ts,
-                    }
-                    for row in rows
-                    if sharding_realm.match(row.creditor_id)
-                ]
-                if dicts_to_insert:
-                    db.session.execute(
-                        insert(ReviseAccountLockSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        dicts_to_insert,
+                db.session.execute(
+                    ReviseAccountLockSignal.insert_rows(
+                        [
+                            (
+                                None,  # signal_id
+                                row.creditor_id,
+                                row.debtor_id,
+                                turn_id,
+                                current_ts,
+                            )
+                            for row in rows
+                            if sharding_realm.match(row.creditor_id)
+                        ],
+                        default_columns=["signal_id"],
                     )
+                )
 
 
 @atomic
@@ -1445,6 +1338,7 @@ def _update_needed_worker_account_blocked_amounts() -> None:
 
 
 def _update_worker_account_surplus_amounts(turn_id: int) -> None:
+    current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
@@ -1460,26 +1354,27 @@ def _update_worker_account_surplus_amounts(turn_id: int) -> None:
         ) as result:
             for rows in result.partitions(2 * KILL_ACCOUNTS_BATCH_SIZE):
                 for row in rows:
-                    signal_dicts = []
+                    signals = []
                     accounts_not_from_this_shard = []
                     if sharding_realm.match(row.creditor_id):
-                        signal_dicts.append(
-                            {
-                                "collector_id": row.creditor_id,
-                                "debtor_id": row.debtor_id,
-                                "turn_id": turn_id,
-                            }
+                        signals.append(
+                            (
+                                None,  # signal_id
+                                row.creditor_id,
+                                row.debtor_id,
+                                turn_id,
+                                current_ts,
+                            )
                         )
                     else:
                         accounts_not_from_this_shard.append(tuple(row))
 
-                    if signal_dicts:
+                    if signals:
                         db.session.execute(
-                            insert(CalculateSurplusSignal).execution_options(
-                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                                synchronize_session=False,
-                            ),
-                            signal_dicts,
+                            CalculateSurplusSignal.insert_rows(
+                                signals,
+                                default_columns=["signal_id"],
+                            )
                         )
                     if accounts_not_from_this_shard:
                         _kill_needed_worker_accounts_and_rate_stats(
@@ -1519,25 +1414,23 @@ def _kill_broken_worker_accounts() -> None:
             for rows in result.partitions(KILL_ACCOUNTS_BATCH_SIZE):
                 pks_to_kill = [tuple(row) for row in rows]
                 _kill_needed_worker_accounts_and_rate_stats(pks_to_kill)
-                status_change_dicts = (
-                    {
-                        "collector_id": creditor_id,
-                        "debtor_id": debtor_id,
-                        "from_status": 3,
-                        "to_status": 1,
-                        "account_id": None,
-                    }
-                    for creditor_id, debtor_id in pks_to_kill
-                    if sharding_realm.match(creditor_id)
-                )
-                if status_change_dicts:
-                    db.session.execute(
-                        insert(CollectorStatusChange).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        status_change_dicts,
+                db.session.execute(
+                    CollectorStatusChange.insert_rows(
+                        [
+                            (
+                                creditor_id,
+                                None,  # change_id
+                                debtor_id,
+                                3,
+                                1,
+                                None,
+                            )
+                            for creditor_id, debtor_id in pks_to_kill
+                            if sharding_realm.match(creditor_id)
+                        ],
+                        default_columns=["change_id"],
                     )
+                )
 
 
 def _kill_needed_worker_accounts_and_rate_stats(primary_keys) -> None:

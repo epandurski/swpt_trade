@@ -19,7 +19,6 @@ from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_FORCE_CUSTOM_PLAN,
-    SET_DEFAULT_PLAN_CACHE_MODE,
     TransferAttempt,
     DispatchingStatus,
     WorkerCollecting,
@@ -268,6 +267,7 @@ def _replay_delayed_account_transfers_batch(rows) -> int:
 
 
 def signal_dispatching_statuses_ready_to_send() -> None:
+    current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
@@ -319,21 +319,21 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                         .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
-                    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
                     db.session.execute(
-                        insert(StartSendingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        [
-                            {
-                                "collector_id": collector_id,
-                                "debtor_id": debtor_id,
-                                "turn_id": turn_id,
-                            }
-                            for collector_id, debtor_id, turn_id
-                            in pks_to_update
-                        ],
+                        StartSendingSignal.insert_rows(
+                            [
+                                (
+                                    None,  # signal_id
+                                    collector_id,
+                                    turn_id,
+                                    debtor_id,
+                                    current_ts,
+                                )
+                                for collector_id, debtor_id, turn_id
+                                in pks_to_update
+                            ],
+                            default_columns=["signal_id"],
+                        )
                     )
 
                 db.session.commit()
@@ -398,6 +398,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
 
 
 def signal_dispatching_statuses_ready_to_dispatch() -> None:
+    current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
@@ -451,21 +452,21 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                         .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
-                    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
                     db.session.execute(
-                        insert(StartDispatchingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        [
-                            {
-                                "collector_id": collector_id,
-                                "debtor_id": debtor_id,
-                                "turn_id": turn_id,
-                            }
-                            for collector_id, debtor_id, turn_id
-                            in pks_to_update
-                        ],
+                        StartDispatchingSignal.insert_rows(
+                            [
+                                (
+                                    None,  # signal_id
+                                    collector_id,
+                                    turn_id,
+                                    debtor_id,
+                                    current_ts,
+                                )
+                                for collector_id, debtor_id, turn_id
+                                in pks_to_update
+                            ],
+                            default_columns=["signal_id"],
+                        )
                     )
 
                 db.session.commit()

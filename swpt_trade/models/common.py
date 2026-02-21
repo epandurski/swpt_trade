@@ -2,7 +2,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from flask import current_app
-from sqlalchemy import text
+from sqlalchemy import text, insert
 from sqlalchemy.inspection import inspect
 from swpt_trade.extensions import db
 from swpt_pythonlib import rabbitmq
@@ -127,14 +127,29 @@ class ChooseRowsMixin:
         )
 
     @classmethod
-    def rows_to_insert(cls, rows: list[tuple], name: str = "to_insert"):
+    def insert_rows(
+            cls,
+            rows: list[tuple],
+            name: str = "to_insert",
+            default_columns: list[str] = [],
+    ):
         table_name = cls.__table__.name
         bindparam_name = f"{name}_rows"
-        return (
+        columns = {
+            c.key: c.type
+            for c in inspect(cls).columns
+            if c.key not in default_columns
+        }
+        rows_to_insert = (
             text(f"SELECT * FROM unnest(:{bindparam_name} :: {table_name}[])")
             .bindparams(**{bindparam_name: rows})
-            .columns(**{c.key: c.type for c in inspect(cls).columns})
+            .columns(**columns)
             .cte(name=name)
+        )
+        return (
+            insert(cls)
+            .execution_options(synchronize_session=False)
+            .from_select(list(columns), rows_to_insert)
         )
 
 

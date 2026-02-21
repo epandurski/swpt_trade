@@ -104,7 +104,7 @@ class Turn(db.Model):
     )
 
 
-class DebtorInfo(db.Model):
+class DebtorInfo(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_info_locator = db.Column(db.String, primary_key=True)
@@ -126,7 +126,7 @@ class DebtorInfo(db.Model):
     )
 
 
-class ConfirmedDebtor(db.Model):
+class ConfirmedDebtor(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -177,7 +177,7 @@ class CurrencyInfo(db.Model):
     )
 
 
-class SellOffer(db.Model):
+class SellOffer(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -198,7 +198,7 @@ class SellOffer(db.Model):
     )
 
 
-class BuyOffer(db.Model):
+class BuyOffer(db.Model, ChooseRowsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)

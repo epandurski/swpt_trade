@@ -240,7 +240,7 @@ class RecentlyNeededCollector(db.Model, ChooseRowsMixin):
     )
 
 
-class UsableCollector(db.Model):
+class UsableCollector(db.Model, ChooseRowsMixin):
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
     account_id = db.Column(db.String, nullable=False)

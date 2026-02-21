@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
 from flask import current_app
-from sqlalchemy import select, update, delete, insert, bindparam
+from sqlalchemy import select, update, delete, bindparam
 from sqlalchemy.sql.expression import func, text, null, tuple_
 from sqlalchemy.dialects import postgresql
 from swpt_pythonlib.utils import ShardingRealm
@@ -270,36 +270,35 @@ def _process_pristine_collectors_batch(
     pks_to_configure = pks_to_create | pks_to_retry
     if pks_to_configure:
         db.session.execute(
-            insert(ConfigureAccountSignal).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "creditor_id": creditor_id,
-                    "debtor_id": debtor_id,
-                    "ts": current_ts,
-                    "seqnum": 0,
-                    "negligible_amount": HUGE_NEGLIGIBLE_AMOUNT,
-                    "config_flags": DEFAULT_CONFIG_FLAGS,
-                }
+            ConfigureAccountSignal.insert_rows([
+                (
+                    creditor_id,
+                    debtor_id,
+                    current_ts,
+                    0,
+                    HUGE_NEGLIGIBLE_AMOUNT,
+                    "",
+                    DEFAULT_CONFIG_FLAGS,
+                    current_ts,
+                )
                 for creditor_id, debtor_id in pks_to_configure
-            ],
+            ])
         )
         db.session.execute(
-            insert(CollectorStatusChange).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                {
-                    "collector_id": collector_id,
-                    "debtor_id": debtor_id,
-                    "from_status": 0,
-                    "to_status": 1,
-                }
-                for collector_id, debtor_id in pks_to_configure
-            ],
+            CollectorStatusChange.insert_rows(
+                [
+                    (
+                        collector_id,
+                        None,  # change_id
+                        debtor_id,
+                        0,
+                        1,
+                        None
+                    )
+                    for collector_id, debtor_id in pks_to_configure
+                ],
+                default_columns=["change_id"]
+            )
         )
 
     db.session.commit()

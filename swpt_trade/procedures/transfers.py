@@ -31,7 +31,6 @@ from swpt_trade.models import (
     T_INFINITY,
     AGENT_TRANSFER_NOTE_FORMAT,
     SET_FORCE_CUSTOM_PLAN,
-    SET_DEFAULT_PLAN_CACHE_MODE,
     cr_seq,
     WorkerTurn,
     AccountLock,
@@ -1483,32 +1482,29 @@ def process_rescheduled_transfers_batch(
         ).all()
     ]
     if pks_to_trigger:
-        db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
         db.session.execute(
-            insert(TriggerTransferSignal)
-            .execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            [
-                dict(
-                    collector_id=collector_id,
-                    turn_id=turn_id,
-                    debtor_id=debtor_id,
-                    creditor_id=creditor_id,
-                    transfer_kind=transfer_kind,
-                    inserted_at=current_ts,
-                )
-                for (
-                    collector_id,
-                    turn_id,
-                    debtor_id,
-                    creditor_id,
-                    transfer_kind,
-                ) in pks_to_trigger
-            ],
+            TriggerTransferSignal.insert_rows(
+                [
+                    (
+                        None,  # signal_id
+                        collector_id,
+                        turn_id,
+                        debtor_id,
+                        creditor_id,
+                        transfer_kind,
+                        current_ts,
+                    )
+                    for (
+                        collector_id,
+                        turn_id,
+                        debtor_id,
+                        creditor_id,
+                        transfer_kind,
+                    ) in pks_to_trigger
+                ],
+                default_columns=["signal_id"],
+            )
         )
-        db.session.execute(SET_FORCE_CUSTOM_PLAN)
         to_update = TransferAttempt.choose_rows(pks_to_trigger)
         db.session.execute(
             update(TransferAttempt)
