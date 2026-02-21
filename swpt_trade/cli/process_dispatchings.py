@@ -50,7 +50,6 @@ def process_dispatchings(wait, quit_early):
         )
         started_at = time.time()
 
-        pt.analyze_dispatching_statuses_table()
         pt.signal_dispatching_statuses_ready_to_send()
         pt.update_dispatching_statuses_with_everything_sent()
         pt.signal_dispatching_statuses_ready_to_dispatch()

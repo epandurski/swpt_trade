@@ -131,9 +131,12 @@ def roll_worker_turns(wait, quit_early):
                 log_completion()
 
             elif phase == 3 and subphase == 5:
-                log_start()
-                run_phase3_subphase5(turn_id)
-                log_completion()
+                collection_started_at = worker_turn.collection_started_at
+                delay = cfg["TRANSFERS_HEALTHY_MAX_COMMIT_DELAY"]
+                if current_ts >= collection_started_at + delay:
+                    log_start()
+                    run_phase3_subphase5(turn_id)
+                    log_completion()
 
             else:  # pragma: no cover
                 raise RuntimeError(

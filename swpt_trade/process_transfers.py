@@ -19,7 +19,6 @@ from swpt_trade.procedures import process_rescheduled_transfers_batch
 from swpt_trade.models import (
     SET_SEQSCAN_ON,
     SET_FORCE_CUSTOM_PLAN,
-    SET_DEFAULT_PLAN_CACHE_MODE,
     TransferAttempt,
     DispatchingStatus,
     WorkerCollecting,
@@ -130,8 +129,9 @@ def process_rescheduled_transfers() -> int:
                     [tuple(row) for row in rows],
                     current_ts,
                 )
-                db.session.close()
+                db.session.commit()
 
+    db.session.close()
     return count
 
 
@@ -139,11 +139,7 @@ def process_delayed_account_transfers() -> int:
     """Replay delayed account transfers if the worker is ready to
     process them.
     """
-    cfg = current_app.config
-    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
-    delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
     count = 0
-
     db.session.execute(text("ANALYZE delayed_account_transfer"))
     db.session.commit()
 
@@ -197,76 +193,81 @@ def process_delayed_account_transfers() -> int:
                     )
             ) as result:
                 for rows in result.partitions(INSERT_BATCH_SIZE):
-                    current_ts = datetime.now(tz=timezone.utc)
-                    to_replay = [
-                        dict(
-                            creditor_id=row.creditor_id,
-                            debtor_id=row.debtor_id,
-                            creation_date=row.creation_date,
-                            transfer_number=row.transfer_number,
-                            coordinator_type=row.coordinator_type,
-                            committed_at=row.committed_at,
-                            acquired_amount=row.acquired_amount,
-                            transfer_note_format=row.transfer_note_format,
-                            transfer_note=row.transfer_note,
-                            principal=row.principal,
-                            previous_transfer_number=row.previous_transfer_number,
-                            sender=row.sender,
-                            recipient=row.recipient,
-                            ts=row.ts,
-                            inserted_at=current_ts,
-                        )
-                        for row in rows
-                        if (
-                                sharding_realm.match(row.creditor_id)
-                                or not (
-                                    # Replying the message more than once
-                                    # is safe, and therefore we do not shy
-                                    # from doing it unless we are certain
-                                    # that the other shard is the one
-                                    # responsible for this particular
-                                    # message.
-                                    delete_parent_records
-                                    and sharding_realm.match(
-                                        row.creditor_id, match_parent=True
-                                    )
-                                )
-                        )
-                    ]
-                    if to_replay:
-                        db.session.execute(
-                            insert(ReplayedAccountTransferSignal)
-                            .execution_options(
-                                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                                synchronize_session=False,
-                            ),
-                            to_replay,
-                        )
-                    chosen = DelayedAccountTransfer.choose_rows(
-                        [(row.turn_id, row.message_id) for row in rows]
-                    )
-                    db.session.execute(SET_FORCE_CUSTOM_PLAN)
-                    db.session.execute(
-                        delete(DelayedAccountTransfer)
-                        .execution_options(synchronize_session=False)
-                        .where(
-                            DELAYED_ACCOUNT_TRANSFER_PK == tuple_(*chosen.c)
-                        )
-                    )
-                    db.session.commit()
-                    count += len(rows)
+                    count += _replay_delayed_account_transfers_batch(rows)
 
     db.session.close()
     return count
 
 
-def analyze_dispatching_statuses_table() -> None:
-    db.session.execute(text("ANALYZE dispatching_status"))
+def _replay_delayed_account_transfers_batch(rows) -> int:
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    delete_parent_records = cfg["DELETE_PARENT_SHARD_RECORDS"]
+    current_ts = datetime.now(tz=timezone.utc)
+
+    to_replay = [
+        dict(
+            creditor_id=row.creditor_id,
+            debtor_id=row.debtor_id,
+            creation_date=row.creation_date,
+            transfer_number=row.transfer_number,
+            coordinator_type=row.coordinator_type,
+            committed_at=row.committed_at,
+            acquired_amount=row.acquired_amount,
+            transfer_note_format=row.transfer_note_format,
+            transfer_note=row.transfer_note,
+            principal=row.principal,
+            previous_transfer_number=row.previous_transfer_number,
+            sender=row.sender,
+            recipient=row.recipient,
+            ts=row.ts,
+            inserted_at=current_ts,
+        )
+        for row in rows
+        if (
+                sharding_realm.match(row.creditor_id)
+                or not (
+                    # Replying the message more than once
+                    # is safe, and therefore we do not shy
+                    # from doing it unless we are certain
+                    # that the other shard is the one
+                    # responsible for this particular
+                    # message.
+                    delete_parent_records
+                    and sharding_realm.match(
+                        row.creditor_id, match_parent=True
+                    )
+                )
+        )
+    ]
+    if to_replay:
+        db.session.execute(
+            insert(ReplayedAccountTransferSignal)
+            .execution_options(
+                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
+                synchronize_session=False,
+            ),
+            to_replay,
+        )
+
+    chosen = DelayedAccountTransfer.choose_rows(
+        [(row.turn_id, row.message_id) for row in rows]
+    )
+    db.session.execute(SET_FORCE_CUSTOM_PLAN)
+    db.session.execute(
+        delete(DelayedAccountTransfer)
+        .execution_options(synchronize_session=False)
+        .where(
+            DELAYED_ACCOUNT_TRANSFER_PK == tuple_(*chosen.c)
+        )
+    )
     db.session.commit()
-    db.session.close()
+
+    return len(rows)
 
 
 def signal_dispatching_statuses_ready_to_send() -> None:
+    current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
@@ -302,8 +303,10 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                                 DISPATCHING_STATUS_PK == tuple_(*chosen.c)
                             )
                             .where(
-                                DispatchingStatus.started_sending == false(),
-                                DispatchingStatus.awaiting_signal_flag == false(),
+                                DispatchingStatus.started_sending
+                                == false(),
+                                DispatchingStatus.awaiting_signal_flag
+                                == false(),
                             )
                             .with_for_update(skip_locked=True)
                     ).all()
@@ -316,20 +319,21 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                         .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
-                    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
                     db.session.execute(
-                        insert(StartSendingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        [
-                            {
-                                "collector_id": collector_id,
-                                "debtor_id": debtor_id,
-                                "turn_id": turn_id,
-                            }
-                            for collector_id, debtor_id, turn_id in pks_to_update
-                        ],
+                        StartSendingSignal.insert_rows(
+                            [
+                                (
+                                    None,  # signal_id
+                                    collector_id,
+                                    turn_id,
+                                    debtor_id,
+                                    current_ts,
+                                )
+                                for collector_id, debtor_id, turn_id
+                                in pks_to_update
+                            ],
+                            default_columns=["signal_id"],
+                        )
                     )
 
                 db.session.commit()
@@ -394,6 +398,7 @@ def update_dispatching_statuses_with_everything_sent() -> None:
 
 
 def signal_dispatching_statuses_ready_to_dispatch() -> None:
+    current_ts = datetime.now(tz=timezone.utc)
     sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
 
     with db.engine.connect() as w_conn:
@@ -431,8 +436,10 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                             )
                             .where(
                                 DispatchingStatus.all_sent == true(),
-                                DispatchingStatus.started_dispatching == false(),
-                                DispatchingStatus.awaiting_signal_flag == false(),
+                                DispatchingStatus.started_dispatching
+                                == false(),
+                                DispatchingStatus.awaiting_signal_flag
+                                == false(),
                             )
                             .with_for_update(skip_locked=True)
                     ).all()
@@ -445,20 +452,21 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                         .where(DISPATCHING_STATUS_PK == tuple_(*to_update.c))
                         .values(awaiting_signal_flag=True)
                     )
-                    db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
                     db.session.execute(
-                        insert(StartDispatchingSignal).execution_options(
-                            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                            synchronize_session=False,
-                        ),
-                        [
-                            {
-                                "collector_id": collector_id,
-                                "debtor_id": debtor_id,
-                                "turn_id": turn_id,
-                            }
-                            for collector_id, debtor_id, turn_id in pks_to_update
-                        ],
+                        StartDispatchingSignal.insert_rows(
+                            [
+                                (
+                                    None,  # signal_id
+                                    collector_id,
+                                    turn_id,
+                                    debtor_id,
+                                    current_ts,
+                                )
+                                for collector_id, debtor_id, turn_id
+                                in pks_to_update
+                            ],
+                            default_columns=["signal_id"],
+                        )
                     )
 
                 db.session.commit()
@@ -501,7 +509,8 @@ def delete_dispatching_statuses_with_everything_dispatched() -> None:
                                 DISPATCHING_STATUS_PK == tuple_(*chosen.c)
                             )
                             .where(
-                                DispatchingStatus.started_dispatching == true(),
+                                DispatchingStatus.started_dispatching
+                                == true(),
                             )
                             .with_for_update(skip_locked=True)
                     ).all()
