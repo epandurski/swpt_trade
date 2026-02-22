@@ -385,7 +385,10 @@ def _load_currencies(bp: BidProcessor, turn_id: int) -> None:
 
 def _generate_user_candidate_offers(bp, turn_id):
     current_ts = datetime.now(tz=timezone.utc)
-    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    deficit_correction = 1.0 / (1.0 - cfg["TRANSFERS_AMOUNT_CUT"])
+    allowed_inaccuracy = 0.001
     bid_counter = 0
 
     def calc_user_bid_amount(row) -> int:
@@ -396,19 +399,29 @@ def _generate_user_candidate_offers(bp, turn_id):
                 or row.max_principal < row.min_principal
                 or row.min_principal <= row.principal <= row.max_principal
         ):
+            # Can not trade.
             return 0
 
-        if row.principal < row.min_principal:
+        # The deficit/excess amounts will not be offered for trade if
+        # they are insignificant compared to the currently available
+        # amount (`row.principal`).
+        insignificant_amount = int(abs(row.principal) * allowed_inaccuracy)
+        assert insignificant_amount >= 0
+
+        deficit_amount = row.min_principal - row.principal
+        if deficit_amount > insignificant_amount:
             # Return a positive number (buy).
             return contain_principal_overflow(
-                row.min_principal - row.principal
+                math.ceil(deficit_amount * deficit_correction)
             )
 
-        # Return a negative number (sell).
-        assert row.principal > row.max_principal
-        return contain_principal_overflow(
-            row.max_principal - row.principal
-        )
+        excess_amount = row.principal - row.max_principal
+        if excess_amount > insignificant_amount:
+            # Return a negative number (sell).
+            return contain_principal_overflow(-excess_amount)
+
+        # The desired change is insignificant.
+        return 0  # pragma: no cover
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
