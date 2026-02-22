@@ -119,9 +119,9 @@ class SqlUtilsMixin:
     def choose_rows(cls, primary_keys: list[tuple], name: str = "chosen"):
         """Return a CTE query for the given primary keys.
 
-        This is useful when you want to perform an operation (delete
-        or update) only on the set of rows specified by the given
-        primary keys.
+        This is useful when you want to perform an operation (select,
+        delete, or update) only on the set of rows specified by the
+        given primary keys.
 
         The `name` parameter specifies the name of the CTE (Common
         Table Expression) query.
