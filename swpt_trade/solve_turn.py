@@ -227,7 +227,7 @@ def _delete_phase3_turn_records_from_table(table) -> None:
 def _write_takings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.takings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
-            CreditorTaking.insert_rows([
+            CreditorTaking.insert_tuples([
                 (
                     turn_id,
                     ac.creditor_id,
@@ -240,7 +240,7 @@ def _write_takings(solver: Solver, turn_id: int) -> None:
             ])
         )
         db.session.execute(
-            CollectorCollecting.insert_rows([
+            CollectorCollecting.insert_tuples([
                 (
                     turn_id,
                     ac.debtor_id,
@@ -268,7 +268,7 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
             solver.collector_transfers_iter(), INSERT_BATCH_SIZE
     ):
         db.session.execute(
-            CollectorSending.insert_rows([
+            CollectorSending.insert_tuples([
                 (
                     turn_id,
                     ct.debtor_id,
@@ -281,7 +281,7 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
             ])
         )
         db.session.execute(
-            CollectorReceiving.insert_rows([
+            CollectorReceiving.insert_tuples([
                 (
                     turn_id,
                     ct.debtor_id,
@@ -307,7 +307,7 @@ def _write_collector_transfers(solver: Solver, turn_id: int) -> None:
 def _write_givings(solver: Solver, turn_id: int) -> None:
     for account_changes in batched(solver.givings_iter(), INSERT_BATCH_SIZE):
         db.session.execute(
-            CollectorDispatching.insert_rows([
+            CollectorDispatching.insert_tuples([
                 (
                     turn_id,
                     ac.debtor_id,
@@ -320,7 +320,7 @@ def _write_givings(solver: Solver, turn_id: int) -> None:
             ])
         )
         db.session.execute(
-            CreditorGiving.insert_rows([
+            CreditorGiving.insert_tuples([
                 (
                     turn_id,
                     ac.creditor_id,

@@ -114,9 +114,19 @@ def message_belongs_to_this_shard(
         raise RuntimeError("Unknown message type.")
 
 
-class ChooseRowsMixin:
+class SqlUtilsMixin:
     @classmethod
     def choose_rows(cls, primary_keys: list[tuple], name: str = "chosen"):
+        """Return a CTE query for the given primary keys.
+
+        This is useful when you want to perform an operation (delete
+        or update) only on the set of rows specified by the given
+        primary keys.
+
+        The `name` parameter specifies the name of the CTE (Common
+        Table Expression) query.
+
+        """
         pktype_name = f"{cls.__table__.name}_pktype"
         bindparam_name = f"{name}_rows"
         return (
@@ -127,12 +137,26 @@ class ChooseRowsMixin:
         )
 
     @classmethod
-    def insert_rows(
+    def insert_tuples(
             cls,
-            rows: list[tuple],
-            name: str = "to_insert",
+            tuples: list[tuple],
             default_columns: list[str] = [],
+            name: str = "to_insert",
     ):
+        """Return a statement for inserting the given tuples.
+
+        Note that the order of the fields in the given `tuples` must
+        be the same as the order in which the columns are defined in
+        the database table.
+
+        If `default_columns` is given, these columns will not be
+        included in the insert statement, and therefore must have
+        default values defined for them in the database schema.
+
+        The `name` parameter specifies the name of the CTE (Common
+        Table Expression) used in the insert statement.
+
+        """
         table_name = cls.__table__.name
         bindparam_name = f"{name}_rows"
         columns = {
@@ -142,7 +166,7 @@ class ChooseRowsMixin:
         }
         rows_to_insert = (
             text(f"SELECT * FROM unnest(:{bindparam_name} :: {table_name}[])")
-            .bindparams(**{bindparam_name: rows})
+            .bindparams(**{bindparam_name: tuples})
             .columns(**columns)
             .cte(name=name)
         )
@@ -153,7 +177,7 @@ class ChooseRowsMixin:
         )
 
 
-class Signal(db.Model, ChooseRowsMixin):
+class Signal(db.Model, SqlUtilsMixin):
     __abstract__ = True
 
     @classmethod

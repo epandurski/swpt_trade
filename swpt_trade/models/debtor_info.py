@@ -2,10 +2,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
-from .common import get_now_utc, ChooseRowsMixin
+from .common import get_now_utc, SqlUtilsMixin
 
 
-class DebtorInfoDocument(db.Model, ChooseRowsMixin):
+class DebtorInfoDocument(db.Model, SqlUtilsMixin):
     debtor_info_locator = db.Column(db.String, primary_key=True)
     debtor_id = db.Column(db.BigInteger, nullable=False)
     peg_debtor_info_locator = db.Column(db.String)
@@ -50,7 +50,7 @@ class DebtorInfoDocument(db.Model, ChooseRowsMixin):
         return not is_frozen and current_ts - self.fetched_at > expiry_period
 
 
-class DebtorLocatorClaim(db.Model, ChooseRowsMixin):
+class DebtorLocatorClaim(db.Model, SqlUtilsMixin):
     debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
     debtor_info_locator = db.Column(db.String)
     latest_locator_fetch_at = db.Column(db.TIMESTAMP(timezone=True))
@@ -81,7 +81,7 @@ class DebtorLocatorClaim(db.Model, ChooseRowsMixin):
     )
 
 
-class DebtorInfoFetch(db.Model, ChooseRowsMixin):
+class DebtorInfoFetch(db.Model, SqlUtilsMixin):
     iri = db.Column(db.String, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     is_locator_fetch = db.Column(db.BOOLEAN, nullable=False, default=False)

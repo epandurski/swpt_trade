@@ -11,7 +11,7 @@ from .common import (
     MAX_INT32,
     MIN_INT64,
     MAX_INT64,
-    ChooseRowsMixin,
+    SqlUtilsMixin,
 )
 
 
@@ -81,7 +81,7 @@ cr_seq = db.Sequence(
 )
 
 
-class AccountLock(db.Model, ChooseRowsMixin):
+class AccountLock(db.Model, SqlUtilsMixin):
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     turn_id = db.Column(db.Integer, nullable=False)
@@ -200,7 +200,7 @@ class AccountLock(db.Model, ChooseRowsMixin):
         )
 
 
-class CreditorParticipation(db.Model, ChooseRowsMixin):
+class CreditorParticipation(db.Model, SqlUtilsMixin):
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     turn_id = db.Column(db.Integer, primary_key=True)
@@ -234,7 +234,7 @@ class CreditorParticipation(db.Model, ChooseRowsMixin):
     )
 
 
-class DispatchingStatus(db.Model, ChooseRowsMixin):
+class DispatchingStatus(db.Model, SqlUtilsMixin):
     # NOTE: The `started_sending`, `all_sent`, `started_dispatching`,
     # and `awaiting_signal_flag` columns are not be part of the
     # primary key, but it probably is a good idea to include them in
@@ -420,7 +420,7 @@ class DispatchingStatus(db.Model, ChooseRowsMixin):
         return amt
 
 
-class WorkerCollecting(db.Model, ChooseRowsMixin):
+class WorkerCollecting(db.Model, SqlUtilsMixin):
     # NOTE: The `amount` column is not be part of the primary key, but
     # it probably is a good idea to include it in the primary key
     # index to allow index-only scans. Because SQLAlchemy does not
@@ -460,7 +460,7 @@ class WorkerCollecting(db.Model, ChooseRowsMixin):
     )
 
 
-class WorkerSending(db.Model, ChooseRowsMixin):
+class WorkerSending(db.Model, SqlUtilsMixin):
     # NOTE: The `amount` column is not be part of the primary key, but
     # it probably is a good idea to include it in the primary key
     # index to allow index-only scans. Because SQLAlchemy does not
@@ -489,7 +489,7 @@ class WorkerSending(db.Model, ChooseRowsMixin):
     )
 
 
-class WorkerReceiving(db.Model, ChooseRowsMixin):
+class WorkerReceiving(db.Model, SqlUtilsMixin):
     # NOTE: The `received_amount` column is not be part of the primary
     # key, but it probably is a good idea to include it in the primary
     # key index to allow index-only scans. Because SQLAlchemy does not
@@ -538,7 +538,7 @@ class WorkerReceiving(db.Model, ChooseRowsMixin):
     )
 
 
-class WorkerDispatching(db.Model, ChooseRowsMixin):
+class WorkerDispatching(db.Model, SqlUtilsMixin):
     # NOTE: The `amount` column is not be part of the primary key, but
     # it probably is a good idea to include it in the primary key
     # index to allow index-only scans. Because SQLAlchemy does not
@@ -567,7 +567,7 @@ class WorkerDispatching(db.Model, ChooseRowsMixin):
     )
 
 
-class TransferAttempt(db.Model, ChooseRowsMixin):
+class TransferAttempt(db.Model, SqlUtilsMixin):
     UNSPECIFIED_FAILURE = 0
     TIMEOUT = 1
     NEWER_INTEREST_RATE = 2
@@ -804,7 +804,7 @@ class TransferAttempt(db.Model, ChooseRowsMixin):
         self.increment_backoff_counter()
 
 
-class DelayedAccountTransfer(db.Model, ChooseRowsMixin):
+class DelayedAccountTransfer(db.Model, SqlUtilsMixin):
     turn_id = db.Column(db.Integer, primary_key=True)
     message_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     creditor_id = db.Column(db.BigInteger, nullable=False)

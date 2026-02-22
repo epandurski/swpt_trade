@@ -1,10 +1,10 @@
 from __future__ import annotations
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
-from .common import get_now_utc, calc_i64_column_hash, ChooseRowsMixin
+from .common import get_now_utc, calc_i64_column_hash, SqlUtilsMixin
 
 
-class CollectorAccount(db.Model, ChooseRowsMixin):
+class CollectorAccount(db.Model, SqlUtilsMixin):
     # NOTE: The `status` column is not be part of the primary key, but
     # it probably is a good idea to include it in the primary key
     # index to allow index-only scans. Because SQLAlchemy does not
@@ -104,7 +104,7 @@ class Turn(db.Model):
     )
 
 
-class DebtorInfo(db.Model, ChooseRowsMixin):
+class DebtorInfo(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_info_locator = db.Column(db.String, primary_key=True)
@@ -126,7 +126,7 @@ class DebtorInfo(db.Model, ChooseRowsMixin):
     )
 
 
-class ConfirmedDebtor(db.Model, ChooseRowsMixin):
+class ConfirmedDebtor(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -177,7 +177,7 @@ class CurrencyInfo(db.Model):
     )
 
 
-class SellOffer(db.Model, ChooseRowsMixin):
+class SellOffer(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -198,7 +198,7 @@ class SellOffer(db.Model, ChooseRowsMixin):
     )
 
 
-class BuyOffer(db.Model, ChooseRowsMixin):
+class BuyOffer(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -218,7 +218,7 @@ class BuyOffer(db.Model, ChooseRowsMixin):
     )
 
 
-class CreditorTaking(db.Model, ChooseRowsMixin):
+class CreditorTaking(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -241,7 +241,7 @@ class CreditorTaking(db.Model, ChooseRowsMixin):
     )
 
 
-class CollectorCollecting(db.Model, ChooseRowsMixin):
+class CollectorCollecting(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -264,7 +264,7 @@ class CollectorCollecting(db.Model, ChooseRowsMixin):
     )
 
 
-class CollectorSending(db.Model, ChooseRowsMixin):
+class CollectorSending(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -288,7 +288,7 @@ class CollectorSending(db.Model, ChooseRowsMixin):
     )
 
 
-class CollectorReceiving(db.Model, ChooseRowsMixin):
+class CollectorReceiving(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -312,7 +312,7 @@ class CollectorReceiving(db.Model, ChooseRowsMixin):
     )
 
 
-class CollectorDispatching(db.Model, ChooseRowsMixin):
+class CollectorDispatching(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
@@ -335,7 +335,7 @@ class CollectorDispatching(db.Model, ChooseRowsMixin):
     )
 
 
-class CreditorGiving(db.Model, ChooseRowsMixin):
+class CreditorGiving(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -375,7 +375,7 @@ class OverloadedCurrency(db.Model):
     )
 
 
-class HoardedCurrency(db.Model, ChooseRowsMixin):
+class HoardedCurrency(db.Model, SqlUtilsMixin):
     __bind_key__ = "solver"
     turn_id = db.Column(db.Integer, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
