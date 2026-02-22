@@ -1483,7 +1483,7 @@ def process_rescheduled_transfers_batch(
     ]
     if pks_to_trigger:
         db.session.execute(
-            TriggerTransferSignal.insert_rows(
+            TriggerTransferSignal.insert_tuples(
                 [
                     (
                         None,  # signal_id

@@ -270,7 +270,7 @@ def _process_pristine_collectors_batch(
     pks_to_configure = pks_to_create | pks_to_retry
     if pks_to_configure:
         db.session.execute(
-            ConfigureAccountSignal.insert_rows([
+            ConfigureAccountSignal.insert_tuples([
                 (
                     creditor_id,
                     debtor_id,
@@ -285,7 +285,7 @@ def _process_pristine_collectors_batch(
             ])
         )
         db.session.execute(
-            CollectorStatusChange.insert_rows(
+            CollectorStatusChange.insert_tuples(
                 [
                     (
                         collector_id,
@@ -297,7 +297,7 @@ def _process_pristine_collectors_batch(
                     )
                     for collector_id, debtor_id in pks_to_configure
                 ],
-                default_columns=["change_id"]
+                default_columns=["change_id"],
             )
         )
 

@@ -320,7 +320,7 @@ def signal_dispatching_statuses_ready_to_send() -> None:
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
-                        StartSendingSignal.insert_rows(
+                        StartSendingSignal.insert_tuples(
                             [
                                 (
                                     None,  # signal_id
@@ -453,7 +453,7 @@ def signal_dispatching_statuses_ready_to_dispatch() -> None:
                         .values(awaiting_signal_flag=True)
                     )
                     db.session.execute(
-                        StartDispatchingSignal.insert_rows(
+                        StartDispatchingSignal.insert_tuples(
                             [
                                 (
                                     None,  # signal_id

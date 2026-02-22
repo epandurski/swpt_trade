@@ -2,10 +2,10 @@ from __future__ import annotations
 from datetime import timedelta
 from sqlalchemy.sql.expression import null, or_, and_
 from swpt_trade.extensions import db
-from .common import get_now_utc, TS0, MIN_INT32, ChooseRowsMixin
+from .common import get_now_utc, TS0, MIN_INT32, SqlUtilsMixin
 
 
-class NeededWorkerAccount(db.Model, ChooseRowsMixin):
+class NeededWorkerAccount(db.Model, SqlUtilsMixin):
     creditor_id = db.Column(db.BigInteger, primary_key=True)
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     configured_at = db.Column(
@@ -28,7 +28,7 @@ class NeededWorkerAccount(db.Model, ChooseRowsMixin):
     )
 
 
-class WorkerAccount(db.Model, ChooseRowsMixin):
+class WorkerAccount(db.Model, SqlUtilsMixin):
     CONFIG_SCHEDULED_FOR_DELETION_FLAG = 1 << 0
 
     creditor_id = db.Column(db.BigInteger, primary_key=True)
@@ -132,7 +132,7 @@ WORKER_ACCOUNT_TABLES_JOIN_PREDICATE = and_(
 )
 
 
-class InterestRateChange(db.Model, ChooseRowsMixin):
+class InterestRateChange(db.Model, SqlUtilsMixin):
     # NOTE: The `interest_rate` column is not be part of the primary
     # key, but it probably is a good idea to include it in the primary
     # key index to allow index-only scans. Because SQLAlchemy does not
@@ -181,7 +181,7 @@ class InterestRateChange(db.Model, ChooseRowsMixin):
     )
 
 
-class CollectorStatusChange(db.Model, ChooseRowsMixin):
+class CollectorStatusChange(db.Model, SqlUtilsMixin):
     collector_id = db.Column(db.BigInteger, primary_key=True)
     change_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     debtor_id = db.Column(db.BigInteger, nullable=False)
@@ -208,7 +208,7 @@ class CollectorStatusChange(db.Model, ChooseRowsMixin):
     )
 
 
-class NeededCollectorAccount(db.Model, ChooseRowsMixin):
+class NeededCollectorAccount(db.Model, SqlUtilsMixin):
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
     __table_args__ = (
@@ -221,7 +221,7 @@ class NeededCollectorAccount(db.Model, ChooseRowsMixin):
     )
 
 
-class RecentlyNeededCollector(db.Model, ChooseRowsMixin):
+class RecentlyNeededCollector(db.Model, SqlUtilsMixin):
     debtor_id = db.Column(db.BigInteger, primary_key=True, autoincrement=False)
     needed_at = db.Column(
         db.TIMESTAMP(timezone=True), nullable=False, default=get_now_utc
@@ -240,7 +240,7 @@ class RecentlyNeededCollector(db.Model, ChooseRowsMixin):
     )
 
 
-class UsableCollector(db.Model, ChooseRowsMixin):
+class UsableCollector(db.Model, SqlUtilsMixin):
     debtor_id = db.Column(db.BigInteger, primary_key=True)
     collector_id = db.Column(db.BigInteger, primary_key=True)
     account_id = db.Column(db.String, nullable=False)

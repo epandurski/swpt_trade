@@ -208,7 +208,7 @@ def _populate_debtor_infos(w_conn, s_conn, turn_id):
         for rows in result.partitions(INSERT_BATCH_SIZE):
             try:
                 s_conn.execute(
-                    DebtorInfo.insert_rows([
+                    DebtorInfo.insert_tuples([
                         (
                             turn_id,
                             row.debtor_info_locator,
@@ -247,7 +247,7 @@ def _populate_confirmed_debtors(w_conn, s_conn, turn_id):
         for rows in result.partitions(INSERT_BATCH_SIZE):
             try:
                 s_conn.execute(
-                    ConfirmedDebtor.insert_rows([
+                    ConfirmedDebtor.insert_tuples([
                         (
                             turn_id,
                             row.debtor_id,
@@ -385,7 +385,10 @@ def _load_currencies(bp: BidProcessor, turn_id: int) -> None:
 
 def _generate_user_candidate_offers(bp, turn_id):
     current_ts = datetime.now(tz=timezone.utc)
-    sharding_realm: ShardingRealm = current_app.config["SHARDING_REALM"]
+    cfg = current_app.config
+    sharding_realm: ShardingRealm = cfg["SHARDING_REALM"]
+    deficit_correction = 1.0 / (1.0 - cfg["TRANSFERS_AMOUNT_CUT"])
+    allowed_inaccuracy = 0.001
     bid_counter = 0
 
     def calc_user_bid_amount(row) -> int:
@@ -396,19 +399,29 @@ def _generate_user_candidate_offers(bp, turn_id):
                 or row.max_principal < row.min_principal
                 or row.min_principal <= row.principal <= row.max_principal
         ):
+            # Can not trade.
             return 0
 
-        if row.principal < row.min_principal:
+        # The deficit/excess amounts will not be offered for trade if
+        # they are insignificant compared to the currently available
+        # amount (`row.principal`).
+        insignificant_amount = int(abs(row.principal) * allowed_inaccuracy)
+        assert insignificant_amount >= 0
+
+        deficit_amount = row.min_principal - row.principal
+        if deficit_amount > insignificant_amount:
             # Return a positive number (buy).
             return contain_principal_overflow(
-                row.min_principal - row.principal
+                math.ceil(deficit_amount * deficit_correction)
             )
 
-        # Return a negative number (sell).
-        assert row.principal > row.max_principal
-        return contain_principal_overflow(
-            row.max_principal - row.principal
-        )
+        excess_amount = row.principal - row.max_principal
+        if excess_amount > insignificant_amount:
+            # Return a negative number (sell).
+            return contain_principal_overflow(-excess_amount)
+
+        # The desired change is insignificant.
+        return 0  # pragma: no cover
 
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
@@ -619,7 +632,7 @@ def _generate_owner_candidate_offers(bp, turn_id, collection_deadline):
 def _process_bids(bp: BidProcessor, turn_id: int, ts: datetime) -> None:
     for candidate_offers in batched(bp.analyze_bids(), INSERT_BATCH_SIZE):
         db.session.execute(
-            CandidateOfferSignal.insert_rows([
+            CandidateOfferSignal.insert_tuples([
                 (
                     turn_id,
                     o.debtor_id,
@@ -656,7 +669,7 @@ def _copy_usable_collectors(bp: BidProcessor) -> None:
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
                 db.session.execute(
-                    UsableCollector.insert_rows([
+                    UsableCollector.insert_tuples([
                         (
                             row.debtor_id,
                             row.collector_id,
@@ -681,7 +694,7 @@ def _insert_needed_collector_signals(bp: BidProcessor) -> None:
             bp.currencies_to_be_confirmed(), INSERT_BATCH_SIZE
     ):
         db.session.execute(
-            NeededCollectorSignal.insert_rows(
+            NeededCollectorSignal.insert_tuples(
                 [
                     (
                         None,  # signal_id
@@ -747,7 +760,7 @@ def _populate_sell_offers(w_conn, s_conn, turn_id):
         for rows in result.partitions(INSERT_BATCH_SIZE):
             try:
                 s_conn.execute(
-                    SellOffer.insert_rows([
+                    SellOffer.insert_tuples([
                         (
                             turn_id,
                             row.creditor_id,
@@ -792,7 +805,7 @@ def _populate_buy_offers(w_conn, s_conn, turn_id):
         for rows in result.partitions(INSERT_BATCH_SIZE):
             try:
                 s_conn.execute(
-                    BuyOffer.insert_rows([
+                    BuyOffer.insert_tuples([
                         (
                             turn_id,
                             row.creditor_id,
@@ -877,7 +890,7 @@ def _copy_creditor_takings(s_conn, worker_turn):
                 for row in rows
             ]
             assert all(sharding_realm.match(t[0]) for t in to_insert)
-            db.session.execute(CreditorParticipation.insert_rows(to_insert))
+            db.session.execute(CreditorParticipation.insert_tuples(to_insert))
 
 
 def _copy_creditor_givings(s_conn, worker_turn):
@@ -912,7 +925,7 @@ def _copy_creditor_givings(s_conn, worker_turn):
                 for row in rows
             ]
             assert all(sharding_realm.match(t[0]) for t in to_insert)
-            db.session.execute(CreditorParticipation.insert_rows(to_insert))
+            db.session.execute(CreditorParticipation.insert_tuples(to_insert))
 
 
 def _copy_collector_collectings(s_conn, worker_turn, statuses):
@@ -956,7 +969,7 @@ def _copy_collector_collectings(s_conn, worker_turn, statuses):
                 for row in rows
             ]
             assert all(sharding_realm.match(t[0]) for t in to_insert)
-            db.session.execute(WorkerCollecting.insert_rows(to_insert))
+            db.session.execute(WorkerCollecting.insert_tuples(to_insert))
             for t in to_insert:
                 statuses.register_collecting(t[0], t[1], t[2], t[4])
 
@@ -1002,7 +1015,7 @@ def _copy_collector_sendings(s_conn, worker_turn, statuses):
                 for row in rows
             ]
             assert all(sharding_realm.match(t[0]) for t in to_insert)
-            db.session.execute(WorkerSending.insert_rows(to_insert))
+            db.session.execute(WorkerSending.insert_tuples(to_insert))
             for t in to_insert:
                 statuses.register_sending(t[0], t[1], t[2], t[4])
 
@@ -1049,7 +1062,7 @@ def _copy_collector_receivings(s_conn, worker_turn, statuses):
                 for row in rows
             ]
             assert all(sharding_realm.match(t[0]) for t in to_insert)
-            db.session.execute(WorkerReceiving.insert_rows(to_insert))
+            db.session.execute(WorkerReceiving.insert_tuples(to_insert))
             for t in to_insert:
                 statuses.register_receiving(t[0], t[1], t[2], t[4])
 
@@ -1097,7 +1110,7 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
                 for row in rows
             ]
             assert all(sharding_realm.match(t[0]) for t in to_insert)
-            db.session.execute(WorkerDispatching.insert_rows(to_insert))
+            db.session.execute(WorkerDispatching.insert_tuples(to_insert))
             for t in to_insert:
                 statuses.register_dispatching(t[0], t[1], t[2], t[4])
 
@@ -1132,7 +1145,7 @@ def _insert_revise_account_lock_signals(worker_turn):
         ) as result:
             for rows in result.partitions(INSERT_BATCH_SIZE):
                 db.session.execute(
-                    ReviseAccountLockSignal.insert_rows(
+                    ReviseAccountLockSignal.insert_tuples(
                         [
                             (
                                 None,  # signal_id
@@ -1371,7 +1384,7 @@ def _update_worker_account_surplus_amounts(turn_id: int) -> None:
 
                     if signals:
                         db.session.execute(
-                            CalculateSurplusSignal.insert_rows(
+                            CalculateSurplusSignal.insert_tuples(
                                 signals,
                                 default_columns=["signal_id"],
                             )
@@ -1415,7 +1428,7 @@ def _kill_broken_worker_accounts() -> None:
                 pks_to_kill = [tuple(row) for row in rows]
                 _kill_needed_worker_accounts_and_rate_stats(pks_to_kill)
                 db.session.execute(
-                    CollectorStatusChange.insert_rows(
+                    CollectorStatusChange.insert_tuples(
                         [
                             (
                                 creditor_id,

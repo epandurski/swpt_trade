@@ -2120,7 +2120,7 @@ def test_run_phase2_subphase0(
     assert cas[0].turn_id == t1.turn_id
     assert cas[0].debtor_id == 666
     assert cas[0].creditor_id == 123
-    assert cas[0].amount == 200000
+    assert 200000 <= cas[0].amount <= 200200
     assert cas[0].account_creation_date == date(2024, 4, 8)
     assert cas[0].last_transfer_number == 567
     assert cas[0].inserted_at >= current_ts
