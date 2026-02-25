@@ -182,15 +182,17 @@ class Signal(db.Model, SqlUtilsMixin):
 
     @classmethod
     def send_signalbus_messages(cls, objects):  # pragma: no cover
-        assert all(isinstance(obj, cls) for obj in objects)
-        messages = (obj._create_message() for obj in objects)
+        create_message = cls._create_message
+        messages = (create_message(obj) for obj in objects)
         cls.publisher.publish_messages([m for m in messages if m is not None])
 
-    def send_signalbus_message(self):  # pragma: no cover
-        self.send_signalbus_messages([self])
+    @classmethod
+    def send_signalbus_message(cls, obj):  # pragma: no cover
+        cls.send_signalbus_messages([obj])
 
-    def _create_message(self):
-        data = self.__marshmallow_schema__.dump(self)
+    @classmethod
+    def _create_message(cls, obj):
+        data = cls.__marshmallow_schema__.dump(obj)
         message_type = data["type"]
         headers = {"message-type": message_type}
         is_smp_message = message_type in SMP_MESSAGE_TYPES
@@ -232,8 +234,8 @@ class Signal(db.Model, SqlUtilsMixin):
         ).encode("utf8")
 
         return rabbitmq.Message(
-            exchange=self.exchange_name,
-            routing_key=self.routing_key,
+            exchange=cls.exchange_name,
+            routing_key=cls.get_routing_key(obj),
             body=body,
             properties=properties,
             mandatory=message_type == "FinalizeTransfer" or not is_smp_message,
