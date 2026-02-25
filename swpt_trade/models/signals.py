@@ -49,9 +49,9 @@ class ConfigureAccountSignal(Signal):
     config_data = db.Column(db.String, nullable=False, default="")
     config_flags = db.Column(db.Integer, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return i64_to_hex_routing_key(self.debtor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return i64_to_hex_routing_key(obj.debtor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -91,9 +91,9 @@ class PrepareTransferSignal(Signal):
     )
     max_commit_delay = db.Column(db.Integer, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return i64_to_hex_routing_key(self.debtor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return i64_to_hex_routing_key(obj.debtor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -129,9 +129,9 @@ class FinalizeTransferSignal(Signal):
     transfer_note_format = db.Column(db.String, nullable=False)
     transfer_note = db.Column(db.String, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return i64_to_hex_routing_key(self.debtor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return i64_to_hex_routing_key(obj.debtor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -164,9 +164,9 @@ class FetchDebtorInfoSignal(Signal):
     forced_iri = db.Column(db.String)
     recursion_level = db.Column(db.SmallInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_iri_routing_key(self.iri)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_iri_routing_key(obj.iri)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -205,9 +205,9 @@ class StoreDocumentSignal(Signal):
     peg_exchange_rate = db.Column(db.FLOAT)
     will_not_change_until = db.Column(db.TIMESTAMP(timezone=True))
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_iri_routing_key(self.debtor_info_locator)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_iri_routing_key(obj.debtor_info_locator)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -248,9 +248,9 @@ class DiscoverDebtorSignal(Signal):
     force_locator_refetch = db.Column(db.Boolean, nullable=False)
     iri = db.Column(db.String, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.debtor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.debtor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -278,9 +278,9 @@ class ConfirmDebtorSignal(Signal):
     debtor_id = db.Column(db.BigInteger, nullable=False)
     debtor_info_locator = db.Column(db.String, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.debtor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.debtor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -316,9 +316,9 @@ class CandidateOfferSignal(Signal):
     account_creation_date = db.Column(db.DATE, nullable=False)
     last_transfer_number = db.Column(db.BigInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.creditor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.creditor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -342,9 +342,9 @@ class NeededCollectorSignal(Signal):
     signal_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     debtor_id = db.Column(db.BigInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.debtor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.debtor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -371,9 +371,9 @@ class ReviseAccountLockSignal(Signal):
     debtor_id = db.Column(db.BigInteger, nullable=False)
     turn_id = db.Column(db.Integer, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.creditor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.creditor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -404,9 +404,9 @@ class TriggerTransferSignal(Signal):
     creditor_id = db.Column(db.BigInteger, nullable=False)
     transfer_kind = db.Column(db.SmallInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.collector_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.collector_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -441,9 +441,9 @@ class AccountIdRequestSignal(Signal):
     creditor_id = db.Column(db.BigInteger, nullable=False)
     transfer_kind = db.Column(db.SmallInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.creditor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.creditor_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -478,9 +478,9 @@ class AccountIdResponseSignal(Signal):
     account_id = db.Column(db.String, nullable=False)
     account_id_version = db.Column(db.BigInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.collector_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.collector_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -507,9 +507,9 @@ class StartSendingSignal(Signal):
     turn_id = db.Column(db.Integer, nullable=False)
     debtor_id = db.Column(db.BigInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.collector_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.collector_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -536,9 +536,9 @@ class StartDispatchingSignal(Signal):
     turn_id = db.Column(db.Integer, nullable=False)
     debtor_id = db.Column(db.BigInteger, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.collector_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.collector_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -565,9 +565,9 @@ class CalculateSurplusSignal(Signal):
     debtor_id = db.Column(db.BigInteger, nullable=False)
     turn_id = db.Column(db.Integer, nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.collector_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.collector_id)
 
     @classproperty
     def signalbus_burst_count(self):
@@ -615,9 +615,9 @@ class ReplayedAccountTransferSignal(Signal):
     recipient = db.Column(db.String(100), nullable=False)
     ts = db.Column(db.TIMESTAMP(timezone=True), nullable=False)
 
-    @property
-    def routing_key(self):  # pragma: no cover
-        return calc_bin_routing_key(self.creditor_id)
+    @staticmethod
+    def get_routing_key(obj):  # pragma: no cover
+        return calc_bin_routing_key(obj.creditor_id)
 
     @classproperty
     def signalbus_burst_count(self):

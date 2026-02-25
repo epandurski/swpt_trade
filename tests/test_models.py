@@ -131,13 +131,13 @@ def test_sharding_realm(app, restore_sharding_realm, db_session, current_ts):
     db_session.add(signal2)
     db_session.flush()
 
-    assert signal1._create_message() is not None
+    assert m.ConfigureAccountSignal._create_message(signal1) is not None
 
     with pytest.raises(RuntimeError):
-        signal2._create_message()
+        m.ConfigureAccountSignal._create_message(signal2)
 
     app.config["DELETE_PARENT_SHARD_RECORDS"] = True
-    assert signal2._create_message() is None
+    assert m.ConfigureAccountSignal._create_message(signal2) is None
 
 
 def test_non_smp_signals(db_session):
@@ -150,7 +150,7 @@ def test_non_smp_signals(db_session):
     )
     db_session.add(signal)
     db_session.flush()
-    message = signal._create_message()
+    message = m.FetchDebtorInfoSignal._create_message(signal)
     assert message.mandatory
     assert message.properties.headers["message-type"] == "FetchDebtorInfo"
     assert message.properties.type == "FetchDebtorInfo"
@@ -171,7 +171,7 @@ def test_non_smp_signals(db_session):
     )
     db_session.add(signal)
     db_session.flush()
-    message = signal._create_message()
+    message = m.DiscoverDebtorSignal._create_message(signal)
     assert message.mandatory
     assert message.properties.headers["message-type"] == "DiscoverDebtor"
     assert message.properties.type == "DiscoverDebtor"
@@ -191,7 +191,7 @@ def test_non_smp_signals(db_session):
     )
     db_session.add(signal)
     db_session.flush()
-    message = signal._create_message()
+    message = m.ConfirmDebtorSignal._create_message(signal)
     assert message.mandatory
     assert message.properties.headers["message-type"] == "ConfirmDebtor"
     assert message.properties.type == "ConfirmDebtor"
@@ -218,7 +218,7 @@ def test_configure_account_signal(db_session, current_ts):
     )
     db_session.add(signal)
     db_session.flush()
-    message = signal._create_message()
+    message = m.ConfigureAccountSignal._create_message(signal)
     assert not message.mandatory
     assert message.properties.headers["message-type"] == "ConfigureAccount"
     assert message.properties.headers["creditor-id"] == 4294967297
@@ -254,7 +254,7 @@ def test_finalize_transfer_signal(
     )
     db_session.add(signal)
     db_session.flush()
-    message = signal._create_message()
+    message = m.FinalizeTransferSignal._create_message(signal)
     assert message.mandatory
     assert message.properties.headers["message-type"] == "FinalizeTransfer"
     assert message.properties.headers["creditor-id"] == 4294967297
@@ -284,7 +284,7 @@ def test_finalize_transfer_signal(
     db_session.flush()
 
     with pytest.raises(RuntimeError):
-        signal._create_message()
+        m.FinalizeTransferSignal._create_message(signal)
 
 
 def test_document_has_expired(current_ts):
