@@ -337,23 +337,32 @@ def test_dispatching_data():
     dd.register_dispatching(1, 3, 2, 2000)
 
     ll = list(dd.statuses_iter())
-    ll.sort(key=lambda x: (x["collector_id"], x["turn_id"], x["debtor_id"]))
+    ll.sort(key=lambda x: (x.collector_id, x.turn_id, x.debtor_id))
     assert len(ll) == 2
-    assert ll[0]["collector_id"] == 1
-    assert ll[0]["turn_id"] == 2
-    assert ll[0]["debtor_id"] == 3
-    assert ll[0]["amount_to_collect"] == 250
-    assert ll[0]["amount_to_send"] == 500
-    assert ll[0]["amount_to_receive"] == 1000
-    assert ll[0]["number_to_receive"] == 1
-    assert ll[0]["amount_to_dispatch"] == 2000
-    assert ll[1]["collector_id"] == 1
-    assert ll[1]["turn_id"] == 2
-    assert ll[1]["debtor_id"] == 4
-    assert ll[1]["amount_to_collect"] == 300
-    assert ll[1]["amount_to_send"] == 0
-    assert ll[1]["number_to_receive"] == 0
-    assert ll[1]["amount_to_dispatch"] == 0
+    assert ll[0].collector_id == ll[0][0] == 1
+    assert ll[0].debtor_id == ll[0][1] == 3
+    assert ll[0].turn_id == ll[0][2] == 2
+    assert ll[0].inserted_at == ll[0][3]
+    assert ll[0].amount_to_collect == ll[0][4] == 250
+    assert ll[0].total_collected_amount == ll[0][5]
+    assert ll[0].amount_to_send == ll[0][6] == 500
+    assert ll[0].started_sending == ll[0][7]
+    assert ll[0].all_sent == ll[0][8]
+    assert ll[0].amount_to_receive == ll[0][9] == 1000
+    assert ll[0].number_to_receive == ll[0][10] == 1
+    assert ll[0].total_received_amount == ll[0][11]
+    assert ll[0].all_received == ll[0][12]
+    assert ll[0].amount_to_dispatch == ll[0][13] == 2000
+    assert ll[0].started_dispatching == ll[0][14]
+    assert ll[0].awaiting_signal_flag == ll[0][15]
+
+    assert ll[1].collector_id == 1
+    assert ll[1].turn_id == 2
+    assert ll[1].debtor_id == 4
+    assert ll[1].amount_to_collect == 300
+    assert ll[1].amount_to_send == 0
+    assert ll[1].number_to_receive == 0
+    assert ll[1].amount_to_dispatch ==  0
 
 
 def test_calc_balance_at():

@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from flask import current_app
 from sqlalchemy import text, insert
 from sqlalchemy.inspection import inspect
+from sqlalchemy.dialects import postgresql
 from swpt_trade.extensions import db
 from swpt_pythonlib import rabbitmq
 from swpt_pythonlib.utils import ShardingRealm
@@ -171,7 +172,7 @@ class SqlUtilsMixin:
             .cte(name=name)
         )
         return (
-            insert(cls)
+            postgresql.insert(cls)
             .execution_options(synchronize_session=False)
             .from_select(list(columns), rows_to_insert)
         )

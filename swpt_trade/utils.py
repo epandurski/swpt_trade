@@ -7,7 +7,15 @@ import struct
 import functools
 from heapq import heappush, heappop, heappushpop
 from random import Random
-from typing import TypeVar, Self, Iterable, Callable, Optional, Iterator
+from typing import (
+    TypeVar,
+    Self,
+    Iterable,
+    Callable,
+    Optional,
+    Iterator,
+    NamedTuple,
+)
 from enum import Enum
 from dataclasses import dataclass
 from hashlib import md5
@@ -134,6 +142,24 @@ class CurrencyBuyersCountHeap:
 
 
 class DispatchingData:
+    class Status(NamedTuple):
+        collector_id: int
+        debtor_id: int
+        turn_id: int
+        inserted_at: datetime
+        amount_to_collect: int
+        total_collected_amount: Optional[int]
+        amount_to_send: int
+        started_sending: bool
+        all_sent: bool
+        amount_to_receive: int
+        number_to_receive: int
+        total_received_amount: Optional[None]
+        all_received: bool
+        amount_to_dispatch: int
+        started_dispatching: bool
+        awaiting_signal_flag: bool
+
     def __init__(self, turn_id):
         self._turn_id = turn_id
         self._empty_value_tuple = (0, 0, 0, 0, 0)
@@ -167,30 +193,30 @@ class DispatchingData:
         value = self._get_value(collector_id, debtor_id)
         value[4] = contain_principal_overflow(value[4] + amount)
 
-    def statuses_iter(self):
+    def statuses_iter(self) -> Iterable[Status]:
         current_ts = datetime.now(tz=timezone.utc)
         turn_id = self._turn_id
 
         for key, value in self._data.items():
             collector_id, debtor_id = struct.unpack('qq', key)
-            yield {
-                "collector_id": collector_id,
-                "debtor_id": debtor_id,
-                "turn_id": turn_id,
-                "inserted_at": current_ts,
-                "amount_to_collect": value[0],
-                "total_collected_amount": None,
-                "amount_to_send": value[1],
-                "started_sending": False,
-                "all_sent": False,
-                "amount_to_receive": value[2],
-                "number_to_receive": value[3],
-                "total_received_amount": None,
-                "all_received": False,
-                "amount_to_dispatch": value[4],
-                "started_dispatching": False,
-                "awaiting_signal_flag": False,
-            }
+            yield DispatchingData.Status(
+                collector_id=collector_id,
+                debtor_id=debtor_id,
+                turn_id=turn_id,
+                inserted_at=current_ts,
+                amount_to_collect=value[0],
+                total_collected_amount=None,
+                amount_to_send=value[1],
+                started_sending=False,
+                all_sent=False,
+                amount_to_receive=value[2],
+                number_to_receive=value[3],
+                total_received_amount=None,
+                all_received=False,
+                amount_to_dispatch=value[4],
+                started_dispatching=False,
+                awaiting_signal_flag=False,
+            )
 
 
 def allow_none(func: Callable[[str], T]) -> Callable[[str], Optional[T]]:

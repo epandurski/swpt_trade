@@ -83,6 +83,7 @@ INTEREST_RATE_CHANGE_PK = tuple_(
     InterestRateChange.change_ts,
 )
 KILL_ACCOUNTS_BATCH_SIZE = 1000
+STATUSES_BATCH_SIZE = 2500
 INSERT_BATCH_SIZE = 5000
 UPDATE_BATCH_SIZE = 5000
 DELETE_BATCH_SIZE = 5000
@@ -1118,13 +1119,9 @@ def _copy_collector_dispatchings(s_conn, worker_turn, statuses):
 
 
 def _create_dispatching_statuses(worker_turn, statuses):
-    for status_dicts in batched(statuses.statuses_iter(), INSERT_BATCH_SIZE):
+    for statuses in batched(statuses.statuses_iter(), STATUSES_BATCH_SIZE):
         db.session.execute(
-            insert(DispatchingStatus).execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            ),
-            status_dicts,
+            DispatchingStatus.insert_tuples(list(statuses))
         )
     db.session.execute(text("ANALYZE dispatching_status"))
 

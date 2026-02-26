@@ -3,11 +3,11 @@ from datetime import datetime, timezone, timedelta
 from flask import current_app
 from sqlalchemy import select, update, delete, bindparam
 from sqlalchemy.sql.expression import func, text, null, tuple_
-from sqlalchemy.dialects import postgresql
 from swpt_pythonlib.utils import ShardingRealm
 from swpt_trade.utils import u16_to_i16
 from swpt_trade.extensions import db
 from swpt_trade.models import (
+    TS0,
     SET_SEQSCAN_ON,
     SET_FORCE_CUSTOM_PLAN,
     SET_DEFAULT_PLAN_CACHE_MODE,
@@ -212,25 +212,23 @@ def _process_pristine_collectors_batch(
         # `ConfigureAccount` messages, so as to configure new accounts
         # (see `pks_to_configure` bellow).
         db.session.execute(
-            postgresql.insert(NeededWorkerAccount)
-            .execution_options(
-                insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                synchronize_session=False,
-            )
+            NeededWorkerAccount.insert_tuples([
+                (
+                    creditor_id,
+                    debtor_id,
+                    current_ts,
+                    None,
+                    0,
+                    TS0,
+                )
+                for creditor_id, debtor_id in pks_to_create
+            ])
             .on_conflict_do_nothing(
                 index_elements=[
                     NeededWorkerAccount.creditor_id,
                     NeededWorkerAccount.debtor_id,
                 ]
-            ),
-            [
-                {
-                    "creditor_id": creditor_id,
-                    "debtor_id": debtor_id,
-                    "configured_at": current_ts,
-                }
-                for creditor_id, debtor_id in pks_to_create
-            ],
+            )
         )
 
     pks_to_retry = set(
