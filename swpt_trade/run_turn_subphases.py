@@ -3,7 +3,7 @@ import math
 from typing import TypeVar, Callable
 from datetime import datetime, timezone, timedelta
 from itertools import groupby
-from sqlalchemy import select, insert, update, delete, text, bindparam, Numeric
+from sqlalchemy import select, insert, update, delete, text, Numeric
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.sql.expression import (
     null,
@@ -1286,7 +1286,6 @@ def _update_needed_worker_account_blocked_amounts() -> None:
 
     current_ts = datetime.now(tz=timezone.utc)
     sbd = timedelta(days=current_app.config["APP_SURPLUS_BLOCKING_DELAY_DAYS"])
-
     nwa_row_filter = and_(
         # We must calculate the blocked amount only after the
         # collection has been disabled for a week or two. This gives
@@ -1302,24 +1301,6 @@ def _update_needed_worker_account_blocked_amounts() -> None:
         > NeededWorkerAccount.blocked_amount_ts,
     )
 
-    # NOTE: Setting `blocked_amount_ts` to `current_ts` guarantees
-    # that if the `nwa_row_filter` predicate is True now, it will be
-    # False after the update.
-    nwa = NeededWorkerAccount.__table__
-    nwa_update_statement = (
-        update(nwa)
-        .where(
-            nwa.c.creditor_id == bindparam("b_creditor_id"),
-            nwa.c.debtor_id == bindparam("b_debtor_id"),
-            nwa.c.collection_disabled_since < current_ts - sbd,
-            nwa.c.collection_disabled_since > nwa.c.blocked_amount_ts,
-        )
-        .values(
-            blocked_amount=bindparam("b_blocked_amount"),
-            blocked_amount_ts=current_ts,
-        )
-    )
-
     with db.engine.connect() as w_conn:
         w_conn.execute(SET_SEQSCAN_ON)
         with w_conn.execution_options(yield_per=SELECT_BATCH_SIZE).execute(
@@ -1333,18 +1314,55 @@ def _update_needed_worker_account_blocked_amounts() -> None:
                 .select_from(NeededWorkerAccount)
                 .where(nwa_row_filter)
         ) as result:
+            db.session.execute(SET_FORCE_CUSTOM_PLAN)
+
             for rows in result.partitions(UPDATE_BATCH_SIZE):
-                dicts_to_update = [
-                    {
-                        "b_creditor_id": row.creditor_id,
-                        "b_debtor_id": row.debtor_id,
-                        "b_blocked_amount": contain_principal_overflow(
-                            int(row.locked + row.to_relay + row.to_move)
-                        ),
-                    }
-                    for row in rows
-                ]
-                db.session.execute(nwa_update_statement, dicts_to_update)
+                nwa = NeededWorkerAccount
+                updates = (
+                    text(
+                        "SELECT * FROM unnest("
+                        " :creditor_ids :: BIGINT[],"
+                        " :debtor_ids :: BIGINT[],"
+                        " :blocked_amounts :: BIGINT[]"
+                        ") AS t(creditor_id, debtor_id, blocked_amount)"
+                    )
+                    .bindparams(
+                        creditor_ids=[r.creditor_id for r in rows],
+                        debtor_ids=[r.debtor_id for r in rows],
+                        blocked_amounts=[
+                            contain_principal_overflow(
+                                int(r.locked + r.to_relay + r.to_move)
+                            )
+                            for r in rows
+                        ],
+                    )
+                    .columns(
+                        creditor_id=db.BigInteger,
+                        debtor_id=db.BigInteger,
+                        blocked_amount=db.BigInteger,
+                    )
+                    .cte(name="updates")
+                )
+                db.session.execute(
+                    update(nwa)
+                    .execution_options(synchronize_session=False)
+                    .where(
+                        nwa.creditor_id == updates.c.creditor_id,
+                        nwa.debtor_id == updates.c.debtor_id,
+                        nwa.collection_disabled_since < current_ts - sbd,
+                        nwa.collection_disabled_since > nwa.blocked_amount_ts,
+                    )
+                    .values(
+                        # NOTE: Setting `blocked_amount_ts` to
+                        # `current_ts` guarantees that if the
+                        # `nwa_row_filter` predicate is True now, it
+                        # will be False after the update.
+                        blocked_amount=updates.c.blocked_amount,
+                        blocked_amount_ts=current_ts,
+                    )
+                )
+
+            db.session.execute(SET_DEFAULT_PLAN_CACHE_MODE)
 
 
 def _update_worker_account_surplus_amounts(turn_id: int) -> None:
