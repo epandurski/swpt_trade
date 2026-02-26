@@ -1,11 +1,11 @@
 from typing import TypeVar, Callable, Sequence, List, Iterable
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, insert, delete, text, func
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql.expression import null, and_
 from swpt_trade.utils import (
     can_start_new_turn,
     generate_collector_account_pkeys,
+    calc_hash,
 )
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -276,22 +276,25 @@ def get_turns_by_ids(turn_ids: List[int]) -> Sequence[Turn]:
 
 @atomic
 def insert_collector_accounts(pks: Iterable[tuple[int, int]]) -> None:
+    current_ts = datetime.now(tz=timezone.utc)
     db.session.execute(
-        postgresql.insert(CollectorAccount)
-        .execution_options(
-            insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-            synchronize_session=False,
-        )
+        CollectorAccount.insert_tuples([
+            (
+                debtor_id,
+                collector_id,
+                calc_hash(collector_id),
+                "",
+                0,
+                current_ts,
+            )
+            for debtor_id, collector_id in pks
+        ])
         .on_conflict_do_nothing(
             index_elements=[
                 CollectorAccount.debtor_id,
                 CollectorAccount.collector_id,
             ]
-        ),
-        [
-            {"debtor_id": debtor_id, "collector_id": collector_id}
-            for debtor_id, collector_id in pks
-        ],
+        )
     )
 
 

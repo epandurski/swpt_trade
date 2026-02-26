@@ -2,7 +2,6 @@ import math
 from typing import TypeVar, Callable, Optional
 from datetime import date, datetime, timezone, timedelta
 from swpt_pythonlib.utils import Seqnum
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import exc, load_only
 from swpt_trade.extensions import db
 from swpt_trade.models import (
@@ -470,21 +469,13 @@ def register_needed_colector(
         )
         if collector_account_pkeys:
             db.session.execute(
-                postgresql.insert(NeededCollectorAccount)
-                .execution_options(
-                    insertmanyvalues_page_size=INSERT_BATCH_SIZE,
-                    synchronize_session=False,
-                )
+                NeededCollectorAccount.insert_tuples(collector_account_pkeys)
                 .on_conflict_do_nothing(
                     index_elements=[
                         NeededCollectorAccount.debtor_id,
                         NeededCollectorAccount.collector_id,
                     ]
-                ),
-                [
-                    {"debtor_id": x, "collector_id": y}
-                    for x, y in collector_account_pkeys
-                ],
+                )
             )
 
 
