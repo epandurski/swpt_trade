@@ -152,12 +152,15 @@ variables. Here are the most important settings with some random
 example values:
 
 ```shell
-# Determiene when new trading turns will be started. In this
-# example (these are the default values), a new turn will be
-# started every day at 2:00am UTC, the time allotted to the first
-# turn phase (the currency info collection phase) will be 10
-# minutes, and the time allotted to the second turn
-# phase (buy/sell offers collection phase) will be 1 hour.
+# These settings determine when new trading turns will be started. You
+# should ensure there is sufficient idle time between consecutive
+# trading turns. In this example (these are the default values), a new
+# turn will be started every day at 2:00 AM UTC, the time allotted to
+# the first turn phase (the currency info collection phase) will be 10
+# minutes, and the time allotted to the second turn phase (buy/sell
+# offers collection phase) will be 1 hour. The duration of the third
+# (and final) phase can not be specified, and will vary depending on
+# the system load.
 TURN_PERIOD=1d
 TURN_PERIOD_OFFSET=2h
 TURN_PHASE1_DURATION=10m
