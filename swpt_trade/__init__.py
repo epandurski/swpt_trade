@@ -429,6 +429,18 @@ def _check_config_sanity(c):  # pragma: nocover
             " to small. Choose a more appropriate value."
         )
 
+    if (
+            + parse_timedelta(c["TURN_PHASE1_DURATION"])
+            + 2 * parse_timedelta(c["TURN_PHASE2_DURATION"])
+            + timedelta(minutes=6)
+            > 0.9 * parse_timedelta(c["TURN_PERIOD"])
+    ):
+        raise RuntimeError(
+            "The configured value for TURN_PERIOD is too small compared to"
+            " the configured duration of turn phases. Choose more"
+            " appropriate values."
+        )
+
     if c["APP_LOCATOR_CLAIM_EXPIRY_DAYS"] < 30.0:
         raise RuntimeError(
             "The configured value for APP_LOCATOR_CLAIM_EXPIRY_DAYS is"
