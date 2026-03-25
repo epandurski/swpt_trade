@@ -2111,7 +2111,7 @@ sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
 name = "Swpt-Pythonlib"
-version = "0.12.0"
+version = "0.12.1"
 description = "A Python library used by many Swaptacular micro-services"
 optional = false
 python-versions = "*"
@@ -2129,8 +2129,8 @@ SQLAlchemy = ">=1.4.18,<3"
 [package.source]
 type = "git"
 url = "https://github.com/swaptacular/swpt_pythonlib.git"
-reference = "v0.12.0"
-resolved_reference = "7d64e7d6983be75ae0dec3523297fe27f7edcd15"
+reference = "v0.12.1"
+resolved_reference = "2b5796ccf3961408a2cd6a23992df5874e5cae47"
 
 [[package]]
 name = "tomlkit"
@@ -2552,4 +2552,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<4.0"
-content-hash = "3def6537171138ef25e7eb23395981acd5719e97a8e4e63b4cb6db412cdecb29"
+content-hash = "ffe76734159543f2c735ce327058fca412506efe14e63728cda6ac7b96bcfaa2"
