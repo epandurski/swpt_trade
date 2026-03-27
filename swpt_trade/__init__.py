@@ -3,6 +3,7 @@ __version__ = "0.1.0"
 import logging
 import json
 import sys
+import signal
 import os
 import os.path
 import re
@@ -42,6 +43,12 @@ def _parse_creditor_id(s: str) -> int:
 
 
 _parse_debtor_id = _parse_creditor_id
+
+
+def _raise_keyboard_interrupt(signum, frame):  # pragma: no cover
+    logger = logging.getLogger(__name__)
+    logger.warning("Received %s signal. Exiting...", signal.strsignal(signum))
+    raise KeyboardInterrupt()
 
 
 def _excepthook(exc_type, exc_value, traceback):  # pragma: nocover
@@ -569,3 +576,5 @@ configure_logging(
     associated_loggers=os.environ.get("APP_ASSOCIATED_LOGGERS", "").split(),
 )
 sys.excepthook = _excepthook
+signal.signal(signal.SIGTERM, _raise_keyboard_interrupt)
+signal.signal(signal.SIGINT, _raise_keyboard_interrupt)
